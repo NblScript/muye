@@ -6,41 +6,41 @@
 
 ```text
 muye/
-├── .env.example
-├── app.py
-├── config/
-│   ├── api_keys.env
-│   ├── drone_config.json
-│   └── yolo_config.yaml
-├── data/
-│   ├── images/
-│   └── logs/
-├── models/
-│   └── README.md
-├── modules/
-│   ├── __init__.py
-│   ├── ai_decision.py
-│   ├── common.py
-│   ├── data_collector.py
-│   ├── drone_controller.py
-│   ├── event_bus.py
-│   ├── image_processor.py
-│   ├── local_yolo_api.py
-│   ├── virtual_drone_api.py
-│   └── weather_integration.py
-├── drone_api.py
-├── tests/
-│   ├── test_ai_decision.py
-│   ├── test_event_bus.py
-│   ├── test_image_processor.py
-│   ├── test_local_yolo_api.py
-│   ├── test_main.py
-│   ├── test_virtual_drone_api.py
-│   └── test_weather_integration.py
-├── main.py
-├── requirements.txt
-├── yolo_api.py
-└── README.md
+├── .env.example                 # 环境变量模板
+├── app.py                       # Streamlit 可视化演示面板
+├── config/                      # 项目配置目录
+│   ├── api_keys.env             # 本地运行时密钥与接口地址配置
+│   ├── drone_config.json        # 地块、围栏、飞行限制等无人机配置
+│   └── yolo_config.yaml         # YOLO 推理服务相关配置
+├── data/                        # 运行期数据目录
+│   ├── images/                  # 无人机采集图像与演示上传图片
+│   └── logs/                    # 系统日志与事件总线文件
+├── models/                      # 本地模型目录
+│   └── README.md                # 模型放置说明
+├── modules/                     # 核心业务模块
+│   ├── __init__.py              # 模块包初始化文件
+│   ├── ai_decision.py           # 千问决策与结构化提示词组装
+│   ├── common.py                # 公共工具、日志与路径管理
+│   ├── data_collector.py        # 图片采集与目录监听
+│   ├── drone_controller.py      # 无人机指令校验与任务执行
+│   ├── event_bus.py             # 基于 JSONL 的演示事件总线
+│   ├── image_processor.py       # YOLO API 调用与识别结果校验
+│   ├── local_yolo_api.py        # 本地 YOLO 模型 HTTP 服务
+│   ├── virtual_drone_api.py     # 虚拟无人机 HTTP 服务
+│   └── weather_integration.py   # 和风天气接入与字段映射
+├── drone_api.py                 # 虚拟无人机 API 启动入口
+├── tests/                       # 单元测试目录
+│   ├── test_ai_decision.py      # 千问决策测试
+│   ├── test_event_bus.py        # 事件总线测试
+│   ├── test_image_processor.py  # YOLO 识别流程测试
+│   ├── test_local_yolo_api.py   # 本地 YOLO API 测试
+│   ├── test_main.py             # 主入口辅助逻辑测试
+│   ├── test_virtual_drone_api.py # 虚拟无人机状态流测试
+│   └── test_weather_integration.py # 和风天气两步调用测试
+├── main.py                      # 后端主入口与一键演示调度器
+├── requirements.txt             # Python 依赖清单
+├── yolo_api.py                  # 本地 YOLO API 启动入口
+└── README.md                    # 项目说明文档
 ```
 
 ## 功能说明
@@ -135,8 +135,8 @@ QWEN_API_KEY="replace-with-your-qwen-key"
 QWEN_MODEL="qwen-max"
 
 QWEATHER_API_KEY="在此填入你的和风天气API_KEY"
-QWEATHER_GEO_URL="https://geoapi.qweather.com/v2/city/lookup"
-QWEATHER_WEATHER_URL="https://devapi.qweather.com/v7/weather/now"
+QWEATHER_GEO_URL="https://api.qweather.com/geo/v2/city/lookup"
+QWEATHER_WEATHER_URL="https://api.qweather.com/v7/weather/now"
 
 DRONE_API_URL="http://127.0.0.1:9010/missions"
 DRONE_API_KEY="virtual-drone-token"
@@ -157,6 +157,22 @@ SERVICE_CLIENT_IP="127.0.0.1"
 - 使用 `--with-virtual-drone-api` 或 `--with-demo-stack` 时，主程序会自动接管无人机接口地址并关闭本地模拟模式。
 
 ## 运行方式
+
+当前项目已经支持以下真实/模拟组合：
+
+- YOLO：真实本地模型 `best.pt`
+- 和风天气：真实接口
+- 千问：支持真实接口，也支持通过 `QWEN_USE_MOCK` 切换为模拟模式
+- 无人机：虚拟无人机 API
+
+当你的 [api_keys.env](/home/qingking/muye/config/api_keys.env) 中设置为：
+
+```env
+QWEATHER_USE_MOCK="false"
+QWEN_USE_MOCK="false"
+```
+
+系统会运行在“真实天气 + 真实千问 + 虚拟无人机”模式。
 
 推荐一键启动本地 YOLO API、虚拟无人机 API 与主系统：
 
@@ -232,6 +248,7 @@ streamlit run app.py
 3. 后端监听到新图片后，依次执行 YOLO、天气、千问和无人机流程
 4. 事件总线持续写入 `data/logs/demo_events.jsonl`
 5. Streamlit 自动轮询并刷新原图、识别框、天气卡片、AI 建议和无人机状态
+6. Streamlit 左侧栏会直接显示当前是 `real` 还是 `mock` 模式
 
 ## 日志与数据
 

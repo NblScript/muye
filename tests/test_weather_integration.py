@@ -7,6 +7,41 @@ from modules.weather_integration import WeatherClient, WeatherIntegrationError
 
 
 @pytest.mark.asyncio
+async def test_weather_client_uses_mock_payload_when_enabled() -> None:
+    client = WeatherClient(
+        geo_api_url="https://api.qweather.com/geo/v2/city/lookup",
+        weather_api_url="https://api.qweather.com/v7/weather/now",
+        api_key="weather-key",
+        use_mock=True,
+        mock_weather={
+            "temperature": "25",
+            "humidity": "60",
+            "summary": "晴",
+            "wind_direction": "东北风",
+            "wind_scale_text": "2",
+            "wind_speed": "3.3",
+        },
+    )
+    try:
+        result = await client.fetch_current_weather(
+            location_query="上海",
+            request_id="req-weather-mock-1",
+        )
+    finally:
+        await client.close()
+
+    assert result == {
+        "temperature": 25,
+        "humidity": 60.0,
+        "summary": "晴",
+        "wind_direction": "东北风",
+        "wind_scale": 2,
+        "wind_scale_text": "2",
+        "wind_speed": 3.3,
+    }
+
+
+@pytest.mark.asyncio
 async def test_weather_client_fetches_qweather_in_two_steps() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/v2/city/lookup"):

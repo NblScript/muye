@@ -236,6 +236,15 @@ class MuyeApplication:
                 "https://devapi.qweather.com/v7/weather/now",
             ),
             api_key=os.getenv("QWEATHER_API_KEY", ""),
+            use_mock=os.getenv("QWEATHER_USE_MOCK", "false").lower() in {"1", "true", "yes", "on"},
+            mock_weather={
+                "temperature": os.getenv("QWEATHER_MOCK_TEMPERATURE", "26"),
+                "humidity": os.getenv("QWEATHER_MOCK_HUMIDITY", "58"),
+                "summary": os.getenv("QWEATHER_MOCK_SUMMARY", "多云"),
+                "wind_direction": os.getenv("QWEATHER_MOCK_WIND_DIRECTION", "东南风"),
+                "wind_scale_text": os.getenv("QWEATHER_MOCK_WIND_SCALE", "2"),
+                "wind_speed": os.getenv("QWEATHER_MOCK_WIND_SPEED", "3.3"),
+            },
             timeout_seconds=float(
                 self.drone_config.get("execution", {}).get("request_timeout_seconds", 15)
             ),
@@ -246,6 +255,7 @@ class MuyeApplication:
             api_key=os.getenv("QWEN_API_KEY", ""),
             model=os.getenv("QWEN_MODEL", "qwen-max"),
             weather_client=self.weather_client,
+            use_mock=os.getenv("QWEN_USE_MOCK", "false").lower() in {"1", "true", "yes", "on"},
             timeout_seconds=30,
             logger=self.logger,
             event_bus=self.event_bus,

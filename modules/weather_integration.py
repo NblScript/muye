@@ -19,6 +19,8 @@ class WeatherClient:
         geo_api_url: str,
         weather_api_url: str,
         api_key: str,
+        use_mock: bool = False,
+        mock_weather: dict[str, Any] | None = None,
         timeout_seconds: float = 15,
         logger: logging.Logger | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -26,6 +28,8 @@ class WeatherClient:
         self.geo_api_url = geo_api_url
         self.weather_api_url = weather_api_url
         self.api_key = api_key
+        self.use_mock = use_mock
+        self.mock_weather = mock_weather or {}
         self.logger = logger or logging.getLogger("muye.weather")
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
@@ -40,6 +44,20 @@ class WeatherClient:
     ) -> dict[str, Any]:
         started = time.perf_counter()
         try:
+            if self.use_mock:
+                normalized = self._normalize_mock_weather_payload(self.mock_weather)
+                log_event(
+                    self.logger,
+                    logging.INFO,
+                    "天气数据获取完成（模拟）",
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    weather=normalized,
+                    location_query=location_query,
+                )
+                return normalized
+
             if not self.api_key:
                 raise WeatherIntegrationError("缺少 QWEATHER_API_KEY 配置")
             if not self.geo_api_url or not self.weather_api_url:
@@ -73,6 +91,30 @@ class WeatherClient:
             )
             raise WeatherIntegrationError(str(exc)) from exc
 
+    def _normalize_mock_weather_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        required_fields = {"temperature", "humidity", "summary", "wind_direction", "wind_scale_text"}
+        if not required_fields.issubset(payload):
+            raise WeatherIntegrationError(
+                "模拟天气配置缺少 temperature/humidity/summary/wind_direction/wind_scale_text 字段"
+            )
+
+        wind_scale_text = str(payload["wind_scale_text"])
+        wind_scale = self._parse_wind_scale(wind_scale_text)
+        data = {
+            "temperature": int(float(payload["temperature"])),
+            "humidity": float(payload["humidity"]),
+            "summary": str(payload["summary"]),
+            "wind_direction": str(payload["wind_direction"]),
+            "wind_scale": wind_scale,
+            "wind_scale_text": wind_scale_text,
+            "wind_speed": float(
+                payload.get("wind_speed", self._wind_scale_to_speed_mps(wind_scale))
+            ),
+        }
+        if data["humidity"] < 0 or data["humidity"] > 100:
+            raise WeatherIntegrationError("模拟天气配置中的湿度超出合理范围")
+        return data
+
     async def _lookup_location_id(self, location_query: str) -> str:
         response = await self._client.get(
             self.geo_api_url,
@@ -80,7 +122,10 @@ class WeatherClient:
                 "location": location_query,
                 "key": self.api_key,
             },
-            headers={"Accept": "application/json"},
+            headers={
+                "Accept": "application/json",
+                "X-QW-Api-Key": self.api_key,
+            },
         )
         response.raise_for_status()
         payload = response.json()
@@ -105,7 +150,10 @@ class WeatherClient:
                 "location": location_id,
                 "key": self.api_key,
             },
-            headers={"Accept": "application/json"},
+            headers={
+                "Accept": "application/json",
+                "X-QW-Api-Key": self.api_key,
+            },
         )
         response.raise_for_status()
         return response.json()
