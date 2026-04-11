@@ -1,0 +1,12 @@
+confidence_threshold: 0.25
+timeout_seconds: 20
+batch_size: 4
+tensorrt_enabled: false
+request_headers:
+  X-Source-System: muye
+local_api:
+  host: 127.0.0.1
+  port: 8010
+  model_path: models/best.pt
+  device: auto
+  max_batch_size: 4
