@@ -1,0 +1,168 @@
+{
+  "id": "2026-04-11-231610",
+  "generated_at": "2026-04-11T15:16:10.9892793Z",
+  "language": "zh",
+  "pages": [
+    {
+      "slug": "1-xiang-mu-gai-shu",
+      "title": "项目概述",
+      "file": "1-xiang-mu-gai-shu.md",
+      "section": "快速开始",
+      "level": "Beginner"
+    },
+    {
+      "slug": "2-kuai-su-qi-dong-zhi-nan",
+      "title": "快速启动指南",
+      "file": "2-kuai-su-qi-dong-zhi-nan.md",
+      "section": "快速开始",
+      "level": "Beginner"
+    },
+    {
+      "slug": "3-huan-jing-pei-zhi-yu-yi-lai-an-zhuang",
+      "title": "环境配置与依赖安装",
+      "file": "3-huan-jing-pei-zhi-yu-yi-lai-an-zhuang.md",
+      "section": "快速开始",
+      "level": "Beginner"
+    },
+    {
+      "slug": "4-yun-xing-mo-shi-yu-yan-shi-liu-cheng",
+      "title": "运行模式与演示流程",
+      "file": "4-yun-xing-mo-shi-yu-yan-shi-liu-cheng.md",
+      "section": "快速开始",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "5-xi-tong-jia-gou-she-ji",
+      "title": "系统架构设计",
+      "file": "5-xi-tong-jia-gou-she-ji.md",
+      "section": "核心架构",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "6-yi-bu-ren-wu-liu-yu-shi-jian-zong-xian",
+      "title": "异步任务流与事件总线",
+      "file": "6-yi-bu-ren-wu-liu-yu-shi-jian-zong-xian.md",
+      "section": "核心架构",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "7-mo-kuai-hua-she-ji-yu-zhi-ze-hua-fen",
+      "title": "模块化设计与职责划分",
+      "file": "7-mo-kuai-hua-she-ji-yu-zhi-ze-hua-fen.md",
+      "section": "核心架构",
+      "level": "Advanced"
+    },
+    {
+      "slug": "8-wu-ren-ji-tu-xiang-cai-ji-ji-zhi",
+      "title": "无人机图像采集机制",
+      "file": "8-wu-ren-ji-tu-xiang-cai-ji-ji-zhi.md",
+      "section": "图像采集与处理",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "9-yolohai-chong-shi-bie-liu-cheng",
+      "title": "YOLO害虫识别流程",
+      "file": "9-yolohai-chong-shi-bie-liu-cheng.md",
+      "section": "图像采集与处理",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "10-ben-di-yolo-apifu-wu",
+      "title": "本地YOLO API服务",
+      "file": "10-ben-di-yolo-apifu-wu.md",
+      "section": "图像采集与处理",
+      "level": "Advanced"
+    },
+    {
+      "slug": "11-he-feng-tian-qi-shu-ju-jie-ru",
+      "title": "和风天气数据接入",
+      "file": "11-he-feng-tian-qi-shu-ju-jie-ru.md",
+      "section": "数据整合与决策",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "12-qian-wen-aijue-ce-yin-qing",
+      "title": "千问AI决策引擎",
+      "file": "12-qian-wen-aijue-ce-yin-qing.md",
+      "section": "数据整合与决策",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "13-duo-yuan-shu-ju-rong-he-ce-lue",
+      "title": "多源数据融合策略",
+      "file": "13-duo-yuan-shu-ju-rong-he-ce-lue.md",
+      "section": "数据整合与决策",
+      "level": "Advanced"
+    },
+    {
+      "slug": "14-wu-ren-ji-zhi-ling-xiao-yan-yu-zhi-xing",
+      "title": "无人机指令校验与执行",
+      "file": "14-wu-ren-ji-zhi-ling-xiao-yan-yu-zhi-xing.md",
+      "section": "无人机控制",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "15-xu-ni-wu-ren-ji-apifu-wu",
+      "title": "虚拟无人机API服务",
+      "file": "15-xu-ni-wu-ren-ji-apifu-wu.md",
+      "section": "无人机控制",
+      "level": "Advanced"
+    },
+    {
+      "slug": "16-di-li-wei-lan-yu-fei-xing-xian-zhi",
+      "title": "地理围栏与飞行限制",
+      "file": "16-di-li-wei-lan-yu-fei-xing-xian-zhi.md",
+      "section": "无人机控制",
+      "level": "Advanced"
+    },
+    {
+      "slug": "17-pei-zhi-wen-jian-xiang-jie",
+      "title": "配置文件详解",
+      "file": "17-pei-zhi-wen-jian-xiang-jie.md",
+      "section": "配置与部署",
+      "level": "Beginner"
+    },
+    {
+      "slug": "18-huan-jing-bian-liang-guan-li",
+      "title": "环境变量管理",
+      "file": "18-huan-jing-bian-liang-guan-li.md",
+      "section": "配置与部署",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "19-an-quan-jian-quan-yu-fang-wen-kong-zhi",
+      "title": "安全鉴权与访问控制",
+      "file": "19-an-quan-jian-quan-yu-fang-wen-kong-zhi.md",
+      "section": "配置与部署",
+      "level": "Advanced"
+    },
+    {
+      "slug": "20-streamlityan-shi-mian-ban",
+      "title": "Streamlit演示面板",
+      "file": "20-streamlityan-shi-mian-ban.md",
+      "section": "可视化与监控",
+      "level": "Beginner"
+    },
+    {
+      "slug": "21-shi-jian-ri-zhi-yu-zhuang-tai-zhui-zong",
+      "title": "事件日志与状态追踪",
+      "file": "21-shi-jian-ri-zhi-yu-zhuang-tai-zhui-zong.md",
+      "section": "可视化与监控",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "22-dan-yuan-ce-shi-kuang-jia",
+      "title": "单元测试框架",
+      "file": "22-dan-yuan-ce-shi-kuang-jia.md",
+      "section": "测试与质量保证",
+      "level": "Intermediate"
+    },
+    {
+      "slug": "23-ji-cheng-ce-shi-yu-duan-dao-duan-ce-shi",
+      "title": "集成测试与端到端测试",
+      "file": "23-ji-cheng-ce-shi-yu-duan-dao-duan-ce-shi.md",
+      "section": "测试与质量保证",
+      "level": "Advanced"
+    }
+  ]
+}
