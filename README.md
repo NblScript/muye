@@ -329,6 +329,11 @@ PYTHONPATH=. .venv/bin/pytest -q
   - 当前稳定演示版本
   - 已支持真实 YOLO、真实和风天气、真实千问增强链路、虚拟无人机和可视化指挥中心前端
 
+- `v0.3-initial`
+  - 增加一键启动脚本 `scripts/start_demo.sh`
+  - README 补齐完整演示启动流程与实际可用测试命令
+  - 已验证后端全链路与 Streamlit 演示前端可一起运行
+
 ## 部署建议
 
 - 将 `config/api_keys.env` 中的示例值替换为真实密钥，避免提交到公共仓库。
