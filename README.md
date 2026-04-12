@@ -2,6 +2,27 @@
 
 `muye` 是一个基于 Python 的智能农业害虫防治项目，集成了无人机图像采集、YOLO 害虫识别、和风天气数据整合、千问 AI 决策和精准喷洒控制。项目采用异步任务流、模块化设计，并对外部 API 响应进行严格校验。
 
+> 面向智慧农业演示与原型验证的端到端植保指挥系统。
+
+## 项目简介
+
+牧野将“虫情感知、气象感知、AI 决策、无人机执行、前端可视化”整合为一条完整链路，目标不是单点展示某个模型，而是提供一个可以真实联调、可视化演示、可持续扩展的智慧农业指挥中心原型。系统既支持本地离线能力验证，也支持接入真实天气服务和真实大模型接口，适合用于课程设计、路演演示、方案验证和后续工程化扩展。
+
+核心亮点：
+
+- 端到端闭环：从农田图片输入到虫害识别、药剂建议、飞行参数生成，再到虚拟无人机执行状态回放。
+- 双模式运行：天气与千问均支持 `real/mock` 两种模式，兼顾真实联调与稳定演示。
+- 本地可部署：YOLO 模型通过本地 API 服务封装，支持直接加载 `best.pt` 权重运行。
+- 可视化指挥中心：基于 Streamlit 构建前端面板，能够实时展示识别结果、天气信息、AI 建议、无人机状态与事件日志。
+- 工程化结构清晰：配置、模块、测试、虚拟服务、前端和事件总线分层明确，便于维护与继续开发。
+
+适用场景：
+
+- 智慧农业项目演示与答辩
+- 植保无人机调度原型验证
+- YOLO + 大模型 + 外部 API 的系统集成实践
+- 后续扩展为真实设备控制平台的工程起点
+
 ## 项目结构
 
 ```text
@@ -29,6 +50,8 @@ muye/
 │   ├── virtual_drone_api.py     # 虚拟无人机 HTTP 服务
 │   └── weather_integration.py   # 和风天气接入与字段映射
 ├── drone_api.py                 # 虚拟无人机 API 启动入口
+├── scripts/                     # 启动和演示辅助脚本
+│   └── start_demo.sh            # 一键启动后端 demo 栈和 Streamlit 前端
 ├── tests/                       # 单元测试目录
 │   ├── test_ai_decision.py      # 千问决策测试
 │   ├── test_event_bus.py        # 事件总线测试
@@ -158,6 +181,28 @@ SERVICE_CLIENT_IP="127.0.0.1"
 
 ## 运行方式
 
+推荐一键启动整套演示：
+
+```bash
+cd /home/qingking/muye
+./scripts/start_demo.sh
+```
+
+如果你想启动后自动投喂仓库里的示例图片并触发一轮完整流程：
+
+```bash
+cd /home/qingking/muye
+./scripts/start_demo.sh --sample-image IP000000042.jpg
+```
+
+默认启动后：
+
+- 后端主流程会以 `--with-demo-stack` 方式运行
+- 本地 YOLO API 会监听 `127.0.0.1:8010`
+- 虚拟无人机 API 会监听 `127.0.0.1:9010`
+- Streamlit 前端会监听 `127.0.0.1:8501`
+- 按 `Ctrl+C` 会一起停止前后端进程
+
 当前项目已经支持以下真实/模拟组合：
 
 - YOLO：真实本地模型 `best.pt`
@@ -223,7 +268,9 @@ python main.py
 - 事件总线文件：`data/logs/demo_events.jsonl`
 - 图片投喂目录：`data/images/`
 
-推荐使用两个终端同时启动：
+如果你已经使用一键脚本启动，这一节可以跳过。
+
+手动启动时，推荐使用两个终端同时启动：
 
 终端 1，启动后端主流程：
 
@@ -238,7 +285,7 @@ python main.py --with-demo-stack
 ```bash
 cd /home/qingking/muye
 . .venv/bin/activate
-streamlit run app.py
+streamlit run app.py --server.headless true
 ```
 
 启动后：
@@ -260,7 +307,7 @@ streamlit run app.py
 
 ```bash
 cd /home/qingking/muye
-pytest
+PYTHONPATH=. .venv/bin/pytest -q
 ```
 
 测试覆盖：
