@@ -47,7 +47,11 @@
    - `PROJECT_MEMORY.md`
    - `CHANGELOG.md`
    - `docs/WORKLOG.md`
-2. 再确认是否开始落地 SQLite
+2. 直接从已确认的 SQLite 起步 schema 开始落地
+   - `tasks`
+   - `detections`
+   - `weather_snapshots`
+   - `decisions`
 3. 再拆分：
    - LLM 决策层
    - 系统规划层
@@ -60,4 +64,6 @@
   - 历史农业数据要补齐
   - 分析结果应该入库
   - 无人机路径/高度/喷洒速率/气象限制不应主要由 LLM 推理
+- SQLite 起步表结构已经写入 `PROJECT_MEMORY.md`
+- SQLite 标准 SQL 建表草案已经写入 `PROJECT_MEMORY.md`
 - 这些方向已经确认，但当前还没有开始正式代码改造。
