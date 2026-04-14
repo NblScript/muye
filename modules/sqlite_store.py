@@ -31,7 +31,87 @@ class SqliteStore:
         with self._lock:
             self._connection.close()
 
+    def _migrate_v1_1(self) -> None:
+        """Apply migration for v1.1 to existing databases.
+
+        - Ensure request_id indexes exist on child tables (handled later by initialize()).
+        - Ensure tasks.status has CHECK constraint by recreating table when missing.
+        Idempotent and safe to run multiple times.
+        """
+        with self._lock:
+            cur = self._connection.cursor()
+            # If tasks table does not exist, nothing to migrate
+            row = cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+            ).fetchone()
+            if row is None:
+                return
+
+            # Check if CHECK constraint already present
+            sql_row = cur.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'"
+            ).fetchone()
+            table_sql = sql_row[0] if sql_row and sql_row[0] else ""
+            has_check = "CHECK" in table_sql and "status" in table_sql and "queued" in table_sql
+            if has_check:
+                return
+
+            self.logger.info("Applying v1.1 migration: add CHECK constraint to tasks.status")
+
+            # Make a quick backup before destructive changes
+            try:
+                backup_path = self.db_path.with_suffix(self.db_path.suffix + ".bak")
+                import shutil
+
+                shutil.copy2(self.db_path, backup_path)
+            except Exception as e:  # pragma: no cover - best-effort backup
+                self.logger.warning("Backup before migration failed: %s", e)
+
+            # Normalize invalid statuses up-front to avoid copy failures
+            cur.execute(
+                """
+                UPDATE tasks
+                SET status = CASE
+                  WHEN status IN ('queued','running','completed','error') THEN status
+                  ELSE 'error'
+                END
+                WHERE status IS NOT NULL
+                """
+            )
+
+            # Rebuild tasks table with CHECK constraint
+            cur.execute("PRAGMA foreign_keys = OFF")
+            self._connection.execute("BEGIN IMMEDIATE")
+            cur.execute("DROP TABLE IF EXISTS tasks_new")
+            cur.execute(
+                """
+                CREATE TABLE tasks_new (
+                  request_id TEXT PRIMARY KEY,
+                  image_path TEXT,
+                  start_time DATETIME,
+                  end_time DATETIME,
+                  status TEXT CHECK(status IN ('queued', 'running', 'completed', 'error'))
+                )
+                """
+            )
+            cur.execute(
+                """
+                INSERT INTO tasks_new (request_id, image_path, start_time, end_time, status)
+                SELECT request_id, image_path, start_time, end_time,
+                       CASE WHEN status IN ('queued','running','completed','error') OR status IS NULL
+                            THEN status ELSE 'error' END
+                FROM tasks
+                """
+            )
+            cur.execute("DROP TABLE tasks")
+            cur.execute("ALTER TABLE tasks_new RENAME TO tasks")
+            self._connection.commit()
+            cur.execute("PRAGMA foreign_keys = ON")
+            self.logger.info("v1.1 migration complete: tasks.status now has CHECK constraint")
+
     def initialize(self) -> None:
+        # Run migration first so that existing DBs gain new constraints/indexes
+        self._migrate_v1_1()
         with self._lock:
             self._connection.executescript(
                 """
