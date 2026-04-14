@@ -78,6 +78,7 @@ class SqliteStore:
                 WHERE status IS NOT NULL
                 """
             )
+            self._connection.commit()
 
             # Rebuild tasks table with CHECK constraint
             cur.execute("PRAGMA foreign_keys = OFF")
