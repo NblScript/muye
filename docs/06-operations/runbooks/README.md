@@ -3,3 +3,4 @@
 - incident-weather-unavailable.md
 - incident-yolo-slow.md
 - incident-queue-stuck.md
+- sqlite-migration-v1_1.md
