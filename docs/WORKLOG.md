@@ -4,29 +4,29 @@
 
 本轮已经完成：
 
-- 识别并熟悉了 `muye` 项目的核心架构：
-  - 图片采集
-  - YOLO 识别
-  - 天气获取
-  - 千问决策
-  - 虚拟无人机执行
-  - Streamlit 演示前端
-- 实际验证了完整链路可运行：
-  - `PYTHONPATH=. .venv/bin/pytest -q` 通过
-  - 样例图 `IP000000042.jpg` 能跑通完整流程
-- 新增了一键启动脚本：
-  - `scripts/start_demo.sh`
-- 更新了 README，补齐启动方式和测试命令
-- 创建并推送了版本：
-  - `v0.3-initial`
+- 清理了本地工作区，把无关脏改动从功能分支上摘掉。
+- 确认并合并了两个 SQLite 相关 PR：
+  - PR #1: `feat(sqlite): add status CHECK, request_id indexes, WAL mode`
+  - PR #2: `feat(sqlite): migration to enforce v1.1 constraints on existing DBs`
+- 保持 `v1.1` tag 不变，并新建发布：
+  - `v1.1.1 - SQLite migration support`
+  - https://github.com/NblScript/muye/releases/tag/v1.1.1
+- 补齐旧库迁移回归测试与迁移文档：
+  - `tests/test_sqlite_migration.py`
+  - `docs/06-operations/runbooks/sqlite-migration-v1_1.md`
+  - `docs/08-testing/sqlite-migration-regression.md`
+- 通过迁移回归测试定位并修复 `_migrate_v1_1()` 的事务处理问题。
+- 创建并合并收尾 PR：
+  - PR #3: `fix(sqlite): harden legacy DB migration and docs`
+  - https://github.com/NblScript/muye/pull/3
 
 ## User Intent Confirmed
 
-当前优先事项不是继续扩展业务功能，而是先解决协作记忆问题：
+当前优先事项已经从“先补工程记忆”切换为“先把 SQLite 发布线真正收口”：
 
-1. 项目要有持久记忆
-2. 项目要有修改日志
-3. 新开会话时，应该能通过项目内文档快速恢复上下文
+1. SQLite 发布线已经收口
+2. 下一步转入 planner 与数据模型扩展
+3. 继续补结构化查询与后续工程化能力
 
 ## Project-Level Memory Files
 
@@ -47,11 +47,7 @@
    - `PROJECT_MEMORY.md`
    - `CHANGELOG.md`
    - `docs/WORKLOG.md`
-2. 直接从已确认的 SQLite 起步 schema 开始落地
-   - `tasks`
-   - `detections`
-   - `weather_snapshots`
-   - `decisions`
+2. 先把本地 `main` 同步到最新远端状态。
 3. 再拆分：
    - LLM 决策层
    - 系统规划层
@@ -59,11 +55,9 @@
 
 ## Notes
 
-- 用户明确提出：
-  - SQLite 应该作为结构化业务存储
-  - 历史农业数据要补齐
-  - 分析结果应该入库
-  - 无人机路径/高度/喷洒速率/气象限制不应主要由 LLM 推理
-- SQLite 起步表结构已经写入 `PROJECT_MEMORY.md`
-- SQLite 标准 SQL 建表草案已经写入 `PROJECT_MEMORY.md`
-- 这些方向已经确认，但当前还没有开始正式代码改造。
+- GitHub 当前已完成：
+  - PR #1 merged
+  - PR #2 merged
+  - PR #3 merged
+  - `v1.1.1` release created
+- 今天登录过 GitHub CLI 完成远端操作。
