@@ -15,6 +15,8 @@
 - 本地可部署：YOLO 模型通过本地 API 服务封装，支持直接加载 `best.pt` 权重运行。
 - 可视化指挥中心：基于 Streamlit 构建前端面板，能够实时展示识别结果、天气信息、AI 建议、无人机状态与事件日志。
 - 工程化结构清晰：配置、模块、测试、虚拟服务、前端和事件总线分层明确，便于维护与继续开发。
+- 混合存储起步：保留 JSONL 事件流，同时将主处理链摘要同步写入 SQLite，方便后续查询与扩展。
+- 状态可追溯：无人机任务推进状态也会落入 SQLite，便于历史检索和后续报表扩展。
 
 适用场景：
 
@@ -39,7 +41,8 @@ muye/
 │   └── yolo_config.yaml         # YOLO 推理服务相关配置
 ├── data/                        # 运行期数据目录
 │   ├── images/                  # 无人机采集图像与演示上传图片
-│   └── logs/                    # 系统日志与事件总线文件
+│   ├── logs/                    # 系统日志与事件总线文件
+│   └── muye.db                  # SQLite 结构化业务存储
 ├── models/                      # 本地模型目录
 │   └── README.md                # 模型放置说明
 ├── modules/                     # 核心业务模块
@@ -51,10 +54,15 @@ muye/
 │   ├── event_bus.py             # 基于 JSONL 的演示事件总线
 │   ├── image_processor.py       # YOLO API 调用与识别结果校验
 │   ├── local_yolo_api.py        # 本地 YOLO 模型 HTTP 服务
+│   ├── mission_planner.py       # 系统级飞行与喷洒参数规划
 │   ├── virtual_drone_api.py     # 虚拟无人机 HTTP 服务
 │   └── weather_integration.py   # 和风天气接入与字段映射
 ├── drone_api.py                 # 虚拟无人机 API 启动入口
-├── scripts/                     # 启动和演示辅助脚本
+├── scripts/                     # 启动、seed 生成与导入辅助脚本
+│   ├── generate_henan_field_crop_seed_csv.py # 生成河南地块/作物/cycle CSV
+│   ├── import_henan_field_crop_seed_csv.py   # 导入河南地块/作物/cycle CSV
+│   ├── import_henan_reference_data.py        # 导入河南统计指标 seed
+│   ├── import_henan_weather_history_csv.py   # 导入河南历史天气 CSV
 │   └── start_demo.sh            # 一键启动后端 demo 栈和 Streamlit 前端
 ├── tests/                       # 单元测试目录
 │   ├── test_ai_decision.py      # 千问决策测试
@@ -95,11 +103,13 @@ muye/
 
 5. `ai_decision.py`
    - 将害虫检测和天气信息整合成结构化文本。
-   - 调用千问 API 输出 JSON 决策。
+   - 调用千问 API 输出“用药建议 + 农事建议”JSON。
+   - 飞行路径、高度、喷洒速率和气象限制不再由 LLM 生成。
    - 使用 `jsonschema` 强制校验返回结构。
 
-6. `drone_controller.py`
-   - 校验气象限制、地理围栏和飞行控制参数。
+6. `drone_controller.py` + `mission_planner.py`
+   - `mission_planner.py` 负责从地块围栏、天气和飞控约束生成系统执行参数。
+   - `drone_controller.py` 负责校验气象限制、地理围栏和飞行控制参数。
    - 支持虚拟无人机 API 执行与状态轮询。
 
 7. `main.py`
@@ -176,9 +186,12 @@ SERVICE_CLIENT_IP="127.0.0.1"
 说明：
 
 - 请将训练好的权重文件放到 `models/best.pt`。
-- `drone_config.json` 中的 `field.weather_location` 或 `field.location.city` 用于和风天气地点查询，建议填写城市名，例如 `上海`。
+- 主流程会优先从 SQLite `fields` / `field_crop_cycles` 读取运行时地块上下文；`drone_config.json` 里的地块信息只作为回退配置。
+- `drone_config.json` 中的 `field.weather_location` 或 `field.location.city` 用于回退天气地点查询，建议填写河南城市名，例如 `郑州`。
 - 本地 YOLO API 默认读取 `YOLO_LOCAL_MODEL_PATH`，主流程默认调用 `YOLO_API_URL`。
 - `YOLO_API_KEY` 同时用于主项目访问本地 YOLO API 的 Bearer Token。
+- `MUYE_SQLITE_PATH` 默认是 `data/muye.db`，主处理链会把任务、检测、天气和决策摘要同步写入该库。
+- `MUYE_ACTIVE_FIELD_ID` 可指定当前演示链路优先使用的数据库地块 ID。
 - `drone_config.json` 中 `simulate_capture=true` 时，系统会自动生成一张最小 JPEG 作为采图结果，便于本地联调。
 - `execution.simulate_only=true` 时，无人机喷洒任务只做本地模拟，不访问虚拟无人机 API。
 - 使用 `--with-virtual-drone-api` 或 `--with-demo-stack` 时，主程序会自动接管无人机接口地址并关闭本地模拟模式。
@@ -206,6 +219,59 @@ cd /home/qingking/muye
 - 虚拟无人机 API 会监听 `127.0.0.1:9010`
 - Streamlit 前端会监听 `127.0.0.1:8501`
 - 按 `Ctrl+C` 会一起停止前后端进程
+
+## 河南参考数据导入
+
+仓库已经内置第一批河南参考数据 seed，当前包含：
+
+- 官方数据来源登记
+- 河南省农业统计指标
+
+相关文件：
+
+- [`sources.json`](/home/qingking/muye/data/seeds/henan/sources.json)
+- [`agri_statistical_indicators.json`](/home/qingking/muye/data/seeds/henan/agri_statistical_indicators.json)
+- [`import_henan_reference_data.py`](/home/qingking/muye/scripts/import_henan_reference_data.py)
+
+导入方式：
+
+```bash
+cd /home/qingking/muye
+PYTHONPATH=. .venv/bin/python scripts/import_henan_reference_data.py
+```
+
+导入后的数据会写入：
+
+- `data_sources`
+- `agri_statistical_indicators`
+
+所有导入记录都带有来源 URL、发布单位和来源摘录，便于后续核验。
+
+## 河南地块与作物种子
+
+当前仓库已补齐河南地块、作物目录和种植季 CSV seed，并提供数据库导入脚本。
+
+生成 CSV：
+
+```bash
+cd /home/qingking/muye
+PYTHONPATH=. .venv/bin/python scripts/generate_henan_field_crop_seed_csv.py
+```
+
+导入 SQLite：
+
+```bash
+cd /home/qingking/muye
+PYTHONPATH=. .venv/bin/python scripts/import_henan_field_crop_seed_csv.py
+```
+
+导入后会写入：
+
+- `fields`
+- `crop_catalog`
+- `field_crop_cycles`
+
+当前历史天气导入脚本也会优先根据站点经纬度和区县信息，把天气日值自动挂到最近的河南地块上。
 
 ## 工程记忆
 

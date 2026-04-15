@@ -7,18 +7,23 @@
     "http_method": "GET"
   },
   "field": {
-    "name": "牧野示范田",
-    "weather_location": "上海",
+    "field_id": "henan-zz-001",
+    "name": "郑州示范田1号",
+    "area_mu": 68.0,
+    "soil_type": "潮土",
+    "weather_location": "郑州",
     "location": {
-      "city": "上海",
-      "latitude": 31.2304,
-      "longitude": 121.4737
+      "province": "河南省",
+      "city": "郑州",
+      "county": "中原区",
+      "latitude": 34.7473,
+      "longitude": 113.6249
     },
     "geofence": [
-      [121.4728, 31.2298],
-      [121.4746, 31.2298],
-      [121.4748, 31.2312],
-      [121.4729, 31.2314]
+      [113.6241, 34.7467],
+      [113.6257, 34.7467],
+      [113.6257, 34.7479],
+      [113.6241, 34.7479]
     ]
   },
   "flight_constraints": {

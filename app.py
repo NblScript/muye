@@ -12,8 +12,9 @@ from PIL import Image, ImageDraw
 from streamlit.components.v1 import html as st_html
 from streamlit_autorefresh import st_autorefresh
 
-from modules.common import IMAGES_DIR, ensure_runtime_dirs
+from modules.common import DATA_DIR, IMAGES_DIR, ensure_runtime_dirs
 from modules.event_bus import FileEventBus, build_task_views, load_events
+from modules.sqlite_store import SqliteStore
 
 
 EVENT_BUS = FileEventBus()
@@ -677,10 +678,140 @@ def render_log_box(events: list[dict[str, Any]]) -> None:
     )
 
 
+def load_sqlite_task_views(
+    *,
+    limit: int = 20,
+    status: str | None = None,
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    store = SqliteStore(sqlite_path)
+    try:
+        return store.fetch_task_views(limit=limit, status=status, search=search)
+    finally:
+        store.close()
+
+
+def merge_sqlite_tasks_with_events(
+    sqlite_tasks: list[dict[str, Any]],
+    event_tasks: list[dict[str, Any]],
+    *,
+    include_event_only: bool = True,
+) -> list[dict[str, Any]]:
+    event_by_request = {str(task["request_id"]): task for task in event_tasks}
+    merged: list[dict[str, Any]] = []
+    seen_request_ids: set[str] = set()
+
+    for sqlite_task in sqlite_tasks:
+        request_id = str(sqlite_task["request_id"])
+        event_task = event_by_request.get(request_id)
+        merged_task = dict(sqlite_task)
+        if event_task:
+            merged_task["updated_at"] = event_task.get("updated_at") or sqlite_task.get("updated_at")
+            merged_task["current_stage"] = event_task.get("current_stage") or sqlite_task.get("current_stage")
+            merged_task["status"] = event_task.get("status") or sqlite_task.get("status")
+            merged_task["message"] = event_task.get("message") or sqlite_task.get("message")
+            merged_task["image_path"] = sqlite_task.get("image_path") or event_task.get("image_path")
+            merged_task["detections"] = sqlite_task.get("detections") or event_task.get("detections", [])
+            merged_task["weather"] = sqlite_task.get("weather") or event_task.get("weather", {})
+            merged_task["decision"] = sqlite_task.get("decision") or event_task.get("decision", {})
+            merged_task["drone"] = sqlite_task.get("drone") or event_task.get("drone", {})
+            merged_task["events"] = event_task.get("events", [])
+            merged_task["error"] = event_task.get("error") or sqlite_task.get("error")
+        seen_request_ids.add(request_id)
+        merged.append(merged_task)
+
+    if include_event_only:
+        for event_task in event_tasks:
+            request_id = str(event_task["request_id"])
+            if request_id not in seen_request_ids:
+                merged.append(event_task)
+
+    merged.sort(
+        key=lambda task: str(task.get("updated_at") or task.get("created_at") or ""),
+        reverse=True,
+    )
+    return merged
+
+
+def render_task_history(tasks: list[dict[str, Any]]) -> None:
+    st.subheader("任务历史检索")
+    if not tasks:
+        st.info("当前筛选条件下暂无结构化任务记录。")
+        return
+
+    for task in tasks:
+        detections = task.get("detections", [])
+        pest_labels, pest_summary = summarize_pests(detections)
+        weather = task.get("weather", {})
+        decision = task.get("decision", {})
+        medication = decision.get("用药", {}) if isinstance(decision, dict) else {}
+        drone = task.get("drone", {})
+        updated_at = str(task.get("updated_at") or task.get("created_at") or "-")
+        updated_display = updated_at.replace("T", " ")[:19] if updated_at != "-" else "-"
+        pills: list[str] = [
+            f'<span class="muye-pill">{html.escape(str(task.get("status", "-")))}</span>',
+            f'<span class="muye-pill" style="background:rgba(34,197,94,0.12);color:#166534;border-color:rgba(34,197,94,0.18);">{html.escape(str(task.get("current_stage", "-")))}</span>',
+        ]
+        for label in pest_labels[:3]:
+            pills.append(
+                f'<span class="muye-pill" style="background:rgba(14,165,233,0.10);color:#0f766e;border-color:rgba(56,189,248,0.22);">{html.escape(label)}</span>'
+            )
+
+        summary_items = [
+            ("请求号", str(task.get("request_id", "-"))[:8]),
+            ("最近更新", updated_display),
+            ("害虫摘要", pest_summary),
+            ("天气", str(weather.get("summary", "-")) if weather else "-"),
+            ("建议农药", str(medication.get("农药名称", "-")) if medication else "-"),
+            ("无人机", str(drone.get("message", "-")) if drone else "-"),
+        ]
+        content = "".join(
+            f"""
+            <div class="muye-card">
+              <div class="muye-card-label">{html.escape(label)}</div>
+              <div class="muye-card-value">{html.escape(value)}</div>
+            </div>
+            """
+            for label, value in summary_items
+        )
+        st.markdown(
+            f"""
+            <div class="muye-card-wrap" style="margin-bottom:0.9rem;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+                <div>
+                  <div style="font-size:1.02rem;font-weight:700;color:#17372a;">任务 {html.escape(str(task.get("request_id", "-"))[:8])}</div>
+                  <div style="font-size:0.86rem;color:#4b5563;margin-top:0.2rem;">{html.escape(str(task.get("message", "-")))}</div>
+                </div>
+                <div class="muye-pill-wrap" style="margin-top:0;">{''.join(pills)}</div>
+              </div>
+              <div class="muye-card-grid" style="margin-top:0.9rem;">{content}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def render_dashboard() -> None:
     events = load_events(limit=500)
-    tasks = build_task_views(events)
+    event_tasks = build_task_views(events)
+    tasks = merge_sqlite_tasks_with_events(
+        load_sqlite_task_views(limit=80),
+        event_tasks,
+    )
     latest_task = tasks[0] if tasks else None
+    history_status = st.session_state.get("history_status", "all")
+    history_search = st.session_state.get("history_search", "").strip()
+    history_limit = int(st.session_state.get("history_limit", 12))
+    history_tasks = merge_sqlite_tasks_with_events(
+        load_sqlite_task_views(
+            limit=history_limit,
+            status=None if history_status == "all" else history_status,
+            search=history_search or None,
+        ),
+        event_tasks,
+        include_event_only=False,
+    )
 
     inject_styles()
     render_hero(latest_task, len(events))
@@ -777,7 +908,8 @@ def render_dashboard() -> None:
         st.subheader("千问建议")
         decision = latest_task.get("decision", {}) if latest_task else {}
         medication = decision.get("用药", {})
-        instruction = decision.get("指令", {})
+        agronomy_tips = decision.get("农事建议", []) if isinstance(decision, dict) else []
+        instruction = (latest_task.get("drone", {}) if latest_task else {}).get("instruction", {})
         if decision:
             st.markdown(
                 f"""
@@ -802,7 +934,7 @@ def render_dashboard() -> None:
                 unsafe_allow_html=True,
             )
             render_info_cards(
-                "执行参数",
+                "系统规划参数",
                 [
                     ("总量", str(medication.get("总量", "-"))),
                     ("飞行高度", f"{instruction.get('高度', '-')} m"),
@@ -821,6 +953,20 @@ def render_dashboard() -> None:
                     <div class="muye-safety-box">
                       <h3 style="margin:0;color:#17372a;">安全提示</h3>
                       <div class="muye-pill-wrap">{pills}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            if agronomy_tips:
+                tips = "".join(
+                    f'<span class="muye-pill" style="background:rgba(14,165,233,0.10);color:#0f766e;border-color:rgba(56,189,248,0.22);">{html.escape(str(item))}</span>'
+                    for item in agronomy_tips
+                )
+                st.markdown(
+                    f"""
+                    <div class="muye-safety-box">
+                      <h3 style="margin:0;color:#17372a;">农事建议</h3>
+                      <div class="muye-pill-wrap">{tips}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -885,6 +1031,7 @@ def render_dashboard() -> None:
 
     st.subheader("实时事件日志")
     render_log_box(latest_task["events"] if latest_task else events)
+    render_task_history(history_tasks)
 
 
 def sidebar_controls() -> None:
@@ -929,6 +1076,27 @@ def sidebar_controls() -> None:
 
         st.caption("后端会监听 data/images/ 目录。上传完成后，稍等片刻即可在主面板看到处理结果。")
         st.code("python main.py --with-demo-stack", language="bash")
+
+        st.header("历史检索")
+        st.selectbox(
+            "任务状态",
+            options=["all", "queued", "running", "completed", "error"],
+            index=0,
+            key="history_status",
+        )
+        st.text_input(
+            "结构化检索",
+            key="history_search",
+            placeholder="request_id / 图片路径 / 害虫类型",
+        )
+        st.slider(
+            "历史任务数",
+            min_value=5,
+            max_value=30,
+            value=12,
+            step=1,
+            key="history_limit",
+        )
 
 
 def main() -> None:

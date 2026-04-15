@@ -6,6 +6,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 import httpx
 import uvicorn
@@ -13,6 +14,7 @@ import uvicorn
 from modules.ai_decision import DecisionEngine
 from modules.common import (
     CONFIG_DIR,
+    DATA_DIR,
     IMAGES_DIR,
     build_logger,
     ensure_runtime_dirs,
@@ -28,6 +30,7 @@ from modules.event_bus import FileEventBus
 from modules.image_processor import ImageProcessor
 from modules.local_yolo_api import create_app as create_local_yolo_app
 from modules.local_yolo_api import load_local_yolo_settings
+from modules.sqlite_store import SqliteStore
 from modules.virtual_drone_api import create_virtual_drone_app, load_virtual_drone_settings
 from modules.weather_integration import WeatherClient
 
@@ -206,8 +209,10 @@ class MuyeApplication:
             "SERVICE_CLIENT_IP",
             self.drone_config.get("network", {}).get("client_ip", "127.0.0.1"),
         )
+        sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+        self.sqlite_store = SqliteStore(sqlite_path, logger=self.logger)
 
-        self.queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue()
+        self.queue: asyncio.Queue[tuple[str, Path, dict[str, Any]]] = asyncio.Queue()
         self.pending_images: set[str] = set()
         self.worker_tasks: list[asyncio.Task[None]] = []
 
@@ -269,6 +274,7 @@ class MuyeApplication:
             ),
             logger=self.logger,
             event_bus=self.event_bus,
+            sqlite_store=self.sqlite_store,
         )
         self.data_collector = DataCollectorService(
             images_dir=IMAGES_DIR,
@@ -311,6 +317,7 @@ class MuyeApplication:
         await self.decision_engine.close()
         await self.weather_client.close()
         await self.drone_controller.close()
+        self.sqlite_store.close()
 
     async def enqueue_image(self, image_path: Path) -> None:
         ready = await self._wait_until_ready(image_path)
@@ -330,14 +337,41 @@ class MuyeApplication:
             return
 
         request_id = generate_request_id()
+        try:
+            field_context = self._resolve_runtime_field_context()
+        except Exception as exc:
+            log_event(
+                self.logger,
+                logging.ERROR,
+                "运行时地块上下文解析失败",
+                request_id=request_id,
+                client_ip=self.client_ip,
+                image_path=str(image_path),
+                error=str(exc),
+            )
+            return
         self.pending_images.add(key)
-        await self.queue.put((request_id, image_path))
+        await self.queue.put((request_id, image_path, field_context))
+        self._sqlite_write(
+            request_id,
+            "mark_task_queued",
+            lambda: self.sqlite_store.mark_task_queued(
+                request_id,
+                str(image_path),
+                field_id=field_context.get("field_id"),
+            ),
+        )
         self.event_bus.publish(
             request_id=request_id,
             stage="queue",
             status="queued",
             message="图片已进入处理队列",
-            payload={"image_path": str(image_path), "filename": image_path.name},
+            payload={
+                "image_path": str(image_path),
+                "filename": image_path.name,
+                "field_id": field_context.get("field_id"),
+                "field_name": field_context.get("name"),
+            },
         )
         log_event(
             self.logger,
@@ -360,22 +394,42 @@ class MuyeApplication:
 
     async def _worker(self, worker_id: int) -> None:
         while True:
-            request_id, image_path = await self.queue.get()
+            request_id, image_path, field_context = await self.queue.get()
             try:
-                await self._process_image(request_id, image_path, worker_id)
+                await self._process_image(request_id, image_path, field_context, worker_id)
             finally:
                 self.pending_images.discard(str(image_path.resolve()))
                 self.queue.task_done()
 
-    async def _process_image(self, request_id: str, image_path: Path, worker_id: int) -> None:
+    async def _process_image(
+        self,
+        request_id: str,
+        image_path: Path,
+        field_context: dict[str, Any],
+        worker_id: int,
+    ) -> None:
         started = time.perf_counter()
         try:
+            self._sqlite_write(
+                request_id,
+                "mark_task_started",
+                lambda: self.sqlite_store.mark_task_started(
+                    request_id,
+                    str(image_path),
+                    field_id=field_context.get("field_id"),
+                ),
+            )
             self.event_bus.publish(
                 request_id=request_id,
                 stage="pipeline",
                 status="running",
                 message="开始处理图片",
-                payload={"image_path": str(image_path), "worker_id": worker_id},
+                payload={
+                    "image_path": str(image_path),
+                    "worker_id": worker_id,
+                    "field_id": field_context.get("field_id"),
+                    "field_name": field_context.get("name"),
+                },
             )
             self.event_bus.publish(
                 request_id=request_id,
@@ -396,7 +450,17 @@ class MuyeApplication:
                 message="YOLO 识别完成",
                 payload={"image_path": str(image_path), "detections": detections},
             )
+            self._sqlite_write(
+                request_id,
+                "replace_detections",
+                lambda: self.sqlite_store.replace_detections(request_id, detections),
+            )
             if not detections:
+                self._sqlite_write(
+                    request_id,
+                    "mark_task_finished_no_detections",
+                    lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
+                )
                 self.event_bus.publish(
                     request_id=request_id,
                     stage="pipeline",
@@ -418,15 +482,36 @@ class MuyeApplication:
 
             bundle = await self.decision_engine.generate_decision(
                 pest_detections=detections,
-                field_context=self.drone_config.get("field", {}),
+                field_context=field_context,
                 request_id=request_id,
                 client_ip=self.client_ip,
+            )
+            execution_plan = self.drone_controller.plan_spray_mission(
+                field_context=field_context,
+                current_weather=bundle["weather"],
+            )
+            self._sqlite_write(
+                request_id,
+                "add_weather_snapshot",
+                lambda: self.sqlite_store.add_weather_snapshot(request_id, bundle["weather"]),
+            )
+            self._sqlite_write(
+                request_id,
+                "add_decision",
+                lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
             )
             result = await self.drone_controller.execute_spray_mission(
                 decision=bundle["decision"],
                 current_weather=bundle["weather"],
                 request_id=request_id,
                 client_ip=self.client_ip,
+                execution_plan=execution_plan,
+                field_context=field_context,
+            )
+            self._sqlite_write(
+                request_id,
+                "mark_task_finished_success",
+                lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
             )
             self.event_bus.publish(
                 request_id=request_id,
@@ -438,6 +523,7 @@ class MuyeApplication:
                     "detections": detections,
                     "weather": bundle["weather"],
                     "decision": bundle["decision"],
+                    "execution_plan": execution_plan,
                     "mission_result": result,
                 },
             )
@@ -451,9 +537,15 @@ class MuyeApplication:
                 image_path=str(image_path),
                 worker_id=worker_id,
                 detections=detections,
+                execution_plan=execution_plan,
                 mission_result=result,
             )
         except Exception as exc:
+            self._sqlite_write(
+                request_id,
+                "mark_task_finished_error",
+                lambda: self.sqlite_store.mark_task_finished(request_id, "error"),
+            )
             self.event_bus.publish(
                 request_id=request_id,
                 stage="pipeline",
@@ -470,6 +562,63 @@ class MuyeApplication:
                 duration_ms=(time.perf_counter() - started) * 1000,
                 image_path=str(image_path),
                 worker_id=worker_id,
+                error=str(exc),
+            )
+
+    def _resolve_runtime_field_context(self) -> dict[str, Any]:
+        configured_field_id = str(self.drone_config.get("field", {}).get("field_id") or "").strip() or None
+        env_field_id = os.getenv("MUYE_ACTIVE_FIELD_ID")
+        preferred_field_id = env_field_id or configured_field_id
+        field_count_row = self.sqlite_store.fetch_one("SELECT COUNT(*) AS total FROM fields")
+        field_count = int(field_count_row["total"]) if field_count_row else 0
+        if preferred_field_id:
+            field_context = self.sqlite_store.fetch_field_context(field_id=preferred_field_id)
+            if field_context:
+                return field_context
+            if env_field_id or field_count > 0:
+                raise RuntimeError(f"指定地块不存在: {preferred_field_id}")
+        field_context = self.sqlite_store.fetch_field_context()
+        if field_context:
+            return field_context
+        return self._build_config_field_context()
+
+    def _build_config_field_context(self) -> dict[str, Any]:
+        field = self.drone_config.get("field", {})
+        location = field.get("location", {})
+        return {
+            "field_id": field.get("field_id"),
+            "name": field.get("name", "默认示范田"),
+            "weather_location": field.get("weather_location") or location.get("city"),
+            "area_mu": field.get("area_mu"),
+            "soil_type": field.get("soil_type"),
+            "geofence": field.get("geofence", []),
+            "location": {
+                "province": location.get("province"),
+                "city": location.get("city"),
+                "county": location.get("county"),
+                "latitude": location.get("latitude"),
+                "longitude": location.get("longitude"),
+            },
+            "crop_cycle": None,
+        }
+
+    def _sqlite_write(
+        self,
+        request_id: str,
+        operation: str,
+        callback: Callable[[], None],
+    ) -> None:
+        try:
+            callback()
+        except Exception as exc:
+            log_event(
+                self.logger,
+                logging.WARNING,
+                "SQLite 写入失败",
+                request_id=request_id,
+                client_ip=self.client_ip,
+                operation=operation,
+                sqlite_path=str(self.sqlite_store.db_path),
                 error=str(exc),
             )
 

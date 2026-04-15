@@ -55,17 +55,12 @@ def test_ai_decision_builds_mock_decision() -> None:
                     "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
                 }
             ],
-            field_context={
-                "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
-                ]
-            },
+            field_context={"name": "牧野示范田"},
             weather_data={
                 "temperature": 26,
                 "humidity": 58,
                 "wind_speed": 3.3,
+                "summary": "多云",
             },
         )
     finally:
@@ -74,8 +69,9 @@ def test_ai_decision_builds_mock_decision() -> None:
         asyncio.run(engine.close())
 
     assert decision["用药"]["农药名称"] == "示范药剂-aphid"
-    assert decision["指令"]["飞行路径"][0] == [121.4728, 31.2298]
-    assert decision["指令"]["喷洒速率"] == 1.1
+    assert "优先针对aphid高发区域安排喷洒作业" in decision["农事建议"][0]
+
+
 @pytest.mark.asyncio
 async def test_ai_decision_generates_valid_schema() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -94,22 +90,7 @@ async def test_ai_decision_generates_valid_schema() -> None:
                                 "总量": "12L",
                                 "安全提示": ["作业人员佩戴防护服", "远离水源喷洒"]
                               },
-                              "指令": {
-                                "飞行路径": [[121.4729, 31.2300], [121.4740, 31.2308]],
-                                "高度": 3.5,
-                                "速度": 2.4,
-                                "喷洒速率": 1.2,
-                                "覆盖区域": {
-                                  "type": "polygon",
-                                  "coordinates": [[121.4729, 31.2300], [121.4740, 31.2300], [121.4740, 31.2308]]
-                                },
-                                "气象限制": {
-                                  "最大风速": 4.5,
-                                  "最低温度": 15,
-                                  "最高温度": 33,
-                                  "最大湿度": 85
-                                }
-                              }
+                              "农事建议": ["优先处理高风险区", "作业前核验实时风速"]
                             }
                             """
                         }
@@ -150,7 +131,7 @@ async def test_ai_decision_generates_valid_schema() -> None:
         await engine.close()
 
     assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
-    assert result["decision"]["指令"]["喷洒速率"] == 1.2
+    assert result["decision"]["农事建议"] == ["优先处理高风险区", "作业前核验实时风速"]
     assert "害虫检测结果" in result["structured_input_text"]
     assert "风向=东南风" in result["structured_input_text"]
     assert result["weather"]["temperature"] == 27.5
@@ -165,7 +146,7 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
                 "choices": [
                     {
                         "message": {
-                            "content": '{"用药": {"农药名称": "吡虫啉"}, "指令": {}}'
+                            "content": '{"用药": {"农药名称": "吡虫啉"}}'
                         }
                     }
                 ]
@@ -204,7 +185,7 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
         await engine.close()
 
     assert result["decision"]["用药"]["农药名称"]
-    assert result["decision"]["指令"]["飞行路径"]
+    assert result["decision"]["用药"]["安全提示"]
 
 
 @pytest.mark.asyncio
@@ -227,22 +208,7 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
                                 "总量": "12L",
                                 "安全提示": ["佩戴口罩"]
                               },
-                              "指令": {
-                                "飞行路径": [[121.4729, 31.2300], [121.4740, 31.2308]],
-                                "高度": 3.5,
-                                "速度": 2.4,
-                                "喷洒速率": 1.2,
-                                "覆盖区域": {
-                                  "type": "polygon",
-                                  "coordinates": [[121.4729, 31.2300], [121.4740, 31.2300], [121.4740, 31.2308]]
-                                },
-                                "气象限制": {
-                                  "最大风速": 4.5,
-                                  "最低温度": 15,
-                                  "最高温度": 33,
-                                  "最大湿度": 85
-                                }
-                              }
+                              "农事建议": ["佩戴防护具"]
                             }
                             """
                         }
@@ -283,3 +249,4 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
         await engine.close()
 
     assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
+    assert result["decision"]["农事建议"] == ["佩戴防护具"]

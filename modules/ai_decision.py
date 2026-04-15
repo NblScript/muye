@@ -16,7 +16,7 @@ from modules.weather_integration import WeatherClient
 
 DECISION_SCHEMA = {
     "type": "object",
-    "required": ["用药", "指令"],
+    "required": ["用药"],
     "additionalProperties": False,
     "properties": {
         "用药": {
@@ -35,54 +35,9 @@ DECISION_SCHEMA = {
                 },
             },
         },
-        "指令": {
-            "type": "object",
-            "required": ["飞行路径", "高度", "速度", "喷洒速率", "覆盖区域", "气象限制"],
-            "additionalProperties": False,
-            "properties": {
-                "飞行路径": {
-                    "type": "array",
-                    "minItems": 2,
-                    "items": {
-                        "type": "array",
-                        "minItems": 2,
-                        "maxItems": 2,
-                        "items": {"type": "number"},
-                    },
-                },
-                "高度": {"type": "number", "minimum": 0.1},
-                "速度": {"type": "number", "minimum": 0.1},
-                "喷洒速率": {"type": "number", "minimum": 0.01},
-                "覆盖区域": {
-                    "type": "object",
-                    "required": ["type", "coordinates"],
-                    "additionalProperties": False,
-                    "properties": {
-                        "type": {"type": "string", "minLength": 1},
-                        "coordinates": {
-                            "type": "array",
-                            "minItems": 3,
-                            "items": {
-                                "type": "array",
-                                "minItems": 2,
-                                "maxItems": 2,
-                                "items": {"type": "number"},
-                            },
-                        },
-                    },
-                },
-                "气象限制": {
-                    "type": "object",
-                    "required": ["最大风速", "最低温度", "最高温度", "最大湿度"],
-                    "additionalProperties": False,
-                    "properties": {
-                        "最大风速": {"type": "number", "minimum": 0.1},
-                        "最低温度": {"type": "number"},
-                        "最高温度": {"type": "number"},
-                        "最大湿度": {"type": "number", "minimum": 0, "maximum": 100},
-                    },
-                },
-            },
+        "农事建议": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
         },
     },
 }
@@ -262,9 +217,11 @@ class DecisionEngine:
             f"天气概况={weather_data['summary']}\n"
             "害虫检测结果：\n"
             f"{chr(10).join(detection_lines)}\n"
+            "注意：飞行路径、高度、速度、喷洒速率、覆盖区域和气象限制由系统 planner 生成，"
+            "不要输出任何飞控参数。\n"
             "输出 JSON Schema 关键字段："
             "用药.农药名称/浓度/配比/总量/安全提示，"
-            "指令.飞行路径/高度/速度/喷洒速率/覆盖区域/气象限制。"
+            "可选字段为农事建议。"
         )
 
     async def _request_qwen_decision(
@@ -289,7 +246,8 @@ class DecisionEngine:
                     "content": (
                         "你是农业植保决策助手。"
                         "必须只输出一个 JSON 对象。"
-                        "顶层只能包含“用药”和“指令”两个字段。"
+                        "顶层必须包含“用药”，可选“农事建议”。"
+                        "禁止输出飞行路径、高度、速度、喷洒速率、覆盖区域、气象限制等飞控字段。"
                         "所有字段名必须使用中文，且必填字段不能为空字符串。"
                     ),
                 },
@@ -365,8 +323,9 @@ class DecisionEngine:
                     "content": (
                         "你是农业植保 JSON 修复助手。"
                         "请把输入修复为合法 JSON。"
-                        "顶层只能保留“用药”和“指令”。"
+                        "顶层只保留“用药”和可选“农事建议”。"
                         "所有必填字段必须存在且不能为空。"
+                        "不要生成任何飞控字段。"
                         "不要输出解释。"
                     ),
                 },
@@ -387,7 +346,7 @@ class DecisionEngine:
             content = message.get("content")
         elif "output" in payload and isinstance(payload["output"], dict):
             content = payload["output"].get("text") or payload["output"].get("content")
-        elif {"用药", "指令"}.issubset(payload):
+        elif "用药" in payload:
             return payload
         else:
             raise DecisionEngineError("无法从千问响应中提取内容")
@@ -413,18 +372,15 @@ class DecisionEngine:
             raise DecisionEngineError(f"千问返回内容不是合法 JSON: {exc}") from exc
 
     def _sanitize_decision_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
-        if {"用药", "指令"}.issubset(payload):
-            return {
-                "用药": payload["用药"],
-                "指令": payload["指令"],
-            }
+        if "用药" in payload:
+            sanitized = {"用药": payload["用药"]}
+            if "农事建议" in payload:
+                sanitized["农事建议"] = payload["农事建议"]
+            return sanitized
         return payload
 
     def _normalize_decision_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         medication = payload.get("用药", {}) if isinstance(payload.get("用药"), dict) else {}
-        instruction = payload.get("指令", {}) if isinstance(payload.get("指令"), dict) else {}
-        coverage = instruction.get("覆盖区域", {}) if isinstance(instruction.get("覆盖区域"), dict) else {}
-        restrictions = instruction.get("气象限制", {}) if isinstance(instruction.get("气象限制"), dict) else {}
 
         return {
             "用药": {
@@ -434,22 +390,7 @@ class DecisionEngine:
                 "总量": self._normalize_text(medication.get("总量")),
                 "安全提示": self._normalize_string_list(medication.get("安全提示")),
             },
-            "指令": {
-                "飞行路径": self._normalize_coordinate_pairs(instruction.get("飞行路径")),
-                "高度": self._normalize_number(instruction.get("高度")),
-                "速度": self._normalize_number(instruction.get("速度")),
-                "喷洒速率": self._normalize_number(instruction.get("喷洒速率")),
-                "覆盖区域": {
-                    "type": self._normalize_text(coverage.get("type")),
-                    "coordinates": self._normalize_coordinate_pairs(coverage.get("coordinates")),
-                },
-                "气象限制": {
-                    "最大风速": self._normalize_number(restrictions.get("最大风速")),
-                    "最低温度": self._normalize_number(restrictions.get("最低温度")),
-                    "最高温度": self._normalize_number(restrictions.get("最高温度")),
-                    "最大湿度": self._normalize_number(restrictions.get("最大湿度")),
-                },
-            },
+            "农事建议": self._normalize_string_list(payload.get("农事建议")),
         }
 
     def _validate_decision_payload(self, payload: dict[str, Any]) -> None:
@@ -457,10 +398,6 @@ class DecisionEngine:
             validate(instance=payload, schema=DECISION_SCHEMA)
         except ValidationError as exc:
             raise DecisionEngineError(f"千问返回 JSON 结构不合法: {exc.message}") from exc
-
-        restrictions = payload["指令"]["气象限制"]
-        if restrictions["最低温度"] > restrictions["最高温度"]:
-            raise DecisionEngineError("气象限制中的最低温度不能大于最高温度")
 
     def _merge_with_fallback(self, value: Any, fallback: Any) -> Any:
         if isinstance(fallback, dict):
@@ -494,50 +431,6 @@ class DecisionEngine:
         payload: dict[str, Any],
         fallback: dict[str, Any],
     ) -> dict[str, Any]:
-        instruction = payload["指令"]
-        fallback_instruction = fallback["指令"]
-
-        instruction["高度"] = self._coalesce_positive_number(
-            instruction.get("高度"),
-            fallback_instruction["高度"],
-        )
-        instruction["速度"] = self._coalesce_positive_number(
-            instruction.get("速度"),
-            fallback_instruction["速度"],
-        )
-        instruction["喷洒速率"] = self._coalesce_positive_number(
-            instruction.get("喷洒速率"),
-            fallback_instruction["喷洒速率"],
-        )
-
-        restrictions = instruction["气象限制"]
-        fallback_restrictions = fallback_instruction["气象限制"]
-        restrictions["最大风速"] = self._coalesce_positive_number(
-            restrictions.get("最大风速"),
-            fallback_restrictions["最大风速"],
-        )
-        restrictions["最大湿度"] = self._coalesce_bounded_number(
-            restrictions.get("最大湿度"),
-            fallback_restrictions["最大湿度"],
-            lower=0,
-            upper=100,
-        )
-
-        if restrictions["最低温度"] is None:
-            restrictions["最低温度"] = fallback_restrictions["最低温度"]
-        if restrictions["最高温度"] is None:
-            restrictions["最高温度"] = fallback_restrictions["最高温度"]
-        if restrictions["最低温度"] > restrictions["最高温度"]:
-            restrictions["最低温度"] = fallback_restrictions["最低温度"]
-            restrictions["最高温度"] = fallback_restrictions["最高温度"]
-
-        if len(instruction["飞行路径"]) < 2:
-            instruction["飞行路径"] = fallback_instruction["飞行路径"]
-        if len(instruction["覆盖区域"]["coordinates"]) < 3:
-            instruction["覆盖区域"]["coordinates"] = fallback_instruction["覆盖区域"]["coordinates"]
-        if not instruction["覆盖区域"]["type"]:
-            instruction["覆盖区域"]["type"] = fallback_instruction["覆盖区域"]["type"]
-
         medication = payload["用药"]
         fallback_medication = fallback["用药"]
         for key in ["农药名称", "浓度", "配比", "总量"]:
@@ -545,39 +438,15 @@ class DecisionEngine:
                 medication[key] = fallback_medication[key]
         if not medication.get("安全提示"):
             medication["安全提示"] = fallback_medication["安全提示"]
+        if not payload.get("农事建议"):
+            payload["农事建议"] = fallback.get("农事建议", [])
 
         return payload
-
-    def _coalesce_positive_number(self, value: Any, fallback: float) -> float:
-        candidate = self._normalize_number(value)
-        if candidate is None or candidate <= 0:
-            return float(fallback)
-        return candidate
-
-    def _coalesce_bounded_number(
-        self,
-        value: Any,
-        fallback: float,
-        *,
-        lower: float,
-        upper: float,
-    ) -> float:
-        candidate = self._normalize_number(value)
-        if candidate is None or candidate < lower or candidate > upper:
-            return float(fallback)
-        return candidate
 
     def _normalize_text(self, value: Any) -> str:
         if value is None:
             return ""
         return str(value).strip()
-
-    def _normalize_string_list(self, value: Any) -> list[str]:
-        if isinstance(value, list):
-            return [str(item).strip() for item in value if str(item).strip()]
-        if isinstance(value, str) and value.strip():
-            return [value.strip()]
-        return []
 
     def _normalize_number(self, value: Any) -> float | None:
         if value in (None, ""):
@@ -587,19 +456,12 @@ class DecisionEngine:
         except (TypeError, ValueError):
             return None
 
-    def _normalize_coordinate_pairs(self, value: Any) -> list[list[float]]:
-        if not isinstance(value, list):
-            return []
-
-        result: list[list[float]] = []
-        for item in value:
-            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                continue
-            try:
-                result.append([float(item[0]), float(item[1])])
-            except (TypeError, ValueError):
-                continue
-        return result
+    def _normalize_string_list(self, value: Any) -> list[str]:
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str) and value.strip():
+            return [value.strip()]
+        return []
 
     def _build_mock_decision(
         self,
@@ -607,10 +469,6 @@ class DecisionEngine:
         field_context: dict[str, Any],
         weather_data: dict[str, Any],
     ) -> dict[str, Any]:
-        geofence = field_context.get("geofence", [])
-        if len(geofence) < 3:
-            raise DecisionEngineError("模拟决策需要至少三个围栏坐标点")
-
         primary_pest = pest_detections[0]["pest_type"] if pest_detections else "unknown-pest"
         total_targets = max(len(pest_detections), 1)
         total_amount_l = round(6 + total_targets * 2.5, 1)
@@ -626,22 +484,10 @@ class DecisionEngine:
                     "喷洒期间远离水源和人畜活动区域",
                 ],
             },
-            "指令": {
-                "飞行路径": [geofence[0], geofence[1], geofence[2]],
-                "高度": 3.5,
-                "速度": 2.2,
-                "喷洒速率": 1.1,
-                "覆盖区域": {
-                    "type": "polygon",
-                    "coordinates": geofence[:3],
-                },
-                "气象限制": {
-                    "最大风速": max(float(weather_data["wind_speed"]) + 1.0, 4.0),
-                    "最低温度": min(float(weather_data["temperature"]) - 8.0, float(weather_data["temperature"])),
-                    "最高温度": max(float(weather_data["temperature"]) + 8.0, float(weather_data["temperature"])),
-                    "最大湿度": max(float(weather_data["humidity"]) + 10.0, 85.0),
-                },
-            },
+            "农事建议": [
+                f"优先针对{primary_pest}高发区域安排喷洒作业",
+                f"当前天气{weather_data['summary']}，作业前再次核验实时风速与湿度",
+            ],
         }
 
     def _resolve_chat_completions_url(self, api_url: str) -> str:
