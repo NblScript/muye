@@ -1,7 +1,46 @@
 # Changelog
 
-## Unreleased
+## v1.3
 
+- 当前仓库已正式接入 `PX4 + Gazebo SITL` 执行链路，不再只是接入方案记录：
+  - 新增 [`modules/px4_simulator.py`](/home/qingking/muye/modules/px4_simulator.py)
+  - [`modules/drone_controller.py`](/home/qingking/muye/modules/drone_controller.py) 已支持 `backend=px4`
+  - [`main.py`](/home/qingking/muye/main.py) 已支持 `--drone-backend px4` 和 PX4 环境变量覆盖
+  - [`.env.example`](/home/qingking/muye/.env.example) 与 [`config/drone_config.json`](/home/qingking/muye/config/drone_config.json) 已补齐 PX4 配置
+- 新增完整 PX4 一键演示脚本链：
+  - [`scripts/run_px4_demo.sh`](/home/qingking/muye/scripts/run_px4_demo.sh)
+  - [`scripts/start_px4_visual_demo.sh`](/home/qingking/muye/scripts/start_px4_visual_demo.sh)
+  - [`scripts/start_competition_mode.sh`](/home/qingking/muye/scripts/start_competition_mode.sh)
+  - [`scripts/start_all_in_one.sh`](/home/qingking/muye/scripts/start_all_in_one.sh)
+- 已在 [`config/drone_config.json`](/home/qingking/muye/config/drone_config.json) 中加入 PX4 SITL 演示地块、显式演示航线和展示参数。
+- 已在 [`README.md`](/home/qingking/muye/README.md) 中补充 PX4 SITL、可视化演示、比赛模式和全量一键命令说明。
+- 已补 PX4 相关测试：
+  - [`tests/test_main.py`](/home/qingking/muye/tests/test_main.py)
+  - [`tests/test_drone_controller.py`](/home/qingking/muye/tests/test_drone_controller.py)
+  - [`tests/test_mission_planner.py`](/home/qingking/muye/tests/test_mission_planner.py)
+  - [`tests/test_event_bus.py`](/home/qingking/muye/tests/test_event_bus.py)
+- 新增 [`data/seeds/henan/soil_records.csv`](/home/qingking/muye/data/seeds/henan/soil_records.csv) 作为河南土壤检测示例 seed。
+- 新增 [`scripts/generate_henan_soil_seed_csv.py`](/home/qingking/muye/scripts/generate_henan_soil_seed_csv.py) 和 [`scripts/import_henan_soil_records_csv.py`](/home/qingking/muye/scripts/import_henan_soil_records_csv.py)。
+- 新增 `modules/sqlite_store.py` 的 `upsert_soil_record()`。
+- 补充土壤 seed 生成、导入和 upsert 测试：
+  - `tests/test_henan_field_crop_seed_generation.py`
+  - `tests/test_sqlite_migration.py`
+- `scripts/import_henan_reference_data.py` 现在会同步导入河南农药目录示例 seed 到 SQLite `pesticide_catalog`。
+- 新增 [`data/seeds/henan/pesticide_catalog.json`](/home/qingking/muye/data/seeds/henan/pesticide_catalog.json)，用于本地联调和喷洒记录关联验证。
+- 新增 `modules/sqlite_store.py` 的 `upsert_pesticide_catalog_record()`。
+- 主处理链在 `pesticide_catalog` 存在同名产品时，会把 `spray_records.pesticide_id` 正式关联起来。
+- 补充农药目录导入与主链关联测试：
+  - `tests/test_sqlite_migration.py`
+  - `tests/test_main.py`
+- 主处理链执行成功后，新增把喷洒作业摘要同步写入 SQLite `spray_records`：
+  - 关联 `request_id`
+  - 关联 `field_id` / `crop_cycle_id`
+  - 回填无人机任务 ID、喷洒速率、飞行高度、飞行速度、天气快照和结果状态
+  - 从 AI 用药建议中提取总量 / 配比，并计算基础 `dosage_per_mu`
+- 当系统退回 `config/drone_config.json` 地块上下文时，会自动把该地块 seed 到 SQLite `fields`，避免后续喷洒记录因缺少外键地块而落库失败。
+- 新增喷洒记录写入回归测试：
+  - `tests/test_main.py`
+  - `tests/test_sqlite_migration.py`
 - 修复 `weather_history_daily` 写入逻辑，允许同一气象站同一天的记录挂载到多个 `field_id`，避免多地块天气历史互相覆盖。
 - 修复主流程运行时地块解析：存在多块地时必须显式指定，不再默认取数据库中的第一块地。
 - 调整地块天气上下文解析优先级，改为优先使用经纬度匹配天气，再回退到市/县信息。
@@ -29,12 +68,13 @@
   - `detections`
   - `weather_snapshots`
   - `decisions`
-- 主处理链现在会优先从 SQLite `fields` / `field_crop_cycles` 读取运行时地块，而不是依赖静态上海配置。
+- 主处理链现在会优先从 SQLite `fields` / `field_crop_cycles` 读取运行时地块，而不是依赖静态单地块配置。
 - `tasks` 新增 `field_id` 关联；`fields` 新增 `owner_user_id`；`crop_catalog` 新增 `water_demand_coefficient`。
 - 新增 `modules/mission_planner.py`：
   - 飞行路径、高度、喷洒速率和气象限制改由系统 planner 生成
   - LLM 决策层只保留用药建议和农事建议
 - Streamlit 前端开始优先从 SQLite 读取任务摘要，并用 JSONL 事件流补实时阶段、无人机状态和日志。
+- Streamlit 前端已能识别 PX4 状态时间线，并在任务历史中展示结构化无人机状态与作业结论。
 - 前端决策卡片改为区分：
   - AI 用药建议
   - 系统规划参数
@@ -75,6 +115,9 @@
   - `tests/test_main.py`
   - `tests/test_drone_controller.py`
   - `tests/test_sqlite_migration.py`
+- 2026-04-16 已重新核对仓库状态并同步更新工程记忆文件，修正此前“PX4 尚未落代码”的过时描述：
+  - [`PROJECT_MEMORY.md`](/home/qingking/muye/PROJECT_MEMORY.md)
+  - [`docs/WORKLOG.md`](/home/qingking/muye/docs/WORKLOG.md)
 
 ## v1.1.1
 

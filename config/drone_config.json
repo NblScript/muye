@@ -37,7 +37,71 @@
     "ip_whitelist": ["127.0.0.1", "192.168.1.10"]
   },
   "execution": {
+    "backend": "simulated",
     "simulate_only": true,
     "request_timeout_seconds": 15
+  },
+  "px4": {
+    "system_address": "udpin://0.0.0.0:14540",
+    "connect_timeout_seconds": 30,
+    "mission_timeout_seconds": 180,
+    "auto_arm": true,
+    "auto_start_mission": true,
+    "return_to_launch_after_mission": true,
+    "require_global_position": true,
+    "acceptance_radius_m": 2.0,
+    "prefer_demo_field": false,
+    "demo_field": {
+      "field_id": "px4-sitl-demo",
+      "name": "PX4 SITL 演示地块",
+      "area_mu": 0.12,
+      "soil_type": "演示地块",
+      "weather_location": "Zurich",
+      "location": {
+        "province": "Zurich",
+        "city": "Zurich",
+        "county": "SITL",
+        "latitude": 47.397742,
+        "longitude": 8.545594
+      },
+      "geofence": [
+        [8.545541, 47.397707],
+        [8.545647, 47.397707],
+        [8.545647, 47.397777],
+        [8.545541, 47.397777]
+      ],
+      "explicit_route": [
+        [8.545541, 47.397711],
+        [8.545647, 47.397711],
+        [8.545647, 47.397719],
+        [8.545541, 47.397719],
+        [8.545541, 47.397727],
+        [8.545647, 47.397727],
+        [8.545647, 47.397734],
+        [8.545541, 47.397734],
+        [8.545541, 47.397742],
+        [8.545647, 47.397742],
+        [8.545647, 47.397750],
+        [8.545541, 47.397750],
+        [8.545541, 47.397758],
+        [8.545647, 47.397758],
+        [8.545647, 47.397765],
+        [8.545541, 47.397765],
+        [8.545541, 47.397773],
+        [8.545647, 47.397773]
+      ],
+      "presentation_profile": {
+        "target_speed_mps": 1.0,
+        "lane_spacing_m": 2.0,
+        "acceptance_radius_m": 0.15,
+        "waypoint_loiter_time_s": 0.0,
+        "fly_through": false,
+        "turn_mode": "in_place",
+        "turn_loiter_time_s": 0.8
+      },
+      "crop_cycle": {
+        "crop_name": "SITL 测试作物"
+      }
+    }
   }
 }

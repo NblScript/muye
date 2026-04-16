@@ -60,9 +60,13 @@ muye/
 ├── drone_api.py                 # 虚拟无人机 API 启动入口
 ├── scripts/                     # 启动、seed 生成与导入辅助脚本
 │   ├── generate_henan_field_crop_seed_csv.py # 生成河南地块/作物/cycle CSV
+│   ├── generate_henan_soil_seed_csv.py       # 生成河南土壤检测 seed CSV
 │   ├── import_henan_field_crop_seed_csv.py   # 导入河南地块/作物/cycle CSV
 │   ├── import_henan_reference_data.py        # 导入河南统计指标 seed
+│   ├── import_henan_soil_records_csv.py      # 导入河南土壤检测 CSV
 │   ├── import_henan_weather_history_csv.py   # 导入河南历史天气 CSV
+│   ├── run_px4_demo.sh          # 一键跑通 PX4 SITL 联调演示
+│   ├── start_all_in_one.sh      # 一键拉起前后端、浏览器和无人机演示页面
 │   └── start_demo.sh            # 一键启动后端 demo 栈和 Streamlit 前端
 ├── tests/                       # 单元测试目录
 │   ├── test_ai_decision.py      # 千问决策测试
@@ -110,12 +114,12 @@ muye/
 6. `drone_controller.py` + `mission_planner.py`
    - `mission_planner.py` 负责从地块围栏、天气和飞控约束生成系统执行参数。
    - `drone_controller.py` 负责校验气象限制、地理围栏和飞行控制参数。
-   - 支持虚拟无人机 API 执行与状态轮询。
+   - 支持 `simulated`、虚拟无人机 API 和 `PX4 SITL / MAVSDK` 三种执行链路。
 
 7. `main.py`
    - 使用 `asyncio` 组织采集、识别、决策、执行全流程。
    - 通过异步队列避免并发场景下的资源竞争。
-   - 支持一键同时启动本地 YOLO API、虚拟无人机 API 和主系统。
+   - 支持一键同时启动本地 YOLO API、虚拟无人机 API 和主系统，也支持切到 PX4 backend。
 
 8. `event_bus.py`
    - 采用 `JSONL` 文件作为简单事件总线。
@@ -195,6 +199,9 @@ SERVICE_CLIENT_IP="127.0.0.1"
 - `drone_config.json` 中 `simulate_capture=true` 时，系统会自动生成一张最小 JPEG 作为采图结果，便于本地联调。
 - `execution.simulate_only=true` 时，无人机喷洒任务只做本地模拟，不访问虚拟无人机 API。
 - 使用 `--with-virtual-drone-api` 或 `--with-demo-stack` 时，主程序会自动接管无人机接口地址并关闭本地模拟模式。
+- `DRONE_BACKEND=px4` 时，项目会改走 PX4 SITL / MAVSDK 执行链路。
+- 本地 PX4 演示建议同时设置 `PX4_USE_SITL_DEMO_FIELD=true`，让任务使用仓库内置的 Zurich SITL 小地块，而不是直接飞往业务配置里的真实农田坐标。
+- 当前比赛演示脚本默认使用 `PX4_SYSTEM_ADDRESS=udpin://0.0.0.0:14540`，直接监听 PX4 的 Onboard MAVLink 远端端口，现场启动更稳。
 
 ## 运行方式
 
@@ -220,17 +227,108 @@ cd /home/qingking/muye
 - Streamlit 前端会监听 `127.0.0.1:8501`
 - 按 `Ctrl+C` 会一起停止前后端进程
 
+## PX4 SITL 演示
+
+如果要把项目切到 PX4 仿真执行链路，推荐直接跑下面这条命令：
+
+```bash
+cd /home/qingking/muye
+./scripts/run_px4_demo.sh
+```
+
+这条脚本会完成下面几件事：
+
+- 启动 `~/PX4-Autopilot` 下的 `make px4_sitl gz_x500`
+- 默认切到 `muye_demo_field` Gazebo 世界，场景里带演示农田、四角桩和可见边界
+- 自动清理代理环境变量，避免 PX4 本地构建/运行链路被代理干扰
+- 以 `DRONE_BACKEND=px4` 启动 Muye 后端和本地 YOLO API
+- 强制切换到仓库内置的 Zurich SITL 演示地块
+- 注入示例图 `IP000000042.jpg`，等待任务真正执行到 PX4 `completed`
+
+如果 PX4 已经在另一个终端跑着，可以复用现有实例：
+
+```bash
+cd /home/qingking/muye
+./scripts/run_px4_demo.sh --skip-px4
+```
+
+常用参数：
+
+- `--px4-dir /path/to/PX4-Autopilot`：指定 PX4 仓库路径
+- `--sample-image /path/to/image.jpg`：替换演示图片
+- `--system-address udpin://0.0.0.0:14540`：覆盖 MAVSDK 连接地址
+- `--world muye_demo_field`：覆盖 Gazebo 世界名称；如果想手工启动，也可执行 `PX4_GZ_WORLD=muye_demo_field make px4_sitl gz_x500`
+- `--keep-px4`：演示结束后不关闭 PX4 SITL
+
+如果比赛演示时希望把 `PX4/Gazebo + Muye 前端` 一起拉起来，直接运行：
+
+```bash
+cd /home/qingking/muye
+./scripts/start_px4_visual_demo.sh --sample-image IP000000042.jpg
+```
+
+这条脚本会：
+
+- 启动 `PX4 SITL + Gazebo`
+- 以 `PX4` 模式启动 Muye 后端
+- 启动 Streamlit 演示面板
+- 如果本机已安装 `QGroundControl`，会自动尝试一并拉起
+
+常用参数：
+
+- `--skip-px4`：复用已运行的 PX4 SITL
+- `--skip-qgc`：只看 Gazebo 和 Muye，不启动 QGroundControl
+- `--qgc-path /path/to/QGroundControl.AppImage`：手工指定 QGroundControl 路径
+- `--frontend-port 8501`：指定 Streamlit 端口
+
+如果想切到“比赛模式”，让脚本在启动后自动拉起浏览器并给出现场展示提示，运行：
+
+```bash
+cd /home/qingking/muye
+./scripts/start_competition_mode.sh --sample-image IP000000042.jpg
+```
+
+如果你只想记一个最直接的一键命令，直接运行：
+
+```bash
+cd /home/qingking/muye
+./scripts/start_all_in_one.sh
+```
+
+这条脚本默认会：
+
+- 拉起 `PX4 SITL + Gazebo`
+- 拉起 Muye 后端
+- 拉起 Streamlit 前端
+- 自动打开浏览器中的控制台页面
+- 自动尝试打开 `QGroundControl` 无人机页面
+
+常用参数：
+
+- `--with-sample`：启动后自动注入仓库内置演示图片，直接触发完整演示流程
+- `--sample-image /path/to/image.jpg`：改用你自己的演示图片
+- `--skip-px4`：复用已经运行中的 PX4
+- `--skip-qgc`：不打开 QGroundControl
+- `--skip-browser`：不自动打开网页
+
+比赛模式额外参数：
+
+- `--browser-cmd /usr/bin/firefox`：指定浏览器程序
+- 其余 `PX4/QGC` 相关参数会透传给 `start_px4_visual_demo.sh`
+
 ## 河南参考数据导入
 
 仓库已经内置第一批河南参考数据 seed，当前包含：
 
 - 官方数据来源登记
 - 河南省农业统计指标
+- 河南农药目录示例 seed
 
 相关文件：
 
 - [`sources.json`](/home/qingking/muye/data/seeds/henan/sources.json)
 - [`agri_statistical_indicators.json`](/home/qingking/muye/data/seeds/henan/agri_statistical_indicators.json)
+- [`pesticide_catalog.json`](/home/qingking/muye/data/seeds/henan/pesticide_catalog.json)
 - [`import_henan_reference_data.py`](/home/qingking/muye/scripts/import_henan_reference_data.py)
 
 导入方式：
@@ -244,6 +342,9 @@ PYTHONPATH=. .venv/bin/python scripts/import_henan_reference_data.py
 
 - `data_sources`
 - `agri_statistical_indicators`
+- `pesticide_catalog`
+
+其中 `pesticide_catalog` 当前是本地联调用的河南示例目录 seed，用于打通喷洒记录与农药目录关联；后续应替换为正式导出的官方登记数据。
 
 所有导入记录都带有来源 URL、发布单位和来源摘录，便于后续核验。
 
@@ -273,6 +374,36 @@ PYTHONPATH=. .venv/bin/python scripts/import_henan_field_crop_seed_csv.py
 
 当前历史天气导入脚本也会优先根据站点经纬度和区县信息，把天气日值自动挂到最近的河南地块上。
 
+## 河南土壤检测种子
+
+当前仓库已经补齐一份河南土壤检测示例 seed，并提供生成脚本和导入脚本。
+
+相关文件：
+
+- [`soil_records.csv`](/home/qingking/muye/data/seeds/henan/soil_records.csv)
+- [`generate_henan_soil_seed_csv.py`](/home/qingking/muye/scripts/generate_henan_soil_seed_csv.py)
+- [`import_henan_soil_records_csv.py`](/home/qingking/muye/scripts/import_henan_soil_records_csv.py)
+
+重新生成 CSV：
+
+```bash
+cd /home/qingking/muye
+PYTHONPATH=. .venv/bin/python scripts/generate_henan_soil_seed_csv.py
+```
+
+导入 SQLite：
+
+```bash
+cd /home/qingking/muye
+PYTHONPATH=. .venv/bin/python scripts/import_henan_soil_records_csv.py
+```
+
+导入后会写入：
+
+- `soil_records`
+
+当前 `soil_records.csv` 主要用于本地联调和后续决策扩展验证；等你拿到真实土壤检测数据后，可以直接替换为真实 CSV 再走同一条导入链。
+
 ## 工程记忆
 
 为了避免后续协作时丢失上下文，项目内约定维护两份工程记忆文件：
@@ -297,7 +428,10 @@ PYTHONPATH=. .venv/bin/python scripts/import_henan_field_crop_seed_csv.py
 - YOLO：真实本地模型 `best.pt`
 - 和风天气：真实接口
 - 千问：支持真实接口，也支持通过 `QWEN_USE_MOCK` 切换为模拟模式
-- 无人机：虚拟无人机 API
+- 无人机：
+  - `simulated`
+  - 虚拟无人机 API
+  - `PX4 SITL / MAVSDK`
 
 当你的 [api_keys.env](/home/qingking/muye/config/api_keys.env) 中设置为：
 
@@ -306,7 +440,7 @@ QWEATHER_USE_MOCK="false"
 QWEN_USE_MOCK="false"
 ```
 
-系统会运行在“真实天气 + 真实千问 + 虚拟无人机”模式。
+系统会运行在“真实天气 + 真实千问 + 当前 `DRONE_BACKEND` 指定的无人机 backend”模式。
 
 推荐一键启动本地 YOLO API、虚拟无人机 API 与主系统：
 
@@ -390,6 +524,8 @@ streamlit run app.py --server.headless true
 
 - 无人机图片存放在 `data/images/`
 - 系统日志存放在 `data/logs/system.log`
+- 实时事件总线存放在 `data/logs/demo_events.jsonl`
+- 结构化业务数据默认写入 `data/muye.db`
 - 日志会记录 `request_id`、`client_ip`、`duration_ms` 等字段
 
 ## 测试
@@ -405,10 +541,17 @@ PYTHONPATH=. .venv/bin/pytest -q
 - 事件总线的写入、清空与任务视图聚合
 - 和风天气地点查询与天气实况两步流程
 - 本地 YOLO API 的鉴权与标准输出格式
-- 虚拟无人机任务状态推进
+- 虚拟无人机与 PX4 状态推进
 - 千问决策 JSON Schema 校验与结构化输入构建
+- SQLite 迁移、结构化历史读取与农业数据写入
+- 主流程 `spray_records` / `pesticide_catalog` / 地块上下文联动
 
 ## 版本记录
+
+- `v1.1.1`
+  - SQLite 迁移支持发布线
+  - 补齐旧库迁移工具 `scripts/migrate_to_v1_1.py`
+  - 补齐迁移回归测试与迁移文档
 
 - `v0.1-initial`
   - 项目初始稳定版本
@@ -422,6 +565,11 @@ PYTHONPATH=. .venv/bin/pytest -q
   - 增加一键启动脚本 `scripts/start_demo.sh`
   - README 补齐完整演示启动流程与实际可用测试命令
   - 已验证后端全链路与 Streamlit 演示前端可一起运行
+
+- `v1.3`
+  - 已接入 `PX4 + Gazebo SITL` backend
+  - 已补完整 PX4 一键演示脚本链
+  - 已将 SQLite 深化接入主 pipeline、前端历史读取和农业数据层
 
 ## 部署建议
 

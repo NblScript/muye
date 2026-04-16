@@ -4,6 +4,7 @@ import csv
 import json
 
 from scripts.generate_henan_field_crop_seed_csv import generate_seed_csvs
+from scripts.generate_henan_soil_seed_csv import generate_soil_seed_csv
 
 
 def test_generate_henan_field_crop_seed_csv_outputs_expected_files(tmp_path) -> None:
@@ -35,3 +36,22 @@ def test_generate_henan_field_crop_seed_csv_outputs_expected_files(tmp_path) -> 
     assert statuses <= {"growing", "harvested"}
     crop_codes = {row["crop_code"] for row in cycle_rows}
     assert crop_codes == {"winter_wheat", "summer_corn"}
+
+
+def test_generate_henan_soil_seed_csv_outputs_expected_rows(tmp_path) -> None:
+    generated = generate_seed_csvs(tmp_path / "field_seed")
+    soil_csv = generate_soil_seed_csv(tmp_path / "soil_records.csv", fields_csv=generated["fields"])
+
+    with soil_csv.open("r", encoding="utf-8") as file:
+        soil_rows = list(csv.DictReader(file))
+
+    assert len(soil_rows) >= 5
+    for row in soil_rows:
+        assert row["field_id"].startswith("henan-")
+        assert row["field_name"]
+        assert row["sample_date"].startswith("2025-03-")
+        assert int(row["depth_cm"]) == 20
+        assert float(row["ph"]) > 0
+        assert float(row["organic_matter_gkg"]) > 0
+        assert float(row["available_potassium_mgkg"]) > 0
+        assert row["source"] == "henan_soil_records_seed"

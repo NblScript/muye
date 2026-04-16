@@ -25,6 +25,7 @@ def import_henan_reference_data(db_path: Path) -> dict[str, int]:
     try:
         sources = load_json(SEED_DIR / "sources.json")
         indicators = load_json(SEED_DIR / "agri_statistical_indicators.json")
+        pesticides = load_json(SEED_DIR / "pesticide_catalog.json")
 
         for item in sources:
             store.upsert_data_source(item)
@@ -32,9 +33,13 @@ def import_henan_reference_data(db_path: Path) -> dict[str, int]:
         for item in indicators:
             store.upsert_agri_statistical_indicator(item)
 
+        for item in pesticides:
+            store.upsert_pesticide_catalog_record(item)
+
         return {
             "sources": len(sources),
             "agri_statistical_indicators": len(indicators),
+            "pesticide_catalog": len(pesticides),
         }
     finally:
         store.close()
@@ -48,6 +53,7 @@ def main() -> None:
         "Imported "
         f"{summary['agri_statistical_indicators']} agri_statistical_indicators into {db_path}"
     )
+    print(f"Imported {summary['pesticide_catalog']} pesticide_catalog rows into {db_path}")
 
 
 if __name__ == "__main__":

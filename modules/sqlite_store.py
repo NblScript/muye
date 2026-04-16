@@ -623,6 +623,128 @@ class SqliteStore:
             )
             self._connection.commit()
 
+    def upsert_pesticide_catalog_record(self, record: dict[str, Any]) -> None:
+        target_crops = record.get("target_crops")
+        if isinstance(target_crops, (list, dict)):
+            target_crops = json.dumps(target_crops, ensure_ascii=False)
+
+        target_pests = record.get("target_pests")
+        if isinstance(target_pests, (list, dict)):
+            target_pests = json.dumps(target_pests, ensure_ascii=False)
+
+        raw_payload = record.get("raw_payload", {})
+        if isinstance(raw_payload, str):
+            raw_payload_text = raw_payload
+        else:
+            raw_payload_text = json.dumps(raw_payload, ensure_ascii=False)
+
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO pesticide_catalog (
+                  pesticide_id, registration_no, product_name, active_ingredient,
+                  formulation, toxicity, manufacturer, target_crops, target_pests,
+                  dilution_guidance, source, raw_payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(pesticide_id) DO UPDATE SET
+                  registration_no = excluded.registration_no,
+                  product_name = excluded.product_name,
+                  active_ingredient = excluded.active_ingredient,
+                  formulation = excluded.formulation,
+                  toxicity = excluded.toxicity,
+                  manufacturer = excluded.manufacturer,
+                  target_crops = excluded.target_crops,
+                  target_pests = excluded.target_pests,
+                  dilution_guidance = excluded.dilution_guidance,
+                  source = excluded.source,
+                  raw_payload = excluded.raw_payload
+                """,
+                (
+                    str(record["pesticide_id"]),
+                    record.get("registration_no"),
+                    record["product_name"],
+                    record.get("active_ingredient"),
+                    record.get("formulation"),
+                    record.get("toxicity"),
+                    record.get("manufacturer"),
+                    target_crops,
+                    target_pests,
+                    record.get("dilution_guidance"),
+                    record.get("source"),
+                    raw_payload_text,
+                ),
+            )
+            self._connection.commit()
+
+    def upsert_soil_record(self, record: dict[str, Any]) -> None:
+        existing = self.fetch_one(
+            """
+            SELECT id
+            FROM soil_records
+            WHERE field_id = ? AND sample_date = ? AND depth_cm = ?
+            """,
+            (
+                str(record["field_id"]),
+                record.get("sample_date"),
+                self._to_int(record.get("depth_cm")),
+            ),
+        )
+        params = (
+            str(record["field_id"]),
+            record.get("sample_date"),
+            self._to_int(record.get("depth_cm")),
+            self._to_float(record.get("ph")),
+            self._to_float(record.get("organic_matter_gkg")),
+            self._to_float(record.get("alkali_hydrolyzable_nitrogen_mgkg")),
+            self._to_float(record.get("available_phosphorus_mgkg")),
+            self._to_float(record.get("available_potassium_mgkg")),
+            self._to_float(record.get("moisture_percent")),
+            self._to_float(record.get("salinity_gkg")),
+            record.get("texture"),
+            record.get("source"),
+            json.dumps(record.get("raw_payload", {}), ensure_ascii=False),
+        )
+        with self._lock:
+            if existing is None:
+                self._connection.execute(
+                    """
+                    INSERT INTO soil_records (
+                      field_id, sample_date, depth_cm, ph, organic_matter_gkg,
+                      alkali_hydrolyzable_nitrogen_mgkg, available_phosphorus_mgkg,
+                      available_potassium_mgkg, moisture_percent, salinity_gkg,
+                      texture, source, raw_payload
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    params,
+                )
+            else:
+                self._connection.execute(
+                    """
+                    UPDATE soil_records
+                    SET ph = ?, organic_matter_gkg = ?, alkali_hydrolyzable_nitrogen_mgkg = ?,
+                        available_phosphorus_mgkg = ?, available_potassium_mgkg = ?,
+                        moisture_percent = ?, salinity_gkg = ?, texture = ?,
+                        source = ?, raw_payload = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        self._to_float(record.get("ph")),
+                        self._to_float(record.get("organic_matter_gkg")),
+                        self._to_float(record.get("alkali_hydrolyzable_nitrogen_mgkg")),
+                        self._to_float(record.get("available_phosphorus_mgkg")),
+                        self._to_float(record.get("available_potassium_mgkg")),
+                        self._to_float(record.get("moisture_percent")),
+                        self._to_float(record.get("salinity_gkg")),
+                        record.get("texture"),
+                        record.get("source"),
+                        json.dumps(record.get("raw_payload", {}), ensure_ascii=False),
+                        int(existing["id"]),
+                    ),
+                )
+            self._connection.commit()
+
     def upsert_weather_station(self, record: dict[str, Any]) -> None:
         with self._lock:
             self._connection.execute(
@@ -912,6 +1034,96 @@ class SqliteStore:
                 )
             self._connection.commit()
 
+    def upsert_spray_record(self, record: dict[str, Any]) -> None:
+        request_id = record.get("request_id")
+        drone_task_id = record.get("drone_task_id")
+        if request_id:
+            self._ensure_task(str(request_id))
+
+        if request_id:
+            existing = self.fetch_one(
+                """
+                SELECT id
+                FROM spray_records
+                WHERE request_id = ?
+                """,
+                (str(request_id),),
+            )
+        elif drone_task_id:
+            existing = self.fetch_one(
+                """
+                SELECT id
+                FROM spray_records
+                WHERE drone_task_id = ?
+                """,
+                (str(drone_task_id),),
+            )
+        else:
+            existing = self.fetch_one(
+                """
+                SELECT id
+                FROM spray_records
+                WHERE field_id = ? AND spray_date = ?
+                """,
+                (
+                    str(record["field_id"]),
+                    record["spray_date"],
+                ),
+            )
+
+        weather_snapshot = record.get("weather_snapshot")
+        if isinstance(weather_snapshot, (dict, list)):
+            weather_snapshot = json.dumps(weather_snapshot, ensure_ascii=False)
+
+        params = (
+            str(request_id) if request_id else None,
+            str(record["field_id"]),
+            self._to_int(record.get("crop_cycle_id")),
+            str(drone_task_id) if drone_task_id else None,
+            record.get("pesticide_id"),
+            record["spray_date"],
+            record.get("operator_name"),
+            self._to_float(record.get("spray_area_mu")),
+            self._to_float(record.get("dosage_per_mu")),
+            self._to_float(record.get("total_dosage")),
+            record.get("dilution_ratio"),
+            self._to_float(record.get("spray_rate_lpm")),
+            self._to_float(record.get("flight_height_m")),
+            self._to_float(record.get("flight_speed_mps")),
+            weather_snapshot,
+            record.get("result_status"),
+            record.get("source"),
+            record.get("notes"),
+        )
+        with self._lock:
+            if existing is None:
+                self._connection.execute(
+                    """
+                    INSERT INTO spray_records (
+                      request_id, field_id, crop_cycle_id, drone_task_id, pesticide_id,
+                      spray_date, operator_name, spray_area_mu, dosage_per_mu,
+                      total_dosage, dilution_ratio, spray_rate_lpm, flight_height_m,
+                      flight_speed_mps, weather_snapshot, result_status, source, notes
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    params,
+                )
+            else:
+                self._connection.execute(
+                    """
+                    UPDATE spray_records
+                    SET request_id = ?, field_id = ?, crop_cycle_id = ?, drone_task_id = ?,
+                        pesticide_id = ?, spray_date = ?, operator_name = ?, spray_area_mu = ?,
+                        dosage_per_mu = ?, total_dosage = ?, dilution_ratio = ?,
+                        spray_rate_lpm = ?, flight_height_m = ?, flight_speed_mps = ?,
+                        weather_snapshot = ?, result_status = ?, source = ?, notes = ?
+                    WHERE id = ?
+                    """,
+                    (*params, int(existing["id"])),
+                )
+            self._connection.commit()
+
     def fetch_field_context(self, field_id: str | None = None) -> dict[str, Any] | None:
         if field_id:
             field_row = self.fetch_one(
@@ -958,6 +1170,7 @@ class SqliteStore:
               field_crop_cycles.season,
               field_crop_cycles.planting_date,
               field_crop_cycles.harvest_date,
+              field_crop_cycles.area_mu,
               field_crop_cycles.status,
               crop_catalog.crop_name,
               crop_catalog.category,
@@ -1152,6 +1365,17 @@ class SqliteStore:
             """,
             tuple(request_ids),
         )
+        spray_rows = self.fetch_all(
+            f"""
+            SELECT request_id, field_id, spray_date, spray_area_mu, dosage_per_mu,
+                   total_dosage, dilution_ratio, spray_rate_lpm, flight_height_m,
+                   flight_speed_mps, result_status
+            FROM spray_records
+            WHERE request_id IN ({placeholders})
+            ORDER BY id ASC
+            """,
+            tuple(request_ids),
+        )
         drone_rows = self.fetch_all(
             f"""
             SELECT request_id, task_id, status, message, progress,
@@ -1162,6 +1386,41 @@ class SqliteStore:
             """,
             tuple(request_ids),
         )
+
+        field_ids = sorted(
+            {
+                str(item["field_id"])
+                for item in task_rows
+                if item.get("field_id") not in (None, "")
+            }
+        )
+        field_by_id: dict[str, dict[str, Any]] = {}
+        if field_ids:
+            field_placeholders = ",".join("?" for _ in field_ids)
+            field_rows = self.fetch_all(
+                f"""
+                SELECT field_id, field_code, field_name, province, city, county,
+                       latitude, longitude, area_mu, area_hectare, geofence
+                FROM fields
+                WHERE field_id IN ({field_placeholders})
+                """,
+                tuple(field_ids),
+            )
+            for row in field_rows:
+                field_id = str(row["field_id"])
+                field_by_id[field_id] = {
+                    "field_id": field_id,
+                    "field_code": row.get("field_code"),
+                    "field_name": row.get("field_name"),
+                    "province": row.get("province"),
+                    "city": row.get("city"),
+                    "county": row.get("county"),
+                    "latitude": self._to_float(row.get("latitude")),
+                    "longitude": self._to_float(row.get("longitude")),
+                    "area_mu": self._to_float(row.get("area_mu")),
+                    "area_hectare": self._to_float(row.get("area_hectare")),
+                    "geofence": self._parse_json_value(row.get("geofence"), default=[]),
+                }
 
         detections_by_request: dict[str, list[dict[str, Any]]] = {}
         for row in detection_rows:
@@ -1188,6 +1447,21 @@ class SqliteStore:
                 default={},
             )
 
+        spray_by_request: dict[str, dict[str, Any]] = {}
+        for row in spray_rows:
+            spray_by_request[str(row["request_id"])] = {
+                "field_id": row.get("field_id"),
+                "spray_date": row.get("spray_date"),
+                "spray_area_mu": self._to_float(row.get("spray_area_mu")),
+                "dosage_per_mu": self._to_float(row.get("dosage_per_mu")),
+                "total_dosage": self._to_float(row.get("total_dosage")),
+                "dilution_ratio": row.get("dilution_ratio"),
+                "spray_rate_lpm": self._to_float(row.get("spray_rate_lpm")),
+                "flight_height_m": self._to_float(row.get("flight_height_m")),
+                "flight_speed_mps": self._to_float(row.get("flight_speed_mps")),
+                "result_status": row.get("result_status"),
+            }
+
         drone_by_request: dict[str, dict[str, Any]] = {}
         for row in drone_rows:
             drone_by_request[str(row["request_id"])] = {
@@ -1206,16 +1480,19 @@ class SqliteStore:
             start_time = row.get("start_time")
             end_time = row.get("end_time")
             status_value = str(row.get("status") or "queued")
+            field_id = row.get("field_id")
             task_views.append(
                 {
                     "request_id": request_id,
-                    "field_id": row.get("field_id"),
+                    "field_id": field_id,
                     "created_at": start_time,
                     "updated_at": end_time or start_time,
                     "current_stage": self._infer_stage(status_value, end_time=end_time),
                     "status": status_value,
                     "message": self._status_message(status_value),
                     "image_path": row.get("image_path"),
+                    "field": field_by_id.get(str(field_id), {}) if field_id else {},
+                    "spray_summary": spray_by_request.get(request_id, {}),
                     "detections": detections_by_request.get(request_id, []),
                     "weather": weather_by_request.get(request_id, {}),
                     "decision": decisions_by_request.get(request_id, {}),

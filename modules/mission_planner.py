@@ -37,14 +37,24 @@ class MissionPlanner:
         crop_name = str(crop_cycle.get("crop_name") or "")
         area_mu = float(field_context.get("area_mu") or 30.0)
         current_wind = float(current_weather.get("wind_speed", 0.0))
-        route = self._build_coverage_route(geofence, crop_name=crop_name)
+        presentation_profile = field_context.get("presentation_profile") or {}
+        route = self._resolve_route(
+            field_context=field_context,
+            geofence=geofence,
+            crop_name=crop_name,
+            presentation_profile=presentation_profile,
+        )
 
         altitude = self._clamp(
             self._suggest_altitude(crop_name=crop_name, area_mu=area_mu),
             altitude_range,
         )
         speed = self._clamp(
-            self._suggest_speed(current_wind=current_wind, speed_range=speed_range),
+            self._suggest_speed(
+                current_wind=current_wind,
+                speed_range=speed_range,
+                presentation_profile=presentation_profile,
+            ),
             speed_range,
         )
         spray_rate = self._clamp(
@@ -61,6 +71,7 @@ class MissionPlanner:
             "高度": round(altitude, 2),
             "速度": round(speed, 2),
             "喷洒速率": round(spray_rate, 2),
+            "航点控制": self._build_waypoint_control(presentation_profile=presentation_profile),
             "覆盖区域": {
                 "type": "polygon",
                 "coordinates": geofence,
@@ -95,6 +106,7 @@ class MissionPlanner:
         geofence: list[list[float]],
         *,
         crop_name: str,
+        lane_spacing_m: float | None = None,
     ) -> list[list[float]]:
         if len(geofence) < 3:
             return geofence
@@ -107,7 +119,11 @@ class MissionPlanner:
         if lat_span <= 0:
             return geofence
 
-        lane_spacing_m = 18.0 if "小麦" in crop_name else 22.0 if "玉米" in crop_name else 20.0
+        if lane_spacing_m is None:
+            lane_spacing_m = self._resolve_lane_spacing(
+                crop_name=crop_name,
+                presentation_profile=None,
+            )
         lat_span_m = lat_span * 111_000
         lane_count = max(2, int(math.ceil(lat_span_m / lane_spacing_m)) + 1)
 
@@ -158,6 +174,69 @@ class MissionPlanner:
         normalized = sorted({round(item, 9) for item in intersections})
         return normalized
 
+    def _resolve_route(
+        self,
+        *,
+        field_context: dict[str, Any],
+        geofence: list[list[float]],
+        crop_name: str,
+        presentation_profile: dict[str, Any] | None,
+    ) -> list[list[float]]:
+        explicit_route = self._normalize_geofence(field_context.get("explicit_route", []))
+        if len(explicit_route) >= 2:
+            return explicit_route
+
+        lane_spacing_m = self._resolve_lane_spacing(
+            crop_name=crop_name,
+            presentation_profile=presentation_profile,
+        )
+        return self._build_coverage_route(
+            geofence,
+            crop_name=crop_name,
+            lane_spacing_m=lane_spacing_m,
+        )
+
+    def _resolve_lane_spacing(
+        self,
+        *,
+        crop_name: str,
+        presentation_profile: dict[str, Any] | None,
+    ) -> float:
+        if presentation_profile:
+            custom_spacing = presentation_profile.get("lane_spacing_m")
+            if isinstance(custom_spacing, (int, float)) and custom_spacing > 0:
+                return float(custom_spacing)
+        if "小麦" in crop_name:
+            return 18.0
+        if "玉米" in crop_name:
+            return 22.0
+        return 20.0
+
+    def _build_waypoint_control(
+        self,
+        *,
+        presentation_profile: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        presentation_profile = presentation_profile or {}
+        acceptance_radius_m = presentation_profile.get("acceptance_radius_m")
+        waypoint_loiter_time_s = presentation_profile.get("waypoint_loiter_time_s")
+        fly_through = presentation_profile.get("fly_through")
+        turn_mode = presentation_profile.get("turn_mode")
+        turn_loiter_time_s = presentation_profile.get("turn_loiter_time_s")
+
+        control: dict[str, Any] = {}
+        if isinstance(acceptance_radius_m, (int, float)) and acceptance_radius_m > 0:
+            control["接受半径"] = float(acceptance_radius_m)
+        if isinstance(waypoint_loiter_time_s, (int, float)) and waypoint_loiter_time_s >= 0:
+            control["到点停留秒数"] = float(waypoint_loiter_time_s)
+        if isinstance(fly_through, bool):
+            control["飞越航点"] = fly_through
+        if isinstance(turn_mode, str) and turn_mode.strip():
+            control["转弯模式"] = turn_mode.strip()
+        if isinstance(turn_loiter_time_s, (int, float)) and turn_loiter_time_s >= 0:
+            control["转弯停留秒数"] = float(turn_loiter_time_s)
+        return control
+
     def _suggest_altitude(self, *, crop_name: str, area_mu: float) -> float:
         if "玉米" in crop_name:
             base = 3.8
@@ -169,8 +248,18 @@ class MissionPlanner:
             base += 0.3
         return base
 
-    def _suggest_speed(self, *, current_wind: float, speed_range: list[float]) -> float:
+    def _suggest_speed(
+        self,
+        *,
+        current_wind: float,
+        speed_range: list[float],
+        presentation_profile: dict[str, Any] | None = None,
+    ) -> float:
         speed_min, speed_max = float(speed_range[0]), float(speed_range[1])
+        if presentation_profile:
+            target_speed = presentation_profile.get("target_speed_mps")
+            if isinstance(target_speed, (int, float)):
+                return float(target_speed)
         wind_ratio = min(max(current_wind / max(float(self.flight_constraints.get("max_safe_wind_speed_mps", 8.0)), 0.1), 0.0), 1.0)
         return speed_max - (speed_max - speed_min) * (0.45 + wind_ratio * 0.35)
 

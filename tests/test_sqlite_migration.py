@@ -5,8 +5,10 @@ import sqlite3
 
 from modules.sqlite_store import SqliteStore
 from scripts.generate_henan_field_crop_seed_csv import generate_seed_csvs
+from scripts.generate_henan_soil_seed_csv import generate_soil_seed_csv
 from scripts.import_henan_field_crop_seed_csv import import_henan_field_crop_seed_csv
 from scripts.import_henan_reference_data import import_henan_reference_data
+from scripts.import_henan_soil_records_csv import import_henan_soil_records_csv
 from scripts.import_henan_weather_history_csv import import_henan_weather_history_csv
 
 
@@ -118,8 +120,22 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
     db_path = tmp_path / "muye.db"
     store = SqliteStore(db_path)
     try:
-        store.mark_task_queued("req-a", "/tmp/a.jpg")
-        store.mark_task_started("req-a", "/tmp/a.jpg")
+        store.upsert_field(
+            {
+                "field_id": "henan-zz-001",
+                "field_code": "HN-001",
+                "field_name": "郑州示范田1号",
+                "province": "河南省",
+                "city": "郑州市",
+                "county": "中牟县",
+                "latitude": 34.7467,
+                "longitude": 113.6241,
+                "area_mu": 66,
+                "geofence": [[113.61, 34.73], [113.63, 34.73], [113.63, 34.75], [113.61, 34.75]],
+            }
+        )
+        store.mark_task_queued("req-a", "/tmp/a.jpg", field_id="henan-zz-001")
+        store.mark_task_started("req-a", "/tmp/a.jpg", field_id="henan-zz-001")
         store.replace_detections(
             "req-a",
             [
@@ -155,8 +171,24 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
             message="虚拟无人机任务完成",
             progress=100,
             current_waypoint_index=1,
-            instruction={"飞行路径": [[121.1, 31.1], [121.2, 31.2]]},
+            instruction={"飞行路径": [[113.6241, 34.7467], [113.6257, 34.7479]]},
             medication={"农药名称": "吡虫啉"},
+        )
+        store.upsert_spray_record(
+            {
+                "request_id": "req-a",
+                "field_id": "henan-zz-001",
+                "drone_task_id": "vd-req-a",
+                "spray_date": "2026-04-16T01:00:00Z",
+                "spray_area_mu": 66,
+                "dosage_per_mu": 0.5,
+                "total_dosage": 33,
+                "dilution_ratio": "1:800",
+                "spray_rate_lpm": 1.8,
+                "flight_height_m": 3.0,
+                "flight_speed_mps": 4.2,
+                "result_status": "completed",
+            }
         )
         store.mark_task_finished("req-a", "completed")
 
@@ -190,6 +222,12 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
     assert completed_tasks[0]["drone"]["status"] == "completed"
     assert completed_tasks[0]["drone"]["task_id"] == "vd-req-a"
     assert completed_tasks[0]["drone"]["message"] == "虚拟无人机任务完成"
+    assert completed_tasks[0]["field"]["field_name"] == "郑州示范田1号"
+    assert completed_tasks[0]["field"]["area_mu"] == 66
+    assert len(completed_tasks[0]["field"]["geofence"]) == 4
+    assert completed_tasks[0]["spray_summary"]["spray_area_mu"] == 66
+    assert completed_tasks[0]["spray_summary"]["total_dosage"] == 33
+    assert completed_tasks[0]["spray_summary"]["result_status"] == "completed"
     assert json.dumps(completed_tasks[0]["detections"][0]["position"], ensure_ascii=False) == '{"x1": 1, "y1": 2, "x2": 3, "y2": 4}'
 
     assert [task["request_id"] for task in pest_search_tasks] == ["req-a"]
@@ -302,6 +340,116 @@ def test_import_henan_field_crop_seed_csv_imports_and_resolves_runtime_context(t
     assert "," in field_context["weather_location"]
     assert len(field_context["geofence"]) >= 3
     assert field_context["crop_cycle"]["crop_name"] in {"冬小麦", "夏玉米"}
+
+
+def test_sqlite_store_upsert_spray_record_updates_existing_row_by_request_id(tmp_path) -> None:
+    db_path = tmp_path / "muye.db"
+    store = SqliteStore(db_path)
+    try:
+        store.upsert_field(
+            {
+                "field_id": "henan-zz-001",
+                "field_code": "HN-001",
+                "field_name": "郑州示范田1号",
+                "province": "河南省",
+                "city": "郑州",
+                "county": "中原区",
+                "latitude": 34.72,
+                "longitude": 113.65,
+            }
+        )
+        store.upsert_crop_catalog_record(
+            {
+                "crop_code": "winter_wheat",
+                "crop_name": "冬小麦",
+                "category": "grain",
+            }
+        )
+        store.upsert_field_crop_cycle(
+            {
+                "field_id": "henan-zz-001",
+                "crop_code": "winter_wheat",
+                "year": 2025,
+                "season": "winter",
+                "planting_date": "2025-10-01",
+                "harvest_date": "2026-06-05",
+                "area_mu": 66,
+                "status": "growing",
+            }
+        )
+        cycle_row = store.fetch_one(
+            """
+            SELECT id
+            FROM field_crop_cycles
+            WHERE field_id = ? AND crop_code = ?
+            """,
+            ("henan-zz-001", "winter_wheat"),
+        )
+        assert cycle_row is not None
+
+        store.mark_task_queued("req-spray-1", "/tmp/sample.jpg", field_id="henan-zz-001")
+        store.upsert_spray_record(
+            {
+                "request_id": "req-spray-1",
+                "field_id": "henan-zz-001",
+                "crop_cycle_id": cycle_row["id"],
+                "drone_task_id": "sim-req-spray-1",
+                "spray_date": "2026-04-16T00:00:00Z",
+                "spray_area_mu": 66,
+                "dosage_per_mu": 0.02,
+                "total_dosage": 1.32,
+                "dilution_ratio": "1:1000",
+                "spray_rate_lpm": 1.1,
+                "flight_height_m": 3.2,
+                "flight_speed_mps": 2.8,
+                "weather_snapshot": {"summary": "多云"},
+                "result_status": "completed",
+                "source": "main_pipeline",
+                "notes": "第一次写入",
+            }
+        )
+        store.upsert_spray_record(
+            {
+                "request_id": "req-spray-1",
+                "field_id": "henan-zz-001",
+                "crop_cycle_id": cycle_row["id"],
+                "drone_task_id": "sim-req-spray-1-updated",
+                "spray_date": "2026-04-16T00:00:00Z",
+                "spray_area_mu": 68,
+                "dosage_per_mu": 0.03,
+                "total_dosage": 2.04,
+                "dilution_ratio": "1:800",
+                "spray_rate_lpm": 1.3,
+                "flight_height_m": 3.5,
+                "flight_speed_mps": 2.6,
+                "weather_snapshot": {"summary": "晴"},
+                "result_status": "completed",
+                "source": "main_pipeline",
+                "notes": "第二次更新",
+            }
+        )
+        spray_rows = store.fetch_all(
+            """
+            SELECT request_id, drone_task_id, spray_area_mu, total_dosage, dilution_ratio,
+                   spray_rate_lpm, flight_height_m, flight_speed_mps, weather_snapshot, notes
+            FROM spray_records
+            WHERE request_id = ?
+            """,
+            ("req-spray-1",),
+        )
+    finally:
+        store.close()
+
+    assert len(spray_rows) == 1
+    assert spray_rows[0]["drone_task_id"] == "sim-req-spray-1-updated"
+    assert spray_rows[0]["spray_area_mu"] == 68
+    assert spray_rows[0]["total_dosage"] == 2.04
+    assert spray_rows[0]["dilution_ratio"] == "1:800"
+    assert spray_rows[0]["spray_rate_lpm"] == 1.3
+    assert spray_rows[0]["flight_height_m"] == 3.5
+    assert spray_rows[0]["flight_speed_mps"] == 2.6
+    assert json.loads(spray_rows[0]["weather_snapshot"])["summary"] == "晴"
+    assert spray_rows[0]["notes"] == "第二次更新"
 
 
 def test_sqlite_store_supports_multiple_field_weather_rows_for_same_station_day(tmp_path) -> None:
@@ -429,6 +577,129 @@ def test_sqlite_store_supports_source_and_indicator_upserts(tmp_path) -> None:
     assert json.loads(indicator_row["raw_payload"])["section"] == "农业"
 
 
+def test_sqlite_store_supports_pesticide_catalog_upserts(tmp_path) -> None:
+    db_path = tmp_path / "muye.db"
+    store = SqliteStore(db_path)
+    try:
+        store.upsert_pesticide_catalog_record(
+            {
+                "pesticide_id": "seed-imidacloprid",
+                "registration_no": "SEED-PD-IMI-001",
+                "product_name": "吡虫啉",
+                "active_ingredient": "吡虫啉",
+                "formulation": "10% 可湿性粉剂",
+                "toxicity": "低毒",
+                "manufacturer": "牧野示例目录",
+                "target_crops": ["冬小麦", "夏玉米"],
+                "target_pests": ["蚜虫", "飞虱"],
+                "dilution_guidance": "1000-1500倍液",
+                "source": "henan_pesticide_catalog_seed",
+                "raw_payload": {"kind": "seed"},
+            }
+        )
+        store.upsert_pesticide_catalog_record(
+            {
+                "pesticide_id": "seed-imidacloprid",
+                "registration_no": "SEED-PD-IMI-001",
+                "product_name": "吡虫啉",
+                "active_ingredient": "吡虫啉",
+                "formulation": "10% 可湿性粉剂",
+                "toxicity": "低毒",
+                "manufacturer": "更新后的目录",
+                "target_crops": ["冬小麦"],
+                "target_pests": ["蚜虫"],
+                "dilution_guidance": "1200倍液",
+                "source": "henan_pesticide_catalog_seed",
+                "raw_payload": {"kind": "seed_updated"},
+            }
+        )
+        pesticide_row = store.fetch_one(
+            """
+            SELECT product_name, manufacturer, target_crops, target_pests, dilution_guidance, raw_payload
+            FROM pesticide_catalog
+            WHERE pesticide_id = ?
+            """,
+            ("seed-imidacloprid",),
+        )
+    finally:
+        store.close()
+
+    assert pesticide_row is not None
+    assert pesticide_row["product_name"] == "吡虫啉"
+    assert pesticide_row["manufacturer"] == "更新后的目录"
+    assert json.loads(pesticide_row["target_crops"]) == ["冬小麦"]
+    assert json.loads(pesticide_row["target_pests"]) == ["蚜虫"]
+    assert pesticide_row["dilution_guidance"] == "1200倍液"
+    assert json.loads(pesticide_row["raw_payload"])["kind"] == "seed_updated"
+
+
+def test_sqlite_store_supports_soil_record_upserts(tmp_path) -> None:
+    db_path = tmp_path / "muye.db"
+    store = SqliteStore(db_path)
+    try:
+        store.upsert_field(
+            {
+                "field_id": "henan-zz-001",
+                "field_code": "HN-001",
+                "field_name": "郑州示范田1号",
+                "province": "河南省",
+                "city": "郑州",
+                "county": "中原区",
+                "latitude": 34.72,
+                "longitude": 113.65,
+            }
+        )
+        store.upsert_soil_record(
+            {
+                "field_id": "henan-zz-001",
+                "sample_date": "2025-03-18",
+                "depth_cm": 20,
+                "ph": 6.8,
+                "organic_matter_gkg": 18.6,
+                "alkali_hydrolyzable_nitrogen_mgkg": 92.4,
+                "available_phosphorus_mgkg": 24.8,
+                "available_potassium_mgkg": 128.5,
+                "moisture_percent": 22.1,
+                "salinity_gkg": 0.9,
+                "texture": "壤土",
+                "source": "henan_soil_records_seed",
+                "raw_payload": {"kind": "seed"},
+            }
+        )
+        store.upsert_soil_record(
+            {
+                "field_id": "henan-zz-001",
+                "sample_date": "2025-03-18",
+                "depth_cm": 20,
+                "ph": 6.9,
+                "organic_matter_gkg": 19.0,
+                "alkali_hydrolyzable_nitrogen_mgkg": 93.1,
+                "available_phosphorus_mgkg": 25.2,
+                "available_potassium_mgkg": 129.8,
+                "moisture_percent": 22.6,
+                "salinity_gkg": 1.0,
+                "texture": "壤土",
+                "source": "henan_soil_records_seed",
+                "raw_payload": {"kind": "seed_updated"},
+            }
+        )
+        soil_rows = store.fetch_all(
+            """
+            SELECT field_id, sample_date, depth_cm, ph, organic_matter_gkg, raw_payload
+            FROM soil_records
+            WHERE field_id = ?
+            """,
+            ("henan-zz-001",),
+        )
+    finally:
+        store.close()
+
+    assert len(soil_rows) == 1
+    assert soil_rows[0]["ph"] == 6.9
+    assert soil_rows[0]["organic_matter_gkg"] == 19.0
+    assert json.loads(soil_rows[0]["raw_payload"])["kind"] == "seed_updated"
+
+
 def test_import_henan_reference_data_seeds_sources_and_indicators(tmp_path) -> None:
     db_path = tmp_path / "muye.db"
     summary = import_henan_reference_data(db_path)
@@ -437,6 +708,7 @@ def test_import_henan_reference_data_seeds_sources_and_indicators(tmp_path) -> N
     try:
         source_count = store.fetch_one("SELECT COUNT(*) AS total FROM data_sources")
         indicator_count = store.fetch_one("SELECT COUNT(*) AS total FROM agri_statistical_indicators")
+        pesticide_count = store.fetch_one("SELECT COUNT(*) AS total FROM pesticide_catalog")
         sample_indicator = store.fetch_one(
             """
             SELECT indicator_name, value, unit, source_id, source_excerpt
@@ -445,21 +717,73 @@ def test_import_henan_reference_data_seeds_sources_and_indicators(tmp_path) -> N
             """,
             ("grain_output_10k_tons",),
         )
+        sample_pesticide = store.fetch_one(
+            """
+            SELECT product_name, source, target_crops, target_pests
+            FROM pesticide_catalog
+            WHERE pesticide_id = ?
+            """,
+            ("seed-imidacloprid",),
+        )
     finally:
         store.close()
 
-    assert summary["sources"] >= 4
+    assert summary["sources"] >= 5
     assert summary["agri_statistical_indicators"] >= 20
+    assert summary["pesticide_catalog"] >= 4
     assert source_count is not None
     assert source_count["total"] == summary["sources"]
     assert indicator_count is not None
     assert indicator_count["total"] == summary["agri_statistical_indicators"]
+    assert pesticide_count is not None
+    assert pesticide_count["total"] == summary["pesticide_catalog"]
     assert sample_indicator is not None
     assert sample_indicator["indicator_name"] == "粮食产量"
     assert sample_indicator["value"] == 6719.37
     assert sample_indicator["unit"] == "万吨"
     assert sample_indicator["source_id"] == "henan_stat_bulletin_2024"
     assert "6719.37万吨" in sample_indicator["source_excerpt"]
+    assert sample_pesticide is not None
+    assert sample_pesticide["product_name"] == "吡虫啉"
+    assert sample_pesticide["source"] == "henan_pesticide_catalog_seed"
+    assert "冬小麦" in json.loads(sample_pesticide["target_crops"])
+    assert "蚜虫" in json.loads(sample_pesticide["target_pests"])
+
+
+def test_import_henan_soil_records_csv_imports_rows(tmp_path) -> None:
+    seed_dir = tmp_path / "henan_seed"
+    generate_seed_csvs(seed_dir)
+    soil_csv = tmp_path / "soil_records.csv"
+    generate_soil_seed_csv(soil_csv, fields_csv=seed_dir / "fields.csv")
+    db_path = tmp_path / "muye.db"
+
+    import_henan_field_crop_seed_csv(seed_dir, db_path)
+    summary = import_henan_soil_records_csv(soil_csv, db_path)
+
+    store = SqliteStore(db_path)
+    try:
+        soil_count = store.fetch_one("SELECT COUNT(*) AS total FROM soil_records")
+        sample_row = store.fetch_one(
+            """
+            SELECT field_id, sample_date, depth_cm, ph, texture, source
+            FROM soil_records
+            WHERE field_id = ?
+            """,
+            ("henan-zz-001",),
+        )
+    finally:
+        store.close()
+
+    assert summary["soil_records"] >= 5
+    assert soil_count is not None
+    assert soil_count["total"] == summary["soil_records"]
+    assert sample_row is not None
+    assert sample_row["field_id"] == "henan-zz-001"
+    assert sample_row["sample_date"] == "2025-03-18"
+    assert sample_row["depth_cm"] == 20
+    assert sample_row["source"] == "henan_soil_records_seed"
+    assert sample_row["texture"]
+
 
 
 def test_import_henan_weather_history_csv_imports_stations_and_daily_rows(tmp_path) -> None:

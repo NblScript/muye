@@ -8,7 +8,7 @@ from modules.ai_decision import DecisionEngine, DecisionEngineError
 
 class StubWeatherClient:
     async def fetch_current_weather(self, location_query, request_id, client_ip="127.0.0.1"):
-        assert location_query == "上海"
+        assert location_query == "郑州"
         return {
             "temperature": 27.5,
             "humidity": 58.0,
@@ -117,12 +117,12 @@ async def test_ai_decision_generates_valid_schema() -> None:
             ],
             field_context={
                 "name": "牧野示范田",
-                "weather_location": "上海",
-                "location": {"city": "上海", "latitude": 31.2304, "longitude": 121.4737},
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
                 ],
             },
             request_id="req-ai-1",
@@ -171,12 +171,12 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
             ],
             field_context={
                 "name": "牧野示范田",
-                "weather_location": "上海",
-                "location": {"city": "上海", "latitude": 31.2304, "longitude": 121.4737},
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
                 ],
             },
             request_id="req-ai-2",
@@ -235,12 +235,12 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
             ],
             field_context={
                 "name": "牧野示范田",
-                "weather_location": "上海",
-                "location": {"city": "上海", "latitude": 31.2304, "longitude": 121.4737},
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
                 ],
             },
             request_id="req-ai-3",

@@ -46,5 +46,29 @@
     "retrieval_date": "2026-04-15",
     "license": "",
     "notes": "后续用于导入农药登记、适用作物和适用病虫害信息。"
+  },
+  {
+    "source_id": "henan_pesticide_catalog_seed",
+    "source_name": "河南农药目录示例 seed",
+    "publisher": "muye",
+    "region_scope": "河南省",
+    "source_type": "generated_seed",
+    "source_url": "local://data/seeds/henan/pesticide_catalog.json",
+    "access_level": "local",
+    "retrieval_date": "2026-04-16",
+    "license": "",
+    "notes": "用于本地联调和喷洒记录关联验证，后续应替换为官方登记导出数据。"
+  },
+  {
+    "source_id": "henan_soil_records_seed",
+    "source_name": "河南土壤检测示例 seed",
+    "publisher": "muye",
+    "region_scope": "河南省",
+    "source_type": "generated_seed",
+    "source_url": "local://data/seeds/henan/soil_records.csv",
+    "access_level": "local",
+    "retrieval_date": "2026-04-16",
+    "license": "",
+    "notes": "用于本地联调和土壤记录导入验证，后续应替换为真实检测数据。"
   }
 ]

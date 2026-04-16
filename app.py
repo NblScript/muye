@@ -19,6 +19,65 @@ from modules.sqlite_store import SqliteStore
 
 EVENT_BUS = FileEventBus()
 
+DRONE_STAGE_LABELS = {
+    "submitted": "任务提交",
+    "queued": "任务接收",
+    "connecting": "链路连接",
+    "connected": "飞控连接",
+    "ready": "定位就绪",
+    "uploaded": "航线上传",
+    "armed": "解锁待飞",
+    "takeoff": "起飞",
+    "enroute": "前往作业区",
+    "spraying": "喷洒执行",
+    "returning": "返航",
+    "completed": "任务完成",
+    "error": "异常",
+    "failed": "失败",
+}
+
+DRONE_STAGE_SEQUENCES = {
+    "px4": [
+        "connecting",
+        "connected",
+        "ready",
+        "uploaded",
+        "armed",
+        "takeoff",
+        "spraying",
+        "completed",
+    ],
+    "virtual_api": [
+        "submitted",
+        "queued",
+        "takeoff",
+        "enroute",
+        "spraying",
+        "returning",
+        "completed",
+    ],
+    "simulated": [
+        "queued",
+        "takeoff",
+        "spraying",
+        "completed",
+    ],
+    "generic": [
+        "submitted",
+        "queued",
+        "connecting",
+        "connected",
+        "ready",
+        "uploaded",
+        "armed",
+        "takeoff",
+        "enroute",
+        "spraying",
+        "returning",
+        "completed",
+    ],
+}
+
 
 def inject_styles() -> None:
     st.markdown(
@@ -440,6 +499,218 @@ def inject_styles() -> None:
             letter-spacing: 0.08em;
             margin-bottom: 0.55rem;
         }
+
+        .muye-command-shell {
+            margin-top: 0.35rem;
+            padding: 1.05rem;
+            border-radius: 26px;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.84)),
+                linear-gradient(135deg, rgba(34,197,94,0.10), rgba(56,189,248,0.08));
+            border: 1px solid rgba(15,23,42,0.08);
+            box-shadow: var(--shadow);
+        }
+
+        .muye-command-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.9rem;
+            flex-wrap: wrap;
+        }
+
+        .muye-command-kicker {
+            color: var(--muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.3rem;
+        }
+
+        .muye-command-title {
+            color: var(--ink);
+            font-size: 1.16rem;
+            font-weight: 800;
+            line-height: 1.25;
+        }
+
+        .muye-command-subtitle {
+            margin-top: 0.3rem;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .muye-command-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.45rem 0.8rem;
+            border-radius: 999px;
+            background: rgba(6,78,59,0.08);
+            color: #065f46;
+            border: 1px solid rgba(16,185,129,0.16);
+            font-size: 0.88rem;
+            font-weight: 700;
+        }
+
+        .muye-stage-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 0.65rem;
+            margin-bottom: 0.9rem;
+        }
+
+        .muye-stage-chip {
+            border-radius: 18px;
+            padding: 0.72rem 0.78rem;
+            border: 1px solid rgba(148,163,184,0.20);
+            background: rgba(248,250,252,0.92);
+            min-height: 86px;
+        }
+
+        .muye-stage-chip.done {
+            background: linear-gradient(135deg, rgba(220,252,231,0.96), rgba(240,253,244,0.96));
+            border-color: rgba(34,197,94,0.22);
+        }
+
+        .muye-stage-chip.current {
+            background: linear-gradient(135deg, rgba(224,242,254,0.98), rgba(236,254,255,0.96));
+            border-color: rgba(56,189,248,0.32);
+            box-shadow: 0 14px 26px rgba(56,189,248,0.12);
+        }
+
+        .muye-stage-chip.pending {
+            opacity: 0.8;
+        }
+
+        .muye-stage-status {
+            color: var(--muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.32rem;
+        }
+
+        .muye-stage-name {
+            color: var(--ink);
+            font-size: 0.95rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .muye-stage-meta {
+            color: var(--muted);
+            font-size: 0.82rem;
+            margin-top: 0.42rem;
+            line-height: 1.35;
+        }
+
+        .muye-telemetry-note {
+            margin-top: 0.8rem;
+            padding: 0.88rem 0.95rem;
+            border-radius: 18px;
+            background: rgba(15,23,42,0.04);
+            border: 1px solid rgba(148,163,184,0.18);
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.55;
+        }
+
+        .muye-outcome-shell {
+            margin-top: 0.85rem;
+            padding: 1rem 1.05rem;
+            border-radius: 22px;
+            background: linear-gradient(135deg, rgba(248,250,252,0.96), rgba(255,255,255,0.92));
+            border: 1px solid rgba(148,163,184,0.16);
+            box-shadow: var(--shadow);
+        }
+
+        .muye-outcome-shell.success {
+            background: linear-gradient(135deg, rgba(220,252,231,0.94), rgba(240,253,244,0.96));
+            border-color: rgba(34,197,94,0.22);
+        }
+
+        .muye-outcome-shell.running {
+            background: linear-gradient(135deg, rgba(224,242,254,0.96), rgba(239,246,255,0.96));
+            border-color: rgba(56,189,248,0.24);
+        }
+
+        .muye-outcome-shell.error {
+            background: linear-gradient(135deg, rgba(254,242,242,0.96), rgba(255,247,237,0.96));
+            border-color: rgba(248,113,113,0.26);
+        }
+
+        .muye-outcome-kicker {
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.34rem;
+        }
+
+        .muye-outcome-title {
+            color: var(--ink);
+            font-size: 1.08rem;
+            font-weight: 800;
+            line-height: 1.28;
+        }
+
+        .muye-outcome-summary {
+            margin-top: 0.4rem;
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.55;
+        }
+
+        .muye-alert-box {
+            margin-top: 0.85rem;
+            border-radius: 18px;
+            padding: 0.9rem 0.95rem;
+            background: linear-gradient(135deg, rgba(254,242,242,0.96), rgba(255,247,237,0.96));
+            border: 1px solid rgba(248,113,113,0.26);
+            color: #7f1d1d;
+        }
+
+        .muye-alert-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.32rem;
+            color: #991b1b;
+            font-weight: 700;
+        }
+
+        .muye-history-meta {
+            margin-top: 0.85rem;
+            padding-top: 0.85rem;
+            border-top: 1px dashed rgba(148,163,184,0.26);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .muye-history-meta-card {
+            background: rgba(255,255,255,0.78);
+            border: 1px solid rgba(148,163,184,0.14);
+            border-radius: 16px;
+            padding: 0.78rem 0.82rem;
+        }
+
+        .muye-history-meta-label {
+            color: var(--muted);
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.28rem;
+        }
+
+        .muye-history-meta-value {
+            color: var(--ink);
+            font-size: 0.94rem;
+            font-weight: 700;
+            line-height: 1.35;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -450,15 +721,19 @@ def render_hero(latest_task: dict[str, Any] | None, event_count: int) -> None:
     request_id = latest_task["request_id"][:8] if latest_task else "-"
     stage = latest_task["current_stage"] if latest_task else "waiting"
     status = latest_task["status"] if latest_task else "idle"
+    drone = latest_task.get("drone", {}) if latest_task else {}
+    drone_timeline = latest_task.get("drone_timeline", []) if latest_task else []
+    _, backend_label = infer_drone_backend(drone, drone_timeline)
     st.markdown(
         f"""
         <section class="muye-hero">
           <h1>牧野智能农业演示面板</h1>
-          <p>聚焦虫情识别、天气感知、AI 决策和虚拟无人机执行的完整演示闭环。</p>
+          <p>聚焦虫情识别、天气感知、AI 决策和无人机执行的完整演示闭环，适合比赛现场展示任务流与 PX4 执行状态。</p>
           <div class="muye-badges">
             <span class="muye-badge">当前请求：{request_id}</span>
             <span class="muye-badge">当前阶段：{stage}</span>
             <span class="muye-badge">任务状态：{status}</span>
+            <span class="muye-badge">执行链路：{backend_label}</span>
             <span class="muye-badge">事件总数：{event_count}</span>
           </div>
         </section>
@@ -561,6 +836,399 @@ def render_info_cards(title: str, items: list[tuple[str, str]]) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def format_number(value: Any, *, digits: int = 1, suffix: str = "") -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if number.is_integer():
+        text = str(int(number))
+    else:
+        text = f"{number:.{digits}f}".rstrip("0").rstrip(".")
+    return f"{text}{suffix}"
+
+
+def format_timestamp_display(value: Any, *, include_date: bool = False) -> str:
+    if not value:
+        return "-"
+    try:
+        normalized = str(value).replace("Z", "+00:00")
+        timestamp = datetime.fromisoformat(normalized)
+        return timestamp.strftime("%m-%d %H:%M:%S" if include_date else "%H:%M:%S")
+    except ValueError:
+        text = str(value)
+        return text[:19] if include_date else text[11:19]
+
+
+def infer_drone_backend(
+    drone: dict[str, Any] | None,
+    timeline: list[dict[str, Any]] | None = None,
+) -> tuple[str, str]:
+    active_drone = drone or {}
+    timeline = timeline or []
+    task_id = str(active_drone.get("task_id") or "").lower()
+    statuses = {str(item.get("status") or "").lower() for item in timeline}
+    current_status = str(active_drone.get("status") or "").lower()
+    if current_status:
+        statuses.add(current_status)
+
+    if task_id.startswith("px4-") or statuses.intersection({"connecting", "connected", "ready", "uploaded", "armed"}):
+        return "px4", "PX4 SITL"
+    if task_id.startswith("vd-") or statuses.intersection({"submitted", "enroute", "returning"}):
+        return "virtual_api", "虚拟无人机 API"
+    if task_id.startswith("sim-"):
+        return "simulated", "内置模拟"
+    return "generic", "无人机链路"
+
+
+def build_drone_stage_sequence(
+    backend_key: str,
+    timeline: list[dict[str, Any]],
+    current_status: str,
+) -> list[str]:
+    sequence = list(DRONE_STAGE_SEQUENCES.get(backend_key, DRONE_STAGE_SEQUENCES["generic"]))
+    seen_statuses = [
+        str(item.get("status") or "").lower()
+        for item in timeline
+        if str(item.get("status") or "").strip()
+    ]
+    if current_status and current_status not in sequence:
+        sequence.append(current_status)
+    for status in seen_statuses:
+        if status and status not in sequence:
+            sequence.append(status)
+    if backend_key == "generic" and seen_statuses:
+        ordered_seen = []
+        for status in seen_statuses:
+            if status not in ordered_seen:
+                ordered_seen.append(status)
+        return ordered_seen
+    return sequence
+
+
+def build_drone_stage_markup(
+    timeline: list[dict[str, Any]],
+    current_status: str,
+    backend_key: str,
+) -> str:
+    sequence = build_drone_stage_sequence(backend_key, timeline, current_status)
+    timeline_by_status = {
+        str(item.get("status") or "").lower(): item
+        for item in timeline
+        if str(item.get("status") or "").strip()
+    }
+    current_index = sequence.index(current_status) if current_status in sequence else -1
+    cards = []
+    for index, status in enumerate(sequence):
+        timeline_item = timeline_by_status.get(status, {})
+        if status == current_status:
+            state_class = "current"
+            state_label = "当前"
+        elif timeline_item:
+            state_class = "done"
+            state_label = "已达成"
+        elif current_index >= 0 and index < current_index:
+            state_class = "done"
+            state_label = "已达成"
+        else:
+            state_class = "pending"
+            state_label = "待执行"
+        message = str(timeline_item.get("message") or "等待进入该阶段")
+        timestamp = format_timestamp_display(timeline_item.get("timestamp"))
+        cards.append(
+            f"""
+            <div class="muye-stage-chip {state_class}">
+              <div class="muye-stage-status">{html.escape(state_label)}</div>
+              <div class="muye-stage-name">{html.escape(DRONE_STAGE_LABELS.get(status, status or '-'))}</div>
+              <div class="muye-stage-meta">{html.escape(message)}<br/>{html.escape(timestamp)}</div>
+            </div>
+            """
+        )
+    return "".join(cards)
+
+
+def build_field_snapshot(task: dict[str, Any] | None) -> dict[str, Any]:
+    if not task:
+        return {}
+
+    field = dict(task.get("field") or {})
+    drone = task.get("drone") or {}
+    instruction = drone.get("instruction", {}) if isinstance(drone.get("instruction"), dict) else {}
+
+    if not field.get("field_id"):
+        field["field_id"] = task.get("field_id")
+    if not field.get("field_name"):
+        field["field_name"] = instruction.get("field_name")
+    if not field.get("field_code"):
+        field["field_code"] = field.get("field_id")
+    if not field.get("geofence"):
+        coverage = instruction.get("覆盖区域", {}) if isinstance(instruction, dict) else {}
+        if isinstance(coverage, dict):
+            field["geofence"] = coverage.get("coordinates", [])
+    if field.get("area_mu") in (None, ""):
+        spray_summary = task.get("spray_summary") or {}
+        field["area_mu"] = spray_summary.get("spray_area_mu")
+    return field
+
+
+def infer_operation_outcome(task: dict[str, Any] | None) -> dict[str, str]:
+    if not task:
+        return {
+            "tone": "running",
+            "result_label": "等待任务",
+            "verdict": "等待完整处理链路启动。",
+            "summary": "当前还没有可用于说明比赛闭环的有效任务。",
+        }
+
+    spray_summary = task.get("spray_summary") or {}
+    drone = task.get("drone") or {}
+    decision = task.get("decision") or {}
+    detections = task.get("detections") or []
+    result_status = str(spray_summary.get("result_status") or "").lower()
+    task_status = str(task.get("status") or "").lower()
+    drone_status = str(drone.get("status") or "").lower()
+    medication = decision.get("用药", {}) if isinstance(decision, dict) else {}
+
+    if result_status == "completed" or drone_status == "completed" or task_status == "completed":
+        tone = "success"
+        result_label = "闭环完成"
+        verdict = "虫害识别、决策生成、任务执行和作业记录已形成完整闭环。"
+    elif result_status in {"failed", "cancelled"} or task_status == "error":
+        tone = "error"
+        result_label = "执行异常"
+        verdict = "当前任务未正常闭环，需检查飞控状态、接口响应或作业参数。"
+    else:
+        tone = "running"
+        result_label = "执行中"
+        verdict = "系统正在推进识别、决策与喷洒执行链路。"
+
+    area_text = format_number(spray_summary.get("spray_area_mu"), digits=1, suffix="亩")
+    dosage_text = format_number(spray_summary.get("total_dosage"), digits=1, suffix="L")
+    pest_count = len(detections)
+    pesticide_name = str(medication.get("农药名称") or "-")
+    summary = (
+        f"当前批次识别到 {pest_count} 个目标，建议药剂 {pesticide_name}，"
+        f"计划/记录作业面积 {area_text}，总药量 {dosage_text}。"
+    )
+    return {
+        "tone": tone,
+        "result_label": result_label,
+        "verdict": verdict,
+        "summary": summary,
+    }
+
+
+def render_operation_closure_panel(task: dict[str, Any] | None) -> None:
+    outcome = infer_operation_outcome(task)
+    task = task or {}
+    spray_summary = task.get("spray_summary") or {}
+    drone = task.get("drone") or {}
+    latest_time = format_timestamp_display(
+        spray_summary.get("spray_date") or task.get("updated_at"),
+        include_date=True,
+    )
+    render_info_cards(
+        "闭环摘要",
+        [
+            ("作业批次", str(task.get("request_id", "-"))[:8]),
+            ("记录时间", latest_time),
+            ("执行结果", outcome["result_label"]),
+            ("结果状态", str(spray_summary.get("result_status") or drone.get("status") or task.get("status") or "-")),
+            ("飞控任务号", str(drone.get("task_id", "-"))),
+            ("任务闭环", outcome["verdict"]),
+        ],
+    )
+    st.markdown(
+        f"""
+        <div class="muye-outcome-shell {html.escape(outcome['tone'])}">
+          <div class="muye-outcome-kicker">Operation Outcome</div>
+          <div class="muye-outcome-title">{html.escape(outcome['result_label'])}</div>
+          <div class="muye-outcome-summary">
+            {html.escape(outcome['summary'])}<br/>
+            {html.escape(outcome['verdict'])}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def build_history_detail_markup(task: dict[str, Any]) -> str:
+    field = build_field_snapshot(task)
+    spray_summary = task.get("spray_summary") or {}
+    drone = task.get("drone") or {}
+    outcome = infer_operation_outcome(task)
+    medication = (task.get("decision") or {}).get("用药", {}) if isinstance(task.get("decision"), dict) else {}
+    detail_items = [
+        ("地块", str(field.get("field_name") or field.get("field_code") or field.get("field_id") or "-")),
+        ("闭环结果", outcome["result_label"]),
+        ("作业面积", format_number(spray_summary.get("spray_area_mu"), digits=1, suffix=" 亩")),
+        ("总药量", format_number(spray_summary.get("total_dosage"), digits=1, suffix=" L")),
+        ("农药", str(medication.get("农药名称") or "-")),
+        ("飞控任务号", str(drone.get("task_id") or "-")),
+    ]
+    return "".join(
+        f"""
+        <div class="muye-history-meta-card">
+          <div class="muye-history-meta-label">{html.escape(label)}</div>
+          <div class="muye-history-meta-value">{html.escape(value)}</div>
+        </div>
+        """
+        for label, value in detail_items
+    )
+
+
+def build_history_timeline_text(task: dict[str, Any]) -> str:
+    drone_timeline = task.get("drone_timeline") or []
+    if not drone_timeline:
+        return "暂无无人机阶段记录"
+    labels = []
+    for item in drone_timeline:
+        status = str(item.get("status") or "").lower()
+        label = DRONE_STAGE_LABELS.get(status, status or "-")
+        if label not in labels:
+            labels.append(label)
+    return " -> ".join(labels) if labels else "暂无无人机阶段记录"
+
+
+def render_field_operations_panel(task: dict[str, Any] | None) -> None:
+    field = build_field_snapshot(task)
+    if not field:
+        st.info("等待地块上下文与农田边界数据。")
+        return
+
+    spray_summary = task.get("spray_summary", {}) if task else {}
+    geofence = field.get("geofence") if isinstance(field.get("geofence"), list) else []
+    boundary_svg = None
+    if geofence:
+        boundary_svg = build_route_map_svg({"覆盖区域": {"coordinates": geofence}})
+
+    location_parts = [field.get("province"), field.get("city"), field.get("county")]
+    location_text = "".join(str(item) for item in location_parts if item)
+    render_info_cards(
+        "地块概况",
+        [
+            ("地块名称", str(field.get("field_name") or "-")),
+            ("地块编号", str(field.get("field_code") or field.get("field_id") or "-")),
+            ("所属区域", location_text or "-"),
+            ("农田面积", format_number(field.get("area_mu"), digits=1, suffix=" 亩")),
+            ("折合公顷", format_number(field.get("area_hectare"), digits=2, suffix=" ha")),
+            ("边界顶点", str(len(geofence))),
+        ],
+    )
+
+    spray_items = [
+        ("作业面积", format_number(spray_summary.get("spray_area_mu"), digits=1, suffix=" 亩")),
+        ("预计总药量", format_number(spray_summary.get("total_dosage"), digits=1, suffix=" L")),
+        ("亩均剂量", format_number(spray_summary.get("dosage_per_mu"), digits=2, suffix=" L/亩")),
+        ("喷洒配比", str(spray_summary.get("dilution_ratio") or "-")),
+        ("作业流量", format_number(spray_summary.get("spray_rate_lpm"), digits=1, suffix=" L/min")),
+        ("飞行高度", format_number(spray_summary.get("flight_height_m"), digits=1, suffix=" m")),
+    ]
+    render_info_cards("作业指标", spray_items)
+    render_operation_closure_panel(task)
+
+    if boundary_svg:
+        st.markdown(
+            f"""
+            <div class="muye-map-shell">
+              <div class="muye-map-title">农田边界</div>
+              {boundary_svg}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("当前任务还没有可视化的地块边界。")
+
+
+def render_drone_command_panel(task: dict[str, Any] | None) -> None:
+    drone = task.get("drone", {}) if task else {}
+    if not drone:
+        st.info("等待无人机任务状态。")
+        return
+
+    instruction = drone.get("instruction", {}) if isinstance(drone.get("instruction"), dict) else {}
+    drone_timeline = task.get("drone_timeline", []) if task else []
+    progress_value = max(0, min(100, int(drone.get("progress", 0) or 0)))
+    current_status = str(drone.get("status") or "").lower()
+    backend_key, backend_label = infer_drone_backend(drone, drone_timeline)
+    route_points = instruction.get("飞行路径", []) if isinstance(instruction.get("飞行路径", []), list) else []
+    coverage_points = instruction.get("覆盖区域", {}).get("coordinates", []) if isinstance(instruction.get("覆盖区域", {}), dict) else []
+    route_svg = build_route_map_svg(instruction) if instruction else None
+    last_stage_time = "-"
+    if drone_timeline:
+        last_stage_time = format_timestamp_display(drone_timeline[-1].get("timestamp"), include_date=True)
+
+    st.markdown(
+        f"""
+        <div class="muye-command-shell">
+          <div class="muye-command-top">
+            <div>
+              <div class="muye-command-kicker">Mission Command</div>
+              <div class="muye-command-title">{html.escape(str(drone.get('message', '无人机任务执行中')))}</div>
+              <div class="muye-command-subtitle">
+                请求 {html.escape(str(task.get('request_id', '-'))[:8])}
+                · 最近更新 {html.escape(last_stage_time)}
+                · 当前阶段 {html.escape(DRONE_STAGE_LABELS.get(current_status, current_status or '-'))}
+              </div>
+            </div>
+            <div class="muye-command-badge">{html.escape(backend_label)} · {progress_value}%</div>
+          </div>
+          <div class="muye-stage-row">
+            {build_drone_stage_markup(drone_timeline, current_status, backend_key)}
+          </div>
+          <div class="muye-progress-track">
+            <div class="muye-progress-fill" style="width:{progress_value}%;"></div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    render_info_cards(
+        "任务遥测",
+        [
+            ("执行后端", backend_label),
+            ("飞控任务号", str(drone.get("task_id", "-"))),
+            ("当前航点", str(drone.get("current_waypoint_index", 0))),
+            ("航点数量", str(len(route_points))),
+            ("覆盖顶点", str(len(coverage_points))),
+            ("飞行高度", f"{instruction.get('高度', '-')} m"),
+            ("飞行速度", f"{instruction.get('速度', '-')} m/s"),
+            ("喷洒速率", str(instruction.get("喷洒速率", "-"))),
+        ],
+    )
+
+    if route_svg:
+        map_cols = st.columns([1.2, 1])
+        with map_cols[0]:
+            st.markdown(
+                f"""
+                <div class="muye-map-shell">
+                  <div class="muye-map-title">航线地图</div>
+                  {route_svg}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with map_cols[1]:
+            st.markdown(
+                f"""
+                <div class="muye-telemetry">
+当前航点: {html.escape(str(drone.get('current_waypoint_index', 0)))}
+航点数量: {html.escape(str(len(route_points)))}
+飞控任务号: {html.escape(str(drone.get('task_id', '-')))}
+当前状态: {html.escape(DRONE_STAGE_LABELS.get(current_status, current_status or '-'))}
+                </div>
+                <div class="muye-telemetry-note">
+                  航线围栏已与覆盖区域同步展示，适合在评审时解释喷洒边界、飞行路径和当前执行进度。
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 def weather_icon(summary: str) -> str:
@@ -712,10 +1380,13 @@ def merge_sqlite_tasks_with_events(
             merged_task["status"] = event_task.get("status") or sqlite_task.get("status")
             merged_task["message"] = event_task.get("message") or sqlite_task.get("message")
             merged_task["image_path"] = sqlite_task.get("image_path") or event_task.get("image_path")
+            merged_task["field"] = sqlite_task.get("field") or event_task.get("field", {})
+            merged_task["spray_summary"] = sqlite_task.get("spray_summary") or event_task.get("spray_summary", {})
             merged_task["detections"] = sqlite_task.get("detections") or event_task.get("detections", [])
             merged_task["weather"] = sqlite_task.get("weather") or event_task.get("weather", {})
             merged_task["decision"] = sqlite_task.get("decision") or event_task.get("decision", {})
             merged_task["drone"] = sqlite_task.get("drone") or event_task.get("drone", {})
+            merged_task["drone_timeline"] = event_task.get("drone_timeline", [])
             merged_task["events"] = event_task.get("events", [])
             merged_task["error"] = event_task.get("error") or sqlite_task.get("error")
         seen_request_ids.add(request_id)
@@ -747,11 +1418,14 @@ def render_task_history(tasks: list[dict[str, Any]]) -> None:
         decision = task.get("decision", {})
         medication = decision.get("用药", {}) if isinstance(decision, dict) else {}
         drone = task.get("drone", {})
+        spray_summary = task.get("spray_summary", {})
+        outcome = infer_operation_outcome(task)
         updated_at = str(task.get("updated_at") or task.get("created_at") or "-")
         updated_display = updated_at.replace("T", " ")[:19] if updated_at != "-" else "-"
         pills: list[str] = [
             f'<span class="muye-pill">{html.escape(str(task.get("status", "-")))}</span>',
             f'<span class="muye-pill" style="background:rgba(34,197,94,0.12);color:#166534;border-color:rgba(34,197,94,0.18);">{html.escape(str(task.get("current_stage", "-")))}</span>',
+            f'<span class="muye-pill" style="background:rgba(15,23,42,0.06);color:#0f172a;border-color:rgba(148,163,184,0.22);">{html.escape(outcome["result_label"])}</span>',
         ]
         for label in pest_labels[:3]:
             pills.append(
@@ -764,7 +1438,7 @@ def render_task_history(tasks: list[dict[str, Any]]) -> None:
             ("害虫摘要", pest_summary),
             ("天气", str(weather.get("summary", "-")) if weather else "-"),
             ("建议农药", str(medication.get("农药名称", "-")) if medication else "-"),
-            ("无人机", str(drone.get("message", "-")) if drone else "-"),
+            ("作业面积", format_number(spray_summary.get("spray_area_mu"), digits=1, suffix=" 亩")),
         ]
         content = "".join(
             f"""
@@ -786,6 +1460,27 @@ def render_task_history(tasks: list[dict[str, Any]]) -> None:
                 <div class="muye-pill-wrap" style="margin-top:0;">{''.join(pills)}</div>
               </div>
               <div class="muye-card-grid" style="margin-top:0.9rem;">{content}</div>
+              <div class="muye-history-meta">
+                {build_history_detail_markup(task)}
+              </div>
+              <div style="margin-top:0.8rem;color:#4b5563;font-size:0.9rem;line-height:1.55;">
+                <strong style="color:#17372a;">执行路径：</strong>{html.escape(build_history_timeline_text(task))}
+              </div>
+              <div style="margin-top:0.45rem;color:#4b5563;font-size:0.9rem;line-height:1.55;">
+                <strong style="color:#17372a;">任务结论：</strong>{html.escape(outcome["verdict"])}
+              </div>
+              {
+                '<div class="muye-alert-box"><div class="muye-alert-title">异常原因</div><div style="font-size:0.92rem;line-height:1.55;">'
+                + html.escape(str(task.get("error") or "-"))
+                + '</div></div>'
+                if task.get("error") else ''
+              }
+              {
+                '<div style="margin-top:0.8rem;color:#4b5563;font-size:0.9rem;line-height:1.55;"><strong style="color:#17372a;">无人机状态：</strong>'
+                + html.escape(str(drone.get("message", "-")) if drone else "-")
+                + '</div>'
+                if drone else ''
+              }
             </div>
             """,
             unsafe_allow_html=True,
@@ -870,6 +1565,13 @@ def render_dashboard() -> None:
         )
     else:
         st.info("等待 YOLO 返回害虫名称。")
+
+    st.subheader("作业地块")
+    field_cols = st.columns([1, 1.15])
+    with field_cols[0]:
+        render_field_operations_panel(latest_task)
+    with field_cols[1]:
+        render_drone_command_panel(latest_task)
 
     section_cols = st.columns(2)
     with section_cols[0]:
@@ -975,59 +1677,6 @@ def render_dashboard() -> None:
                 st.json(decision)
         else:
             st.info("等待千问生成决策。")
-
-    st.subheader("无人机状态")
-    drone = latest_task.get("drone", {}) if latest_task else {}
-    progress_value = int(drone.get("progress", 0)) if drone else 0
-    if drone:
-        instruction = drone.get("instruction", {})
-        st.markdown(
-            f"""
-            <div class="muye-progress-shell">
-              <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-bottom:0.7rem;">
-                <div>
-                  <div style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#4b5563;">无人机任务状态</div>
-                  <div style="font-size:1.05rem;font-weight:700;color:#1f2937;">{html.escape(str(drone.get('message', '-')))}</div>
-                </div>
-                <div style="text-align:right;">
-                  <div style="font-size:0.82rem;color:#4b5563;">任务号 {html.escape(str(drone.get('task_id', '-')))}</div>
-                  <div style="font-size:1rem;font-weight:700;color:#0f766e;">{progress_value}%</div>
-                </div>
-              </div>
-              <div class="muye-progress-track">
-                <div class="muye-progress-fill" style="width:{progress_value}%;"></div>
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if instruction:
-            map_cols = st.columns([1.2, 1])
-            with map_cols[0]:
-                route_svg = build_route_map_svg(instruction)
-                if route_svg:
-                    st.markdown(
-                        f"""
-                        <div class="muye-map-shell">
-                          <div class="muye-map-title">航线地图</div>
-                          {route_svg}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-            with map_cols[1]:
-                st.markdown(
-                    f"""
-                    <div class="muye-telemetry">
-当前航点: {html.escape(str(drone.get('current_waypoint_index', 0)))}
-飞行路径: {html.escape(str(instruction.get('飞行路径', [])))}
-覆盖区域: {html.escape(str(instruction.get('覆盖区域', {}).get('coordinates', [])))}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-    else:
-        st.info("等待无人机任务状态。")
 
     st.subheader("实时事件日志")
     render_log_box(latest_task["events"] if latest_task else events)

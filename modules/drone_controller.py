@@ -11,6 +11,7 @@ import httpx
 from modules.common import log_event, point_in_polygon
 from modules.event_bus import FileEventBus
 from modules.mission_planner import MissionPlanner
+from modules.px4_simulator import PX4SimulationError, PX4Simulator
 from modules.sqlite_store import SqliteStore
 
 
@@ -40,6 +41,7 @@ class DroneController:
             self.drone_config.get("flight_constraints", {}),
             logger=self.logger,
         )
+        self.px4_backend = PX4Simulator(self.drone_config, logger=self.logger)
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
@@ -73,17 +75,38 @@ class DroneController:
                 "instruction": plan,
                 "weather": current_weather,
             }
-            if execution.get("simulate_only", True) or not self.api_url:
+            backend = self._resolve_backend()
+            if backend == "simulated":
                 result = {
                     "status": "simulated",
                     "task_id": f"sim-{request_id[:8]}",
                     "accepted": True,
+                    "final_status": "completed",
+                    "last_known_status": "completed",
                 }
                 await self._simulate_mission_progress(request_id, result["task_id"], payload)
                 log_event(
                     self.logger,
                     logging.INFO,
                     "无人机喷洒任务已模拟执行",
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    result=result,
+                )
+                return result
+
+            if backend == "px4":
+                result = await self._execute_px4_mission(
+                    request_id=request_id,
+                    plan=plan,
+                    medication=decision["用药"],
+                    current_weather=current_weather,
+                )
+                log_event(
+                    self.logger,
+                    logging.INFO,
+                    "PX4 喷洒任务已提交",
                     request_id=request_id,
                     client_ip=client_ip,
                     duration_ms=(time.perf_counter() - started) * 1000,
@@ -113,12 +136,19 @@ class DroneController:
                 medication=decision["用药"],
                 current_waypoint_index=0,
             )
-            await self._track_remote_mission(
+            final_payload = await self._track_remote_mission(
                 request_id=request_id,
                 task_id=result.get("task_id") or result.get("mission_id"),
                 instruction=plan,
                 medication=decision["用药"],
             )
+            last_known_status = str(
+                (final_payload or {}).get("status")
+                or result.get("status")
+                or "submitted"
+            )
+            result["last_known_status"] = last_known_status
+            result["final_status"] = self._map_drone_status_to_spray_result(last_known_status)
             log_event(
                 self.logger,
                 logging.INFO,
@@ -141,6 +171,40 @@ class DroneController:
             )
             raise DroneExecutionError(str(exc)) from exc
 
+    async def _execute_px4_mission(
+        self,
+        *,
+        request_id: str,
+        plan: dict[str, Any],
+        medication: dict[str, Any],
+        current_weather: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            result = await self.px4_backend.execute_spray_mission(
+                request_id=request_id,
+                execution_plan=plan,
+                medication=medication,
+                current_weather=current_weather,
+                on_status=lambda status, message, progress, current_waypoint_index: self._publish_drone_update(
+                    request_id=request_id,
+                    task_id=f"px4-{request_id[:8]}",
+                    status=status,
+                    message=message,
+                    progress=progress,
+                    instruction=plan,
+                    medication=medication,
+                    current_waypoint_index=current_waypoint_index,
+                ),
+            )
+        except PX4SimulationError as exc:
+            raise DroneExecutionError(str(exc)) from exc
+
+        result["last_known_status"] = str(result.get("last_known_status") or "submitted")
+        result["final_status"] = self._map_drone_status_to_spray_result(
+            result["last_known_status"]
+        )
+        return result
+
     def plan_spray_mission(
         self,
         *,
@@ -158,13 +222,14 @@ class DroneController:
         task_id: str,
         instruction: dict[str, Any],
         medication: dict[str, Any],
-    ) -> None:
+    ) -> dict[str, Any] | None:
         if not task_id or not self.api_url:
-            return
+            return None
 
         status_url = f"{self.api_url.rstrip('/')}/{task_id}"
         seen_statuses: set[str] = set()
         deadline = time.monotonic() + 15
+        last_payload: dict[str, Any] | None = None
 
         while time.monotonic() < deadline:
             response = await self._client.get(
@@ -176,6 +241,7 @@ class DroneController:
             )
             response.raise_for_status()
             payload = response.json()
+            last_payload = payload
             status = str(payload.get("status", "unknown"))
             if status not in seen_statuses:
                 seen_statuses.add(status)
@@ -190,8 +256,9 @@ class DroneController:
                     current_waypoint_index=int(payload.get("current_waypoint_index", 0)),
                 )
             if status == "completed":
-                return
+                return payload
             await asyncio.sleep(0.25)
+        return last_payload
 
     async def _simulate_mission_progress(
         self,
@@ -260,6 +327,40 @@ class DroneController:
                 instruction=instruction,
                 medication=medication,
             )
+
+    def _map_drone_status_to_spray_result(self, status: str) -> str:
+        normalized = status.strip().lower()
+        if normalized in {"completed", "simulated", "success"}:
+            return "completed"
+        if normalized in {"failed", "error"}:
+            return "failed"
+        if normalized in {"cancelled", "canceled"}:
+            return "cancelled"
+        if normalized in {
+            "connecting",
+            "connected",
+            "uploaded",
+            "armed",
+            "ready",
+            "takeoff",
+            "enroute",
+            "spraying",
+            "returning",
+            "running",
+            "in_progress",
+            "processing",
+        }:
+            return "in_progress"
+        return "planned"
+
+    def _resolve_backend(self) -> str:
+        execution = self.drone_config.get("execution", {})
+        explicit_backend = str(execution.get("backend", "")).strip().lower()
+        if explicit_backend in {"simulated", "remote_api", "px4"}:
+            return explicit_backend
+        if execution.get("simulate_only", True) or not self.api_url:
+            return "simulated"
+        return "remote_api"
 
     def validate_execution_plan(
         self,

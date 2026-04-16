@@ -2,620 +2,242 @@
 
 ## Current Priority
 
-1. 在现有 SQLite 起步版基础上继续扩展结构化业务存储，而不是回到只依赖 JSONL 和配置文件。
-2. 把无人机路径、高度、喷洒速率、气象限制进一步从 LLM 建议里拆出来，收敛到系统 planner。
-3. 补无人机状态流、历史农业数据和面向前端查询的结构化读取能力。
-4. 仿真平台后续评估更专业路线，重点候选仍是 PX4/Gazebo，并按需评估 AirSim。
+1. 维护并稳定当前已经接入的 `PX4 + Gazebo SITL + Muye` 演示链路，而不是回退到只靠虚拟无人机 API。
+2. 继续扩展 SQLite 结构化存储和读取侧能力，保持 `JSONL + SQLite` 混合存储策略。
+3. 继续完善河南农业数据 seed / import / 查询链路，服务于演示与后续报表能力。
+4. 保留 `simulated` / `remote_api` / `px4` 三种无人机 backend 并存，方便本地联调、稳定演示和真实 SITL 切换。
 
 ## Confirmed Decisions
 
-- 项目当前已经具备完整演示链路：
-  - 本地 YOLO
-  - 真实天气
-  - 真实千问
-  - 虚拟无人机
-  - Streamlit 前端
-- `scripts/start_demo.sh` 是当前推荐的一键启动入口。
-- 演示前端和后端已验证可以一起运行。
-- 业务数据后续要引入 SQLite 存储。
-- SQLite 采用“混合存储”策略：
-  - 保留现有 JSONL 事件流，作为原始日志与调试信息
-  - 新增 SQLite，作为结构化业务存储和前端查询来源
-- 当前实现边界已确认：
-  - 河南地块/作物核心模型文件已补齐：
-    - `models/agri_models.py`
-    - `CropCatalog`
-    - `Field`
-    - `FieldCropCycle`
-  - 河南地块/作物 CSV 种子生成脚本已补齐：
-    - `scripts/generate_henan_field_crop_seed_csv.py`
-  - 河南地块/作物 CSV 导入脚本已补齐：
-    - `scripts/import_henan_field_crop_seed_csv.py`
-  - `modules/sqlite_store.py`、迁移脚本和回归测试已落地
-  - 主演示链路 `MuyeApplication` 已开始同步写入 SQLite 起步表
-  - 主演示链路现在会优先从 SQLite `fields` / `field_crop_cycles` 加载运行时地块上下文
-  - Streamlit 前端已开始优先通过 SQLite 读取任务摘要与历史记录
-  - `modules/event_bus.py` 仍保留，用于补实时阶段与事件日志
-  - 无人机状态流已进入 SQLite `drone_mission_updates`
-  - `tasks.field_id`、`fields.owner_user_id`、`crop_catalog.water_demand_coefficient` 已进入 SQLite 主 schema
-  - AI 决策层与系统 planner 边界已重新收敛：
-    - LLM 只输出用药建议与农事建议
-    - `modules/mission_planner.py` 负责飞行路径、高度、喷洒速率和气象限制
-  - 本轮审查驱动修复已完成：
-    - `weather_history_daily` 允许同一站点同一天挂到多个地块，不再互相覆盖
-    - 运行时地块选择不再默认取“第一块地”
-    - 天气查询定位优先使用经纬度
-    - `mission_planner` 已从“围栏顶点”升级为基础覆盖式往返航线
-  - 河南参考数据第一批 seed 已落地：
-    - `data_sources`
-    - `agri_statistical_indicators`
-    - 已附官方来源 URL 与摘录
-- 河南历史天气已具备正式导入能力：
+- 当前仓库已经不是“准备接 PX4”，而是“PX4 backend 已落地”：
+  - `modules/px4_simulator.py` 已存在。
+  - `modules/drone_controller.py` 已支持 `backend=px4`。
+  - `main.py` 已支持 `--drone-backend px4` 与 PX4 环境变量覆盖。
+  - `config/drone_config.json` 与 `.env.example` 已包含 PX4 配置。
+- 当前仓库已经提供完整的 PX4 一键演示脚本族：
+  - `scripts/run_px4_demo.sh`
+  - `scripts/start_px4_visual_demo.sh`
+  - `scripts/start_competition_mode.sh`
+  - `scripts/start_all_in_one.sh`
+- 非 PX4 的原始 demo 入口仍保留：
+  - `scripts/start_demo.sh`
+  - 适合继续走 `with-demo-stack + virtual drone` 的稳定演示路径
+- PX4 演示默认采用仓库内置 Zurich SITL 演示地块，而不是直接飞业务配置里的河南地块：
+  - `config/drone_config.json -> px4.demo_field`
+  - `main.py -> _build_px4_demo_field_context()`
+  - `PX4_USE_SITL_DEMO_FIELD=true` 时会自动启用
+- PX4 演示链路默认策略已经明确：
+  - 后端切到 `DRONE_BACKEND=px4`
+  - 使用本地 YOLO API
+  - 天气与千问在演示脚本中默认走 mock，保证稳定性
+  - MAVSDK 连接地址默认 `udpin://0.0.0.0:14540`
+- 当前无人机 backend 是三路并存：
+  - `simulated`
+  - `remote_api`
+  - `px4`
+- SQLite 路线已经从“草案”进入“主链路落地”：
+  - `tasks`
+  - `detections`
+  - `weather_snapshots`
+  - `decisions`
+  - `drone_mission_updates`
+  - `fields`
+  - `crop_catalog`
+  - `field_crop_cycles`
+  - `soil_records`
   - `weather_stations`
   - `weather_history_daily`
+  - `pesticide_catalog`
+  - `spray_records`
+  - `data_sources`
+  - `agri_statistical_indicators`
+- 主处理链和前端的存储边界已经稳定：
+  - `modules/event_bus.py` 继续保留，负责实时事件流和日志
+  - `modules/sqlite_store.py` 负责结构化任务摘要、历史记录和农业数据
+  - `app.py` 优先读取 SQLite，再用 JSONL 补实时阶段与时间线
+- LLM 与 planner 的职责边界已经收敛：
+  - `ai_decision.py` 只输出用药建议与农事建议
+  - `mission_planner.py` 负责飞行路径、高度、速度、喷洒速率与气象限制
+- 运行时地块上下文策略已经确定：
+  - 优先使用 `PX4 SITL demo field`
+  - 其次使用 `MUYE_ACTIVE_FIELD_ID`
+  - 再从 SQLite `fields / field_crop_cycles` 解析
+  - 最后才回退到 `config/drone_config.json`
+  - 当回退配置被使用时，会自动 seed 到 SQLite，避免外键缺失
+
+## Current Code Status
+
+### Main Flow
+
+- `main.py`
+  - 负责系统装配、worker 队列、embedded YOLO / virtual drone 服务启动
+  - 支持 `--with-yolo-api`、`--with-virtual-drone-api`、`--with-demo-stack`
+  - 支持 `--drone-backend simulated|remote_api|px4`
+  - 支持 `--no-capture-on-startup`
+  - 已内建 PX4 环境变量覆盖和 demo field 切换逻辑
+- `modules/drone_controller.py`
+  - 已支持 simulated、remote API、PX4 三种执行路径
+  - 无人机状态流会写入 SQLite `drone_mission_updates`
+  - 最终状态会映射回 `spray_records.result_status`
+- `modules/px4_simulator.py`
+  - 已通过 `mavsdk` 接 PX4 SITL
+  - 已支持连接、等待定位、上传任务、自动解锁、自动起飞、任务完成监听
+  - 已支持航点接受半径、停留时间、飞越航点、原地转弯等演示控制参数
+
+### PX4 Scripts
+
+- `scripts/run_px4_demo.sh`
+  - 一键跑通 `PX4 SITL -> Muye backend -> 示例图注入 -> 等待任务完成`
+  - 会清理代理环境变量，避免 PX4 本地构建/运行受代理干扰
+  - 支持 `--skip-px4`、`--keep-px4`、`--system-address`、`--world`
+- `scripts/start_px4_visual_demo.sh`
+  - 一键拉起 `PX4 SITL + Gazebo + Muye backend + Streamlit`
+  - 可选自动拉起 `QGroundControl`
+- `scripts/start_competition_mode.sh`
+  - 包装 visual demo，并尝试自动打开浏览器，面向比赛现场展示
+- `scripts/start_all_in_one.sh`
+  - 面向最直接的一键入口，透传 QGC / browser / PX4 参数
+
+### Non-PX4 Demo Script
+
+- `scripts/start_demo.sh`
+  - 继续保留为本地 YOLO + 虚拟无人机 + Streamlit 的基础演示入口
+  - 适合作为 PX4 环境不可用时的稳定回退路径
+
+### Database / Data Model
+
+- `modules/sqlite_store.py`
+  - 已完成旧库迁移、主 schema 初始化、索引、WAL / NORMAL
+  - 已支持 `fetch_field_context()`、`fetch_task_views()` 等读取侧能力
+  - 已支持 `upsert_*` 写入：
+    - `upsert_field()`
+    - `upsert_crop_catalog_record()`
+    - `upsert_field_crop_cycle()`
+    - `upsert_soil_record()`
+    - `upsert_weather_station()`
+    - `upsert_weather_history_daily()`
+    - `upsert_pesticide_catalog_record()`
+    - `upsert_data_source()`
+    - `upsert_agri_statistical_indicator()`
+    - `upsert_spray_record()`
+- `scripts/migrate_to_v1_1.py`
+  - 继续保留为 SQLite 旧库迁移工具
+- `v1.1.1`
+  - 代表 SQLite migration support 发布线，相关说明已进入 `CHANGELOG.md`
+- `models/agri_models.py`
+  - 已定义 `CropCatalog`、`Field`、`FieldCropCycle` SQLAlchemy 模型，作为农业数据层参考模型
+
+### Seed / Import Scripts
+
+- 已落地河南数据脚本：
+  - `scripts/generate_henan_field_crop_seed_csv.py`
+  - `scripts/import_henan_field_crop_seed_csv.py`
+  - `scripts/generate_henan_soil_seed_csv.py`
+  - `scripts/import_henan_soil_records_csv.py`
+  - `scripts/import_henan_reference_data.py`
   - `scripts/import_henan_weather_history_csv.py`
-  - 当前阻塞点：
-    - 用户暂时无法下载河南天气 CSV
-    - 先保留导入能力，后续拿到官方 CSV 后再做真实入库验证
-- SQLite v1.1 已完成两阶段落地并已进入发布线：
-  - PR #1 已合并：
-    - `tasks.status` CHECK 约束
-    - `request_id` 索引
-    - WAL / NORMAL
-  - PR #2 已合并：
-    - `_migrate_v1_1()` 自动迁移旧库
-    - `scripts/migrate_to_v1_1.py`
-- `v1.1` tag 保持不动。
-- 新版本 `v1.1.1` 已创建并发布，用于承载迁移支持版本说明。
-- 旧库迁移回归测试、迁移文档和迁移事务修复已经完成并合入 `main`：
-  - PR #3: `fix(sqlite): harden legacy DB migration and docs`
-  - merge commit: `f544cc40adea68dd9c2bfe607c808c77fc98da06`
-- 开发协作层面必须维护：
-  - `PROJECT_MEMORY.md`
-  - `CHANGELOG.md`
+- 已存在的示例 seed：
+  - `data/seeds/henan/field_crop_seed/*.csv`
+  - `data/seeds/henan/soil_records.csv`
+  - `data/seeds/henan/pesticide_catalog.json`
+  - `data/seeds/henan/sources.json`
+  - `data/seeds/henan/agri_statistical_indicators.json`
+
+### Frontend
+
+- `app.py`
+  - 已能识别 PX4 状态时间线并展示为 `PX4 SITL`
+  - 已优先读 SQLite 任务历史
+  - 已补任务历史检索、作业结论、结构化无人机状态、农药/天气/喷洒摘要
+  - 仍用 JSONL 事件流补实时态和日志滚动
+
+## Key Differences From Older Memory
+
+- 旧记忆里“PX4 尚未落代码、还在等待后续接入”的表述已经过时。
+- 当前真实状态是：
+  - PX4 backend 已接入
+  - PX4 demo field 已配置
+  - PX4 CLI / env / backend route 已接入
+  - PX4 一键演示脚本已完整存在
+  - PX4 相关测试已补齐
+- 旧记忆里“SQLite 还是起步草案”的表述也不准确。
+- 当前真实状态是：
+  - SQLite 已写入主 pipeline
+  - SQLite 已接前端历史读取
+  - 农业数据 schema、seed、import、query 已落一整层
 
 ## Last Verified State
 
-- `feat/sqlite-tuning` 分支本地验证通过：
-  - `PYTHONPATH=. .venv/bin/pytest -q`
-  - 结果：`19 passed`
-- `feat/sqlite-migration-v1_1` 分支本地验证通过：
-  - `PYTHONPATH=. .venv/bin/pytest -q`
-  - 结果：`19 passed`
-- 当前本地分支 `chore/sqlite-migration-regression-docs-v2` 已验证：
-  - 提交：`3e03134 docs: update project memory after sqlite release closeout`
-  - `PYTHONPATH=. .venv/bin/pytest -q`
-  - 结果：`22 passed`
-- 主流程 SQLite 接入回归测试已补充：
-  - `tests/test_main.py::test_main_pipeline_writes_sqlite_records`
-  - 结果：`passed`
-- SQLite 历史读取与结构化检索测试已补充：
-  - `tests/test_sqlite_migration.py::test_sqlite_store_fetch_task_views_supports_structured_history_queries`
-  - 结果：`passed`
-- 无人机状态流 SQLite 写入测试已补充：
-  - `tests/test_drone_controller.py::test_drone_controller_persists_simulated_status_updates_to_sqlite`
-  - 结果：`passed`
-- 历史农业数据 schema 回归测试已补充：
-  - `tests/test_sqlite_migration.py::test_sqlite_store_creates_agriculture_data_schema_scaffold`
-  - 结果：`passed`
-- 数据来源与统计指标写入测试已补充：
-  - `tests/test_sqlite_migration.py::test_sqlite_store_supports_source_and_indicator_upserts`
-  - 结果：`passed`
-- 河南历史天气 CSV 导入测试已补充：
-  - `tests/test_sqlite_migration.py::test_import_henan_weather_history_csv_imports_stations_and_daily_rows`
-  - 结果：`passed`
-- 河南地块/作物种子生成测试已补充：
-  - `tests/test_henan_field_crop_seed_generation.py::test_generate_henan_field_crop_seed_csv_outputs_expected_files`
-  - 结果：`passed`
-- 河南地块/作物 CSV 导入与运行时字段解析测试已补充：
-  - `tests/test_sqlite_migration.py::test_import_henan_field_crop_seed_csv_imports_and_resolves_runtime_context`
-  - 结果：`passed`
-- 主流程优先使用 SQLite 地块上下文测试已补充：
-  - `tests/test_main.py::test_main_prefers_sqlite_field_context_over_static_config`
-  - 结果：`passed`
-- 运行时多地块歧义保护测试已补充：
-  - `tests/test_main.py::test_main_rejects_ambiguous_field_context_without_explicit_selection`
-  - 结果：`passed`
-- 同站同日多地块天气写入测试已补充：
-  - `tests/test_sqlite_migration.py::test_sqlite_store_supports_multiple_field_weather_rows_for_same_station_day`
-  - 结果：`passed`
-- 天气定位优先级测试已补充：
-  - `tests/test_sqlite_migration.py::test_fetch_field_context_prefers_coordinates_for_weather_lookup`
-  - 结果：`passed`
-- planner 覆盖航线测试已补充：
-  - `tests/test_mission_planner.py::test_mission_planner_generates_coverage_route_not_just_polygon_vertices`
-  - 结果：`passed`
-- 旧库迁移回归测试已补齐并通过：
-  - `PYTHONPATH=. .venv/bin/pytest -q tests/test_sqlite_migration.py`
-  - 结果：`1 passed`
-- SQLite 相关回归已通过：
-  - `PYTHONPATH=. .venv/bin/pytest -q tests/test_main.py tests/test_sqlite_migration.py`
-  - 结果：`5 passed`
-- 相关测试集合已通过：
-  - `PYTHONPATH=. .venv/bin/pytest -q`
-  - 结果：`34 passed`
-- `./scripts/start_demo.sh --sample-image IP000000042.jpg` 已验证：
-  - 前端可访问
-  - YOLO 可识别目标
-  - 天气接口可用
-  - 千问可生成决策
-  - 虚拟无人机任务能走到 completed
-  - pipeline 最终 completed
+- 2026-04-16 已重新逐项核对当前仓库中的源码、配置、脚本、测试与文档：
+  - `main.py`
+  - `app.py`
+  - `modules/*.py`
+  - `scripts/*.sh`
+  - `scripts/*.py`
+  - `tests/*.py`
+  - `README.md`
+  - `config/drone_config.json`
+  - `.env.example`
+- 本次核对确认：
+  - 记忆文件此前落后于代码状态
+  - 当前仓库已经包含 PX4 接入和完整一键演示脚本
+  - 当前仓库已经包含 SQLite 深化接入和农业数据扩展
+- 当前本地测试已实际通过：
+  - `PYTHONPATH=/home/qingking/muye /home/qingking/muye/.venv/bin/pytest -q`
+  - 结果：`53 passed in 5.32s`
+- 关键测试覆盖已确认存在：
+  - `tests/test_main.py`
+    - PX4 backend override
+    - PX4 demo field override
+    - 主流程 SQLite 写入
+    - `spray_records` 状态回填
+    - `pesticide_catalog` 关联
+    - SQLite 地块上下文选择
+  - `tests/test_drone_controller.py`
+    - simulated 状态写库
+    - PX4 状态写库
+    - PX4 mission completion / address normalize / waypoint timing / pivot turn
+  - `tests/test_mission_planner.py`
+    - 覆盖式航线
+    - presentation profile
+    - explicit demo route
+  - `tests/test_event_bus.py`
+    - PX4 时间线压缩
+  - `tests/test_sqlite_migration.py`
+    - 旧库迁移
+    - 结构化历史读取
+    - 农业 schema
+    - spray / pesticide / soil / weather history / field context
 
-## SQLite Draft Schema
+## Known Gaps / Risks
 
-当前已确认的 SQLite 起步方案如下。
-
-- 数据库文件名：
-  - `muye.db`
-- 存储策略：
-  - JSONL 保留原始事件流
-  - SQLite 存任务摘要、检测结果、天气快照和决策结果
-
-### Table: `tasks`
-
-- `request_id`: TEXT PRIMARY KEY
-- `image_path`: TEXT
-- `start_time`: DATETIME
-- `end_time`: DATETIME
-- `status`: TEXT
-
-### Table: `detections`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `request_id`: TEXT
-- `label`: TEXT
-- `confidence`: REAL
-- `bbox`: TEXT
-
-### Table: `weather_snapshots`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `request_id`: TEXT
-- `timestamp`: DATETIME
-- `weather_data`: TEXT
-
-### Table: `decisions`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `request_id`: TEXT
-- `timestamp`: DATETIME
-- `decision_text`: TEXT
-
-### Table: `drone_mission_updates`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `request_id`: TEXT
-- `timestamp`: DATETIME
-- `task_id`: TEXT
-- `status`: TEXT
-- `message`: TEXT
-- `progress`: INTEGER
-- `current_waypoint_index`: INTEGER
-- `instruction`: TEXT
-- `medication`: TEXT
-
-### Table: `fields`
-
-- `field_id`: TEXT PRIMARY KEY
-- `field_code`: TEXT UNIQUE
-- `field_name`: TEXT
-- `province`: TEXT
-- `city`: TEXT
-- `county`: TEXT
-- `township`: TEXT
-- `village`: TEXT
-- `latitude`: REAL
-- `longitude`: REAL
-- `area_mu`: REAL
-- `area_hectare`: REAL
-- `geofence`: TEXT
-- `soil_type`: TEXT
-- `irrigation_type`: TEXT
-
-### Table: `crop_catalog`
-
-- `crop_code`: TEXT PRIMARY KEY
-- `crop_name`: TEXT
-- `category`: TEXT
-- `variety`: TEXT
-
-### Table: `field_crop_cycles`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `field_id`: TEXT
-- `crop_code`: TEXT
-- `year`: INTEGER
-- `season`: TEXT
-- `planting_date`: DATE
-- `harvest_date`: DATE
-- `area_mu`: REAL
-- `expected_yield_kg`: REAL
-- `actual_yield_kg`: REAL
-- `status`: TEXT
-
-### Table: `soil_records`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `field_id`: TEXT
-- `sample_date`: DATE
-- `depth_cm`: INTEGER
-- `ph`: REAL
-- `organic_matter_gkg`: REAL
-- `alkali_hydrolyzable_nitrogen_mgkg`: REAL
-- `available_phosphorus_mgkg`: REAL
-- `available_potassium_mgkg`: REAL
-- `moisture_percent`: REAL
-- `salinity_gkg`: REAL
-- `texture`: TEXT
-
-### Table: `weather_history_daily`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `field_id`: TEXT
-- `station_code`: TEXT
-- `station_name`: TEXT
-- `observation_date`: DATE
-- `weather_summary`: TEXT
-- `temperature_avg_c`: REAL
-- `temperature_min_c`: REAL
-- `temperature_max_c`: REAL
-- `humidity_avg_percent`: REAL
-- `precipitation_mm`: REAL
-- `wind_speed_avg_mps`: REAL
-- `wind_direction`: TEXT
-- `sunshine_hours`: REAL
-
-### Table: `weather_stations`
-
-- `station_code`: TEXT PRIMARY KEY
-- `station_name`: TEXT
-- `province`: TEXT
-- `city`: TEXT
-- `county`: TEXT
-- `latitude`: REAL
-- `longitude`: REAL
-- `elevation_m`: REAL
-- `source_id`: TEXT
-
-### Table: `pesticide_catalog`
-
-- `pesticide_id`: TEXT PRIMARY KEY
-- `registration_no`: TEXT UNIQUE
-- `product_name`: TEXT
-- `active_ingredient`: TEXT
-- `formulation`: TEXT
-- `toxicity`: TEXT
-- `manufacturer`: TEXT
-- `target_crops`: TEXT
-- `target_pests`: TEXT
-- `dilution_guidance`: TEXT
-
-### Table: `spray_records`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `request_id`: TEXT
-- `field_id`: TEXT
-- `crop_cycle_id`: INTEGER
-- `drone_task_id`: TEXT
-- `pesticide_id`: TEXT
-- `spray_date`: DATETIME
-- `operator_name`: TEXT
-- `spray_area_mu`: REAL
-- `dosage_per_mu`: REAL
-- `total_dosage`: REAL
-- `dilution_ratio`: TEXT
-- `spray_rate_lpm`: REAL
-- `flight_height_m`: REAL
-- `flight_speed_mps`: REAL
-- `weather_snapshot`: TEXT
-- `result_status`: TEXT
-
-### Table: `data_sources`
-
-- `source_id`: TEXT PRIMARY KEY
-- `source_name`: TEXT
-- `publisher`: TEXT
-- `region_scope`: TEXT
-- `source_type`: TEXT
-- `source_url`: TEXT
-- `access_level`: TEXT
-- `retrieval_date`: DATE
-- `license`: TEXT
-- `notes`: TEXT
-
-### Table: `agri_statistical_indicators`
-
-- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
-- `region_level`: TEXT
-- `region_name`: TEXT
-- `province`: TEXT
-- `city`: TEXT
-- `county`: TEXT
-- `year`: INTEGER
-- `period`: TEXT
-- `indicator_code`: TEXT
-- `indicator_name`: TEXT
-- `value`: REAL
-- `unit`: TEXT
-- `source_id`: TEXT
-- `source_excerpt`: TEXT
-- `raw_payload`: TEXT
-
-### SQL DDL Draft
-
-```sql
-CREATE TABLE IF NOT EXISTS tasks (
-  request_id TEXT PRIMARY KEY,
-  image_path TEXT,
-  start_time DATETIME,
-  end_time DATETIME,
-  status TEXT
-);
-
-CREATE TABLE IF NOT EXISTS detections (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT NOT NULL,
-  label TEXT,
-  confidence REAL,
-  bbox TEXT,
-  FOREIGN KEY (request_id) REFERENCES tasks(request_id)
-);
-
-CREATE TABLE IF NOT EXISTS weather_snapshots (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT NOT NULL,
-  timestamp DATETIME,
-  weather_data TEXT,
-  FOREIGN KEY (request_id) REFERENCES tasks(request_id)
-);
-
-CREATE TABLE IF NOT EXISTS decisions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT NOT NULL,
-  timestamp DATETIME,
-  decision_text TEXT,
-  FOREIGN KEY (request_id) REFERENCES tasks(request_id)
-);
-
-CREATE TABLE IF NOT EXISTS drone_mission_updates (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT NOT NULL,
-  timestamp DATETIME,
-  task_id TEXT,
-  status TEXT,
-  message TEXT,
-  progress INTEGER,
-  current_waypoint_index INTEGER,
-  instruction TEXT,
-  medication TEXT,
-  FOREIGN KEY (request_id) REFERENCES tasks(request_id)
-);
-
-CREATE TABLE IF NOT EXISTS fields (
-  field_id TEXT PRIMARY KEY,
-  field_code TEXT UNIQUE,
-  field_name TEXT NOT NULL,
-  province TEXT,
-  city TEXT,
-  county TEXT,
-  township TEXT,
-  village TEXT,
-  latitude REAL,
-  longitude REAL,
-  area_mu REAL,
-  area_hectare REAL,
-  geofence TEXT,
-  soil_type TEXT,
-  irrigation_type TEXT,
-  source TEXT,
-  notes TEXT,
-  created_at DATETIME,
-  updated_at DATETIME
-);
-
-CREATE TABLE IF NOT EXISTS crop_catalog (
-  crop_code TEXT PRIMARY KEY,
-  crop_name TEXT NOT NULL,
-  category TEXT,
-  variety TEXT,
-  growth_cycle_days INTEGER,
-  typical_planting_month TEXT,
-  typical_harvest_month TEXT,
-  source TEXT,
-  notes TEXT
-);
-
-CREATE TABLE IF NOT EXISTS field_crop_cycles (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  field_id TEXT NOT NULL,
-  crop_code TEXT NOT NULL,
-  year INTEGER,
-  season TEXT,
-  planting_date DATE,
-  harvest_date DATE,
-  area_mu REAL,
-  expected_yield_kg REAL,
-  actual_yield_kg REAL,
-  status TEXT,
-  source TEXT,
-  notes TEXT,
-  FOREIGN KEY (field_id) REFERENCES fields(field_id),
-  FOREIGN KEY (crop_code) REFERENCES crop_catalog(crop_code)
-);
-
-CREATE TABLE IF NOT EXISTS soil_records (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  field_id TEXT NOT NULL,
-  sample_date DATE,
-  depth_cm INTEGER,
-  ph REAL,
-  organic_matter_gkg REAL,
-  alkali_hydrolyzable_nitrogen_mgkg REAL,
-  available_phosphorus_mgkg REAL,
-  available_potassium_mgkg REAL,
-  moisture_percent REAL,
-  salinity_gkg REAL,
-  texture TEXT,
-  source TEXT,
-  raw_payload TEXT,
-  FOREIGN KEY (field_id) REFERENCES fields(field_id)
-);
-
-CREATE TABLE IF NOT EXISTS weather_history_daily (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  field_id TEXT,
-  station_code TEXT,
-  station_name TEXT,
-  observation_date DATE NOT NULL,
-  weather_summary TEXT,
-  temperature_avg_c REAL,
-  temperature_min_c REAL,
-  temperature_max_c REAL,
-  humidity_avg_percent REAL,
-  precipitation_mm REAL,
-  wind_speed_avg_mps REAL,
-  wind_direction TEXT,
-  sunshine_hours REAL,
-  source TEXT,
-  raw_payload TEXT,
-  FOREIGN KEY (field_id) REFERENCES fields(field_id)
-);
-
-CREATE TABLE IF NOT EXISTS weather_stations (
-  station_code TEXT PRIMARY KEY,
-  station_name TEXT NOT NULL,
-  province TEXT,
-  city TEXT,
-  county TEXT,
-  latitude REAL,
-  longitude REAL,
-  elevation_m REAL,
-  source_id TEXT,
-  notes TEXT,
-  FOREIGN KEY (source_id) REFERENCES data_sources(source_id)
-);
-
-CREATE TABLE IF NOT EXISTS pesticide_catalog (
-  pesticide_id TEXT PRIMARY KEY,
-  registration_no TEXT UNIQUE,
-  product_name TEXT NOT NULL,
-  active_ingredient TEXT,
-  formulation TEXT,
-  toxicity TEXT,
-  manufacturer TEXT,
-  target_crops TEXT,
-  target_pests TEXT,
-  dilution_guidance TEXT,
-  source TEXT,
-  raw_payload TEXT
-);
-
-CREATE TABLE IF NOT EXISTS spray_records (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  request_id TEXT,
-  field_id TEXT NOT NULL,
-  crop_cycle_id INTEGER,
-  drone_task_id TEXT,
-  pesticide_id TEXT,
-  spray_date DATETIME NOT NULL,
-  operator_name TEXT,
-  spray_area_mu REAL,
-  dosage_per_mu REAL,
-  total_dosage REAL,
-  dilution_ratio TEXT,
-  spray_rate_lpm REAL,
-  flight_height_m REAL,
-  flight_speed_mps REAL,
-  weather_snapshot TEXT,
-  result_status TEXT,
-  source TEXT,
-  notes TEXT,
-  FOREIGN KEY (request_id) REFERENCES tasks(request_id),
-  FOREIGN KEY (field_id) REFERENCES fields(field_id),
-  FOREIGN KEY (crop_cycle_id) REFERENCES field_crop_cycles(id),
-  FOREIGN KEY (pesticide_id) REFERENCES pesticide_catalog(pesticide_id)
-);
-
-CREATE TABLE IF NOT EXISTS data_sources (
-  source_id TEXT PRIMARY KEY,
-  source_name TEXT NOT NULL,
-  publisher TEXT,
-  region_scope TEXT,
-  source_type TEXT,
-  source_url TEXT NOT NULL,
-  access_level TEXT,
-  retrieval_date DATE,
-  license TEXT,
-  notes TEXT
-);
-
-CREATE TABLE IF NOT EXISTS agri_statistical_indicators (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  region_level TEXT NOT NULL,
-  region_name TEXT NOT NULL,
-  province TEXT,
-  city TEXT,
-  county TEXT,
-  year INTEGER NOT NULL,
-  period TEXT NOT NULL,
-  indicator_code TEXT NOT NULL,
-  indicator_name TEXT NOT NULL,
-  value REAL NOT NULL,
-  unit TEXT,
-  source_id TEXT,
-  source_excerpt TEXT,
-  raw_payload TEXT,
-  UNIQUE (
-    region_level, region_name, province, city, county,
-    year, period, indicator_code
-  ),
-  FOREIGN KEY (source_id) REFERENCES data_sources(source_id)
-);
-```
-
-### Notes
-
-- 这是当前确认的起步版 schema，用于先把结构化数据落库。
-- 当前迁移路径的额外结论：
-  - 旧库迁移前建议备份数据库
-  - 旧库非法 `tasks.status` 会被规范化为 `error`
-- 后续很可能继续扩展：
-  - 无人机状态流
-  - 历史农业数据
-  - 更细的结构化字段
-  但这些扩展暂未开始实施。
+- PX4 代码虽然已接入，但真实运行仍依赖外部环境：
+  - `PX4-Autopilot`
+  - Gazebo Sim
+  - `mavsdk`
+  - 可选 `QGroundControl`
+- 本次会话没有重新实际启动 `make px4_sitl gz_x500` 做端到端现场验证；本次验证重点是“仓库代码状态”和“记忆同步”。
+- `pesticide_catalog` 当前仍是示例 seed，用于联调和字段关联，不是正式官方登记全量库。
+- 河南历史天气导入能力已具备，但真实 CSV 仍需用户后续提供再做真实入库验证。
 
 ## Next Work
 
-- 先把 `main` 本地同步到包含 PR #3 的最新状态。
-- 在已接入的 SQLite 起步版基础上继续完善读取侧，而不只是写入：
-  - 已完成前端查询接口
-  - 已完成任务历史列表
-  - 已完成结构化状态检索
-- 在现有 SQLite 基础上继续扩展：
-  - 历史农业数据导入
-  - 面向前端查询的结构化读取接口
-  - 更细粒度的无人机时序查询与统计
-  - 农药数据的正式入库
-- 河南地块/作物数据下一步：
-  - 把 CSV seed 正式接入 SQLite 导入链
-  - 再让 `fields` / `field_crop_cycles` 与天气、喷洒记录联动
-- 河南天气数据的下一步提醒：
-  - 等用户后续拿到官方天气 CSV
-  - 直接运行 `scripts/import_henan_weather_history_csv.py`
-  - 验证 `weather_stations` 与 `weather_history_daily` 实际入库结果
-- 视需要补充 `v1.1.1` Release Notes 的迁移章节，使其与 `main` 当前状态完全一致。
-- 后续再评估是否扩展：
-  - 喷洒任务记录
-  - 无人机状态流
-  - 地块/作物/土壤/历史农业数据
-- 把“LLM 决策”和“任务规划”拆层：
-  - LLM 负责解释、建议、风险提示
-  - 系统 planner 负责飞行参数和作业约束
-- 评估仿真接入方案：
-  - 先明确是否要对接 PX4/Gazebo
-  - 再判断 AirSim 是否只保留为视觉仿真候选
+1. 在目标机器上实际复核一次 PX4 演示链：
+   - `./scripts/run_px4_demo.sh`
+   - 或 `./scripts/start_px4_visual_demo.sh --sample-image IP000000042.jpg`
+2. 如果现场演示优先级最高，继续强化比赛模式：
+   - 日志提示
+   - QGC 检测
+   - 浏览器拉起
+   - 错误时的快速回退
+3. 继续扩展 SQLite 读取侧，而不只是写入：
+   - 更细粒度历史查询
+   - 更清晰的报表/统计视图
+   - 农业数据和喷洒记录联动查询
+4. 继续补农业数据：
+   - 正式农药目录
+   - 真实河南天气 CSV
+   - 更细的土壤/地块/作物属性
 
 ## Update Rule
 
