@@ -2,15 +2,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import logging
 import os
 import re
+import tempfile
+import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
 import httpx
 import uvicorn
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from PIL import Image, ImageDraw, UnidentifiedImageError
+from pydantic import BaseModel, Field
 
 from modules.ai_decision import DecisionEngine
 from modules.common import (
@@ -26,20 +34,933 @@ from modules.common import (
     log_event,
 )
 from modules.data_collector import DataCollectorService
+from modules.decision_context import SqliteDecisionContextProvider
 from modules.drone_controller import DroneController
 from modules.event_bus import FileEventBus
 from modules.image_processor import ImageProcessor
 from modules.local_yolo_api import create_app as create_local_yolo_app
 from modules.local_yolo_api import load_local_yolo_settings
+from modules.event_bus import build_task_views, load_events
 from modules.sqlite_store import SqliteStore
 from modules.virtual_drone_api import create_virtual_drone_app, load_virtual_drone_settings
 from modules.weather_integration import WeatherClient
+
+
+class SimPoint(BaseModel):
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+
+
+class SimDroneState(BaseModel):
+    id: str
+    name: str
+    status: str
+    battery: int = Field(ge=0, le=100)
+    position: SimPoint
+    route: list[SimPoint]
+
+
+class SimMapStateResponse(BaseModel):
+    timestamp: float
+    drones: list[SimDroneState]
+
+
+class WorkflowEventEntry(BaseModel):
+    timestamp: str
+    stage: str
+    status: str
+    message: str
+
+
+class WorkflowTimelineEntry(BaseModel):
+    timestamp: str | None = None
+    status: str
+    message: str
+    progress: int | None = None
+    current_waypoint_index: int | None = None
+    task_id: str | None = None
+
+
+class WorkflowTaskState(BaseModel):
+    request_id: str
+    current_stage: str
+    status: str
+    message: str
+    updated_at: str | None = None
+    image_path: str | None = None
+    field: dict[str, Any]
+    detections: list[dict[str, Any]]
+    weather: dict[str, Any]
+    spray_summary: dict[str, Any]
+    decision: dict[str, Any]
+    drone: dict[str, Any]
+    drone_timeline: list[WorkflowTimelineEntry]
+    recent_events: list[WorkflowEventEntry]
+    error: str | None = None
+
+
+class DashboardTaskEntry(BaseModel):
+    request_id: str
+    updated_at: str | None = None
+    status: str
+    current_stage: str
+    field_name: str
+    drone_label: str
+    progress: int
+    pesticide_name: str | None = None
+    spray_area_mu: float | None = None
+    is_current: bool = False
+
+
+class WorkflowStateResponse(BaseModel):
+    source: str
+    event_count: int
+    latest_task: WorkflowTaskState
+    recent_tasks: list[DashboardTaskEntry]
+
+
+class DashboardContextResponse(BaseModel):
+    modes: dict[str, str]
+    upload_accept: list[str]
+
+
+class HistoryTaskEntry(BaseModel):
+    request_id: str
+    current_stage: str
+    status: str
+    message: str
+    updated_at: str | None = None
+    image_path: str | None = None
+    field: dict[str, Any]
+    detections: list[dict[str, Any]]
+    weather: dict[str, Any]
+    spray_summary: dict[str, Any]
+    decision: dict[str, Any]
+    drone: dict[str, Any]
+    error: str | None = None
+
+
+class WorkflowHistoryResponse(BaseModel):
+    total: int
+    items: list[HistoryTaskEntry]
+
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class SimDroneBlueprint:
+    drone_id: str
+    name: str
+    status: str
+    route: tuple[tuple[float, float], ...]
+    speed_units_per_second: float
+    battery_start: int
+    battery_floor: int
+    battery_drain_per_second: float
+    phase_offset: float = 0.0
+
+
+class Px4MapStateSimulator:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._drones = (
+            SimDroneBlueprint(
+                drone_id="drone-a07",
+                name="植保无人机 A-07",
+                status="作业中",
+                route=((24, 29), (34, 31), (48, 34), (54, 40), (42, 36)),
+                speed_units_per_second=6.5,
+                battery_start=86,
+                battery_floor=34,
+                battery_drain_per_second=0.22,
+                phase_offset=0.0,
+            ),
+            SimDroneBlueprint(
+                drone_id="drone-c12",
+                name="植保无人机 C-12",
+                status="返航",
+                route=((104, 78), (98, 74), (94, 70), (90, 66), (80, 50)),
+                speed_units_per_second=4.2,
+                battery_start=58,
+                battery_floor=18,
+                battery_drain_per_second=0.18,
+                phase_offset=0.35,
+            ),
+        )
+
+    def snapshot(self) -> SimMapStateResponse:
+        with self._lock:
+            drones = [self._build_drone_state(blueprint) for blueprint in self._drones]
+        return SimMapStateResponse(timestamp=time.time(), drones=drones)
+
+    def _build_drone_state(self, blueprint: SimDroneBlueprint) -> SimDroneState:
+        anchor = blueprint.route[0] if blueprint.route else (0.0, 0.0)
+        route = [SimPoint(x=x, y=y) for x, y in blueprint.route]
+        return SimDroneState(
+            id=blueprint.drone_id,
+            name=blueprint.name,
+            status=blueprint.status,
+            battery=blueprint.battery_start,
+            position=SimPoint(x=anchor[0], y=anchor[1]),
+            route=route,
+        )
+
+
+simulator = Px4MapStateSimulator()
+api_app = FastAPI(title="Muye Frontend API", version="1.3.0")
+embedded_yolo_runner_for_health: EmbeddedYoloApiRunner | None = None
+
+
+def _iso_utc_offset(seconds_ago: int) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - seconds_ago))
+
+
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "false").lower() in {"1", "true", "yes", "on"}
+
+
+def _current_mode_labels() -> dict[str, str]:
+    drone_backend = os.getenv("DRONE_BACKEND", "simulated").lower()
+    drone_mode = {
+        "px4": "px4",
+        "remote_api": "virtual_api",
+        "simulated": "simulated",
+    }.get(drone_backend, drone_backend or "simulated")
+    return {
+        "yolo": "real",
+        "weather": "mock" if _truthy_env("QWEATHER_USE_MOCK") else "real",
+        "qwen": "mock" if _truthy_env("QWEN_USE_MOCK") else "real",
+        "drone": drone_mode,
+    }
+
+
+def _sanitize_filename(filename: str) -> str:
+    suffix = Path(filename).suffix.lower() or ".jpg"
+    stem = Path(filename).stem
+    normalized = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_-]+", "-", stem).strip("-")
+    return f"{normalized or 'upload'}{suffix}"
+
+
+def _save_uploaded_image(uploaded_file: UploadFile, content: bytes) -> Path:
+    ensure_runtime_dirs()
+    timestamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
+    filename = _sanitize_filename(uploaded_file.filename or "upload.jpg")
+    target = IMAGES_DIR / f"{timestamp}-{filename}"
+    target.write_bytes(content)
+    return target
+
+
+def _validate_uploaded_image_content(content: bytes) -> None:
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="file_too_large")
+
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image.load()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise HTTPException(status_code=400, detail="invalid_image_content") from exc
+
+
+def _annotate_image(image_path: str | Path, detections: list[dict[str, Any]]) -> Image.Image | None:
+    target = Path(image_path)
+    if not target.exists():
+        return None
+
+    image = Image.open(target).convert("RGB")
+    annotated = image.copy()
+    draw = ImageDraw.Draw(annotated)
+    width = max(2, int(min(image.size) * 0.005))
+
+    for detection in detections:
+        position = detection.get("position", {})
+        box = (
+            float(position.get("x1", 0)),
+            float(position.get("y1", 0)),
+            float(position.get("x2", 0)),
+            float(position.get("y2", 0)),
+        )
+        label = f"{detection.get('pest_type', 'unknown')} {float(detection.get('confidence', 0)):.2f}"
+        draw.rectangle(box, outline="#FF7A00", width=width)
+        text_anchor = (box[0] + 4, max(box[1] - 20, 0))
+        draw.rectangle(
+            (
+                text_anchor[0] - 2,
+                text_anchor[1] - 2,
+                text_anchor[0] + len(label) * 7,
+                text_anchor[1] + 16,
+            ),
+            fill="#FF7A00",
+        )
+        draw.text(text_anchor, label, fill="white")
+
+    return annotated
+
+
+def _image_media_type(path: Path) -> str:
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }.get(path.suffix.lower(), "application/octet-stream")
+
+
+def _build_fallback_workflow_state() -> WorkflowStateResponse:
+    demo_instruction = {
+        "飞行路径": [[24, 29], [34, 31], [48, 34], [54, 40], [42, 36]],
+        "覆盖区域": {
+            "coordinates": [[20, 26], [22, 40], [48, 42], [46, 24]],
+        },
+        "高度": 12,
+        "速度": 4.5,
+        "喷洒速率": "1.8 L/min",
+    }
+    timeline = [
+        WorkflowTimelineEntry(
+            timestamp=_iso_utc_offset(42),
+            status="connecting",
+            message="PX4 链路已建立，等待飞控握手",
+            progress=12,
+            current_waypoint_index=0,
+            task_id="px4-demo-flow",
+        ),
+        WorkflowTimelineEntry(
+            timestamp=_iso_utc_offset(34),
+            status="connected",
+            message="飞控连接完成，开始检查定位状态",
+            progress=24,
+            current_waypoint_index=0,
+            task_id="px4-demo-flow",
+        ),
+        WorkflowTimelineEntry(
+            timestamp=_iso_utc_offset(28),
+            status="ready",
+            message="定位与 Home 点正常，允许上传任务",
+            progress=38,
+            current_waypoint_index=0,
+            task_id="px4-demo-flow",
+        ),
+        WorkflowTimelineEntry(
+            timestamp=_iso_utc_offset(20),
+            status="uploaded",
+            message="作业航线已上传至 PX4",
+            progress=52,
+            current_waypoint_index=1,
+            task_id="px4-demo-flow",
+        ),
+        WorkflowTimelineEntry(
+            timestamp=_iso_utc_offset(12),
+            status="armed",
+            message="飞控已解锁，等待执行起飞",
+            progress=66,
+            current_waypoint_index=1,
+            task_id="px4-demo-flow",
+        ),
+        WorkflowTimelineEntry(
+            timestamp=_iso_utc_offset(4),
+            status="spraying",
+            message="虚拟农田喷洒执行中",
+            progress=78,
+            current_waypoint_index=3,
+            task_id="px4-demo-flow",
+        ),
+    ]
+    recent_events = [
+        WorkflowEventEntry(
+            timestamp=_iso_utc_offset(44),
+            stage="drone",
+            status="connecting",
+            message="PX4 遥测链路接通",
+        ),
+        WorkflowEventEntry(
+            timestamp=_iso_utc_offset(32),
+            stage="drone",
+            status="connected",
+            message="飞控握手完成",
+        ),
+        WorkflowEventEntry(
+            timestamp=_iso_utc_offset(18),
+            stage="drone",
+            status="uploaded",
+            message="覆盖式喷洒航线上传成功",
+        ),
+        WorkflowEventEntry(
+            timestamp=_iso_utc_offset(5),
+            stage="drone",
+            status="spraying",
+            message="PX4 仿真任务正在执行喷洒路径",
+        ),
+    ]
+    latest_task = WorkflowTaskState(
+        request_id="px4-demo-fallback",
+        current_stage="drone",
+        status="running",
+        message="当前暂无事件总线任务，展示 PX4 仿真流程示例",
+        updated_at=_iso_utc_offset(3),
+        image_path=None,
+        field={},
+        detections=[],
+        weather={},
+        spray_summary={},
+        decision={},
+        drone={
+            "task_id": "px4-demo-flow",
+            "status": "spraying",
+            "message": "虚拟农田喷洒执行中",
+            "progress": 78,
+            "current_waypoint_index": 3,
+            "instruction": demo_instruction,
+        },
+        drone_timeline=timeline,
+        recent_events=recent_events,
+        error=None,
+    )
+    return WorkflowStateResponse(
+        source="fallback",
+        event_count=0,
+        latest_task=latest_task,
+        recent_tasks=[],
+    )
+
+
+def _load_sqlite_task_views(
+    limit: int = 40,
+    *,
+    status: str | None = None,
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    store = SqliteStore(sqlite_path)
+    try:
+        return store.fetch_task_views(limit=limit, status=status, search=search)
+    finally:
+        store.close()
+
+
+def _count_sqlite_tasks(
+    *,
+    status: str | None = None,
+    search: str | None = None,
+) -> int:
+    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    store = SqliteStore(sqlite_path)
+    try:
+        return store.count_task_views(status=status, search=search)
+    finally:
+        store.close()
+
+
+def _task_history_status(task: dict[str, Any]) -> str:
+    return str((task.get("drone") or {}).get("status") or task.get("status") or "-")
+
+
+def _matches_history_filters(
+    task: dict[str, Any],
+    *,
+    status: str | None = None,
+    search: str | None = None,
+) -> bool:
+    if status and _task_history_status(task) != status:
+        return False
+
+    if not search:
+        return True
+
+    keyword = search.strip().lower()
+    if not keyword:
+        return True
+
+    candidates = [
+        str(task.get("request_id") or ""),
+        str(task.get("field_id") or ""),
+        str((task.get("field") or {}).get("field_id") or ""),
+        str((task.get("field") or {}).get("field_name") or ""),
+        str(task.get("image_path") or ""),
+    ]
+    for detection in task.get("detections", []) or []:
+        candidates.append(str(detection.get("label") or ""))
+        candidates.append(str(detection.get("pest_type") or ""))
+
+    return any(keyword in candidate.lower() for candidate in candidates if candidate)
+
+
+def _clear_demo_runtime_state() -> None:
+    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    store = SqliteStore(sqlite_path)
+    try:
+        store.clear_runtime_task_data()
+    finally:
+        store.close()
+
+
+def _merge_runtime_field_hints(
+    field: dict[str, Any] | None,
+    drone: dict[str, Any] | None,
+) -> dict[str, Any]:
+    merged_field = dict(field or {})
+    instruction = (drone or {}).get("instruction") or {}
+    if not isinstance(instruction, dict):
+        return merged_field
+
+    field_id = str(instruction.get("field_id") or "").strip()
+    field_name = str(instruction.get("field_name") or "").strip()
+    crop_name = str(instruction.get("crop_name") or "").strip()
+    coverage = instruction.get("覆盖区域") or {}
+    coordinates = coverage.get("coordinates") if isinstance(coverage, dict) else None
+
+    if field_id:
+        merged_field["field_id"] = field_id
+    if field_name:
+        merged_field["field_name"] = field_name
+        merged_field["name"] = field_name
+    if crop_name:
+        crop_cycle = merged_field.get("crop_cycle")
+        merged_crop_cycle = dict(crop_cycle) if isinstance(crop_cycle, dict) else {}
+        merged_crop_cycle["crop_name"] = crop_name
+        merged_field["crop_cycle"] = merged_crop_cycle
+        merged_field["crop_name"] = crop_name
+    if isinstance(coordinates, list) and len(coordinates) >= 3:
+        merged_field["geofence"] = coordinates
+
+    return merged_field
+
+
+def _merge_sqlite_tasks_with_events(
+    sqlite_tasks: list[dict[str, Any]],
+    event_tasks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    event_by_request = {str(task["request_id"]): task for task in event_tasks}
+    merged: list[dict[str, Any]] = []
+    seen_request_ids: set[str] = set()
+
+    for sqlite_task in sqlite_tasks:
+        request_id = str(sqlite_task["request_id"])
+        event_task = event_by_request.get(request_id)
+        merged_task = dict(sqlite_task)
+        if event_task:
+            merged_task["updated_at"] = event_task.get("updated_at") or sqlite_task.get("updated_at")
+            merged_task["current_stage"] = event_task.get("current_stage") or sqlite_task.get("current_stage")
+            merged_task["status"] = event_task.get("status") or sqlite_task.get("status")
+            merged_task["message"] = event_task.get("message") or sqlite_task.get("message")
+            merged_task["image_path"] = sqlite_task.get("image_path") or event_task.get("image_path")
+            merged_task["field"] = sqlite_task.get("field") or event_task.get("field", {})
+            merged_task["spray_summary"] = sqlite_task.get("spray_summary") or event_task.get("spray_summary", {})
+            merged_task["detections"] = sqlite_task.get("detections") or event_task.get("detections", [])
+            merged_task["weather"] = sqlite_task.get("weather") or event_task.get("weather", {})
+            merged_task["decision"] = sqlite_task.get("decision") or event_task.get("decision", {})
+            merged_task["drone"] = {
+                **(sqlite_task.get("drone") or {}),
+                **(event_task.get("drone") or {}),
+            }
+            merged_task["drone_timeline"] = event_task.get("drone_timeline", [])
+            merged_task["events"] = event_task.get("events", [])
+            merged_task["error"] = event_task.get("error") or sqlite_task.get("error")
+        merged_task["field"] = _merge_runtime_field_hints(
+            merged_task.get("field", {}) or {},
+            merged_task.get("drone", {}) or {},
+        )
+        seen_request_ids.add(request_id)
+        merged.append(merged_task)
+
+    for event_task in event_tasks:
+        request_id = str(event_task["request_id"])
+        if request_id not in seen_request_ids:
+            merged_event_task = dict(event_task)
+            merged_event_task["field"] = _merge_runtime_field_hints(
+                merged_event_task.get("field", {}) or {},
+                merged_event_task.get("drone", {}) or {},
+            )
+            merged.append(merged_event_task)
+
+    merged.sort(
+        key=lambda task: str(task.get("updated_at") or task.get("created_at") or ""),
+        reverse=True,
+    )
+    return merged
+
+
+def _build_workflow_state_response() -> WorkflowStateResponse:
+    events = load_events(limit=500)
+    event_tasks = build_task_views(events)
+    tasks = _merge_sqlite_tasks_with_events(_load_sqlite_task_views(limit=40), event_tasks)
+    if not tasks:
+        return _build_fallback_workflow_state()
+
+    latest = next(
+        (
+            task
+            for task in tasks
+            if task.get("drone_timeline")
+            or (task.get("drone") or {}).get("status")
+            or (task.get("drone") or {}).get("task_id")
+        ),
+        None,
+    )
+    if latest is None:
+        fallback = _build_fallback_workflow_state()
+        latest_structured = tasks[0]
+        fallback.latest_task = fallback.latest_task.model_copy(
+            update={
+                "request_id": str(latest_structured.get("request_id") or fallback.latest_task.request_id),
+                "current_stage": str(latest_structured.get("current_stage") or fallback.latest_task.current_stage),
+                "status": str(latest_structured.get("status") or fallback.latest_task.status),
+                "message": str(latest_structured.get("message") or fallback.latest_task.message),
+                "updated_at": latest_structured.get("updated_at") or fallback.latest_task.updated_at,
+                "image_path": latest_structured.get("image_path"),
+                "field": latest_structured.get("field", {}) or {},
+                "detections": latest_structured.get("detections", []) or [],
+                "weather": latest_structured.get("weather", {}) or {},
+                "spray_summary": latest_structured.get("spray_summary", {}) or {},
+                "decision": latest_structured.get("decision", {}) or {},
+                "error": latest_structured.get("error"),
+            }
+        )
+        fallback.recent_tasks = _build_recent_task_entries(tasks, current_request_id=fallback.latest_task.request_id)
+        return fallback.model_copy(update={"event_count": len(events)})
+
+    timeline = [
+        WorkflowTimelineEntry(
+            timestamp=item.get("timestamp"),
+            status=str(item.get("status") or ""),
+            message=str(item.get("message") or ""),
+            progress=item.get("progress"),
+            current_waypoint_index=item.get("current_waypoint_index"),
+            task_id=item.get("task_id"),
+        )
+        for item in latest.get("drone_timeline", [])
+    ]
+    recent_events = [
+        WorkflowEventEntry(
+            timestamp=str(item.get("timestamp") or ""),
+            stage=str(item.get("stage") or ""),
+            status=str(item.get("status") or ""),
+            message=str(item.get("message") or ""),
+        )
+        for item in latest.get("events", [])[-24:]
+    ]
+    latest_task = WorkflowTaskState(
+        request_id=str(latest.get("request_id") or "-"),
+        current_stage=str(latest.get("current_stage") or "-"),
+        status=str(latest.get("status") or "-"),
+        message=str(latest.get("message") or ""),
+        updated_at=latest.get("updated_at"),
+        image_path=latest.get("image_path"),
+        field=latest.get("field", {}) or {},
+        detections=latest.get("detections", []) or [],
+        weather=latest.get("weather", {}) or {},
+        spray_summary=latest.get("spray_summary", {}) or {},
+        decision=latest.get("decision", {}) or {},
+        drone=latest.get("drone", {}) or {},
+        drone_timeline=timeline,
+        recent_events=recent_events,
+        error=latest.get("error"),
+    )
+    return WorkflowStateResponse(
+        source="event_bus",
+        event_count=len(events),
+        latest_task=latest_task,
+        recent_tasks=_build_recent_task_entries(tasks, current_request_id=str(latest.get("request_id") or "-")),
+    )
+
+
+def _build_history_response(
+    *,
+    limit: int = 12,
+    status: str | None = None,
+    search: str | None = None,
+) -> WorkflowHistoryResponse:
+    normalized_status = None if status in {None, "", "all"} else status
+    sqlite_total = _count_sqlite_tasks(status=normalized_status, search=search)
+    sqlite_limit = max(limit, sqlite_total, 1)
+    tasks = _merge_sqlite_tasks_with_events(
+        _load_sqlite_task_views(limit=sqlite_limit, status=normalized_status, search=search),
+        build_task_views(load_events(limit=500)),
+    )
+    filtered_tasks = [
+        task
+        for task in tasks
+        if _matches_history_filters(task, status=normalized_status, search=search)
+    ]
+    paged_tasks = filtered_tasks[:limit]
+    items = [
+        HistoryTaskEntry(
+            request_id=str(task.get("request_id") or "-"),
+            current_stage=str(task.get("current_stage") or "-"),
+            status=_task_history_status(task),
+            message=str(task.get("message") or ""),
+            updated_at=task.get("updated_at"),
+            image_path=task.get("image_path"),
+            field=task.get("field", {}) or {},
+            detections=task.get("detections", []) or [],
+            weather=task.get("weather", {}) or {},
+            spray_summary=task.get("spray_summary", {}) or {},
+            decision=task.get("decision", {}) or {},
+            drone=task.get("drone", {}) or {},
+            error=task.get("error"),
+        )
+        for task in paged_tasks
+    ]
+    return WorkflowHistoryResponse(total=len(filtered_tasks), items=items)
+
+
+def _load_task_by_request_id(request_id: str) -> dict[str, Any] | None:
+    tasks = _merge_sqlite_tasks_with_events(
+        _load_sqlite_task_views(limit=120, search=request_id),
+        build_task_views(load_events(limit=500)),
+    )
+    for task in tasks:
+        if str(task.get("request_id") or "") == request_id:
+            return task
+    return None
+
+
+def _build_recent_task_entries(
+    tasks: list[dict[str, Any]],
+    *,
+    current_request_id: str,
+    limit: int = 6,
+) -> list[DashboardTaskEntry]:
+    entries: list[DashboardTaskEntry] = []
+    ordered_tasks: list[dict[str, Any]] = []
+    current_task = next(
+        (task for task in tasks if str(task.get("request_id") or "-") == current_request_id),
+        None,
+    )
+    if current_task is not None:
+        ordered_tasks.append(current_task)
+    ordered_tasks.extend(
+        task
+        for task in tasks
+        if str(task.get("request_id") or "-") != current_request_id
+    )
+
+    for task in ordered_tasks[:limit]:
+        field = task.get("field") or {}
+        spray_summary = task.get("spray_summary") or {}
+        decision = task.get("decision") or {}
+        medication = decision.get("用药") or {}
+        drone = task.get("drone") or {}
+        entries.append(
+            DashboardTaskEntry(
+                request_id=str(task.get("request_id") or "-"),
+                updated_at=task.get("updated_at"),
+                status=str(drone.get("status") or task.get("status") or "-"),
+                current_stage=str(task.get("current_stage") or "-"),
+                field_name=str(
+                    field.get("field_name")
+                    or field.get("field_code")
+                    or field.get("field_id")
+                    or "未命名地块"
+                ),
+                drone_label=str(
+                    drone.get("message")
+                    or drone.get("task_id")
+                    or task.get("message")
+                    or "农业任务"
+                ),
+                progress=int(drone.get("progress") or 0),
+                pesticide_name=str(medication.get("农药名称")) if medication.get("农药名称") else None,
+                spray_area_mu=spray_summary.get("spray_area_mu"),
+                is_current=str(task.get("request_id") or "-") == current_request_id,
+            )
+        )
+    return entries
+
+
+@api_app.get("/health", response_model=None)
+@api_app.get("/api/health", include_in_schema=False, response_model=None)
+async def api_health() -> Any:
+    payload, healthy = _collect_health_status()
+    if healthy:
+        return payload
+    return JSONResponse(status_code=503, content=payload)
+
+
+@api_app.get("/sim/map-state", response_model=SimMapStateResponse)
+@api_app.get("/api/sim/map-state", include_in_schema=False, response_model=SimMapStateResponse)
+async def get_sim_map_state() -> SimMapStateResponse:
+    return simulator.snapshot()
+
+
+@api_app.get("/workflow/state", response_model=WorkflowStateResponse)
+@api_app.get("/api/workflow/state", include_in_schema=False, response_model=WorkflowStateResponse)
+async def get_workflow_state() -> WorkflowStateResponse:
+    return _build_workflow_state_response()
+
+
+@api_app.get("/dashboard/context", response_model=DashboardContextResponse)
+@api_app.get("/api/dashboard/context", include_in_schema=False, response_model=DashboardContextResponse)
+async def get_dashboard_context() -> DashboardContextResponse:
+    return DashboardContextResponse(
+        modes=_current_mode_labels(),
+        upload_accept=["jpg", "jpeg", "png"],
+    )
+
+
+@api_app.get("/workflow/history", response_model=WorkflowHistoryResponse)
+@api_app.get("/api/workflow/history", include_in_schema=False, response_model=WorkflowHistoryResponse)
+async def get_workflow_history(
+    limit: int = Query(default=12, ge=1, le=80),
+    status: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+) -> WorkflowHistoryResponse:
+    return _build_history_response(limit=limit, status=status, search=search)
+
+
+@api_app.post("/demo/upload-image")
+@api_app.post("/api/demo/upload-image", include_in_schema=False)
+async def upload_demo_image(file: UploadFile = File(...)) -> dict[str, str]:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="missing_filename")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png"}:
+        raise HTTPException(status_code=400, detail="unsupported_file_type")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="empty_file")
+
+    _validate_uploaded_image_content(content)
+    target = _save_uploaded_image(file, content)
+    return {
+        "filename": target.name,
+        "path": str(target),
+    }
+
+
+@api_app.post("/demo/reset-events")
+@api_app.post("/api/demo/reset-events", include_in_schema=False)
+async def reset_demo_events(confirm: bool = False) -> dict[str, str]:
+    if not confirm:
+        raise HTTPException(status_code=400, detail="confirm_required")
+
+    _clear_demo_runtime_state()
+    FileEventBus().clear()
+    return {"status": "cleared"}
+
+
+@api_app.get("/tasks/{request_id}/original-image")
+@api_app.get("/api/tasks/{request_id}/original-image", include_in_schema=False)
+async def get_task_original_image(request_id: str) -> FileResponse:
+    task = _load_task_by_request_id(request_id)
+    if task is None or not task.get("image_path"):
+        raise HTTPException(status_code=404, detail="task_image_not_found")
+
+    image_path = Path(str(task["image_path"]))
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="image_file_not_found")
+
+    return FileResponse(image_path, media_type=_image_media_type(image_path))
+
+
+@api_app.get("/tasks/{request_id}/annotated-image")
+@api_app.get("/api/tasks/{request_id}/annotated-image", include_in_schema=False)
+async def get_task_annotated_image(request_id: str) -> StreamingResponse:
+    task = _load_task_by_request_id(request_id)
+    if task is None or not task.get("image_path"):
+        raise HTTPException(status_code=404, detail="task_image_not_found")
+
+    annotated = _annotate_image(str(task["image_path"]), task.get("detections", []) or [])
+    if annotated is None:
+        raise HTTPException(status_code=404, detail="annotated_image_not_found")
+
+    buffer = io.BytesIO()
+    annotated.save(buffer, format="PNG")
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="image/png")
+
+
+@api_app.websocket("/sim/ws/map-state")
+@api_app.websocket("/api/sim/ws/map-state")
+async def sim_map_state_ws(websocket: WebSocket) -> None:
+    await websocket.accept()
+    try:
+        while True:
+            await websocket.send_json(simulator.snapshot().model_dump())
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        return
 
 
 def _parse_env_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _check_sqlite_health() -> dict[str, Any]:
+    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    store = SqliteStore(sqlite_path)
+    try:
+        row = store.fetch_one("SELECT 1 AS ok")
+        if not row or int(row.get("ok") or 0) != 1:
+            raise RuntimeError("sqlite_query_failed")
+        return {"status": "ok", "path": str(sqlite_path)}
+    finally:
+        store.close()
+
+
+def _check_data_dir_health() -> dict[str, Any]:
+    ensure_runtime_dirs()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    probe_fd, probe_path = tempfile.mkstemp(prefix=".health-", dir=str(DATA_DIR))
+    try:
+        with os.fdopen(probe_fd, "w", encoding="utf-8") as handle:
+            handle.write("ok")
+        Path(probe_path).unlink(missing_ok=True)
+        return {"status": "ok", "path": str(DATA_DIR)}
+    except Exception:
+        Path(probe_path).unlink(missing_ok=True)
+        raise
+
+
+def _check_embedded_yolo_health() -> dict[str, Any]:
+    runner = embedded_yolo_runner_for_health
+    if runner is None:
+        return {"status": "skipped", "detail": "no_embedded_yolo_runner"}
+
+    if runner.server_task is None:
+        raise RuntimeError("embedded_yolo_runner_not_started")
+
+    if runner.server_task.done():
+        error = runner.server_task.exception()
+        if error:
+            raise RuntimeError(f"embedded_yolo_runner_exited: {error}") from error
+        raise RuntimeError("embedded_yolo_runner_exited")
+
+    return {
+        "status": "ok",
+        "detect_url": runner.detect_url,
+        "health_url": runner.health_url,
+    }
+
+
+def _collect_health_status() -> tuple[dict[str, Any], bool]:
+    checks: dict[str, dict[str, Any]] = {}
+    failures: list[str] = []
+    for name, checker in (
+        ("sqlite", _check_sqlite_health),
+        ("data_dir", _check_data_dir_health),
+        ("embedded_yolo", _check_embedded_yolo_health),
+    ):
+        try:
+            result = checker()
+        except Exception as exc:
+            result = {"status": "error", "detail": str(exc)}
+
+        checks[name] = result
+        if result.get("status") == "error":
+            failures.append(name)
+
+    payload: dict[str, Any] = {
+        "status": "ok" if not failures else "error",
+        "checks": checks,
+    }
+    if failures:
+        payload["failures"] = failures
+    return payload, not failures
 
 
 def _resolve_loopback_host(host: str) -> str:
@@ -263,6 +1184,9 @@ class MuyeApplication:
             ),
             logger=self.logger,
         )
+        decision_context_provider = None
+        if os.getenv("MUYE_ENABLE_SQLITE_DECISION_CONTEXT", "false").lower() in {"1", "true", "yes", "on"}:
+            decision_context_provider = SqliteDecisionContextProvider(self.sqlite_store)
         self.decision_engine = DecisionEngine(
             api_url=os.getenv("QWEN_API_URL", ""),
             api_key=os.getenv("QWEN_API_KEY", ""),
@@ -272,6 +1196,7 @@ class MuyeApplication:
             timeout_seconds=30,
             logger=self.logger,
             event_bus=self.event_bus,
+            decision_context_provider=decision_context_provider,
         )
         self.drone_controller = DroneController(
             drone_config=self.drone_config,
@@ -1009,6 +1934,7 @@ class MuyeApplication:
 
 
 async def _async_main(args: argparse.Namespace) -> None:
+    global embedded_yolo_runner_for_health
     app = MuyeApplication()
     embedded_yolo_runner: EmbeddedYoloApiRunner | None = None
     embedded_drone_runner: EmbeddedDroneApiRunner | None = None
@@ -1018,6 +1944,7 @@ async def _async_main(args: argparse.Namespace) -> None:
 
         if args.with_yolo_api or args.with_demo_stack:
             embedded_yolo_runner = EmbeddedYoloApiRunner(logger=app.logger)
+            embedded_yolo_runner_for_health = embedded_yolo_runner
             app.configure_embedded_yolo_api(embedded_yolo_runner.detect_url)
             await embedded_yolo_runner.start()
             app.logger.info(
@@ -1050,6 +1977,7 @@ async def _async_main(args: argparse.Namespace) -> None:
         await app.shutdown()
         if embedded_yolo_runner:
             await embedded_yolo_runner.stop()
+        embedded_yolo_runner_for_health = None
         if embedded_drone_runner:
             await embedded_drone_runner.stop()
 

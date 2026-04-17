@@ -1,6 +1,172 @@
 # Changelog
 
+## v1.4
+
+- SQLite 决策增强上下文已正式接入当前主线：
+  - 新增 `modules/decision_context.py`
+  - `modules/ai_decision.py` 支持按开关注入 SQLite 农业上下文
+  - `modules/sqlite_store.py` 扩展农业数据与决策支撑查询能力
+- 前端已完成从旧 Streamlit 方案向 `Vite + React + TypeScript` 指挥大屏的主线迁移：
+  - `frontend/` 成为唯一前端实现
+  - `main.py -> api_app` 新增工作流、历史、上传、图片查看等接口
+  - `scripts/start_demo.sh` / `scripts/start_px4_visual_demo.sh` 已切换到 React 前端链路
+- PX4 可视化演示链进一步稳定化：
+  - `modules/px4_simulator.py` 现在按真实遥测位置反算航线进度
+  - 前端作业地图已切换为纯 `SVG` 渲染，避免运行态地图容器导致的不可见问题
+  - `config/drone_config.json` 更新了冬小麦演示地块、演示航线和超时参数
+- 新增比赛与部署辅助能力：
+  - 新增 `scripts/start_showtime.sh`
+  - 新增 `deploy/nginx.conf` 与 `deploy/muye_backend.service`
+  - `README.md`、`PROJECT_MEMORY.md`、`docs/WORKLOG.md` 已同步到当前真实工程口径
+
 ## v1.3
+
+- 决策链路已调整为“数据库增强上下文可插拔，但默认关闭”：
+  - `modules/ai_decision.py` 新增 `decision_context_provider` 注入位
+  - 默认情况下，千问决策仍只使用害虫检测、实时天气和基础地块上下文
+  - 只有显式设置 `MUYE_ENABLE_SQLITE_DECISION_CONTEXT=true` 时，才会把 SQLite 中的土壤、历史天气、候选农药等信息拼入决策输入
+- 新增 [`modules/decision_context.py`](/home/qingking/muye/modules/decision_context.py)：
+  - 定义决策增强上下文抽象
+  - 落地 `SqliteDecisionContextProvider`
+- `modules/sqlite_store.py` 新增 `fetch_decision_support_context()`，用于聚合：
+  - 地块画像
+  - 最新土壤记录
+  - 近期历史天气
+  - 候选农药目录
+- 新增回归测试：
+  - [`tests/test_ai_decision.py`](/home/qingking/muye/tests/test_ai_decision.py) 已覆盖 decision context provider 注入与 prompt 拼接
+  - [`tests/test_decision_context.py`](/home/qingking/muye/tests/test_decision_context.py) 已覆盖 SQLite 决策增强上下文聚合
+- React 前端已统一承接旧 Streamlit 面板能力：
+  - 图片上传
+  - 原图 / 识别图对照
+  - 害虫识别摘要
+  - 天气信息 / 千问建议 / 安全提示
+  - 任务历史检索
+  - 运行模式展示
+- `main.py -> api_app` 新增前端迁移所需接口：
+  - `/dashboard/context`
+  - `/workflow/history`
+  - `/demo/upload-image`
+  - `/demo/reset-events`
+  - `/tasks/{request_id}/original-image`
+  - `/tasks/{request_id}/annotated-image`
+- `workflow/state` 已扩展返回 `image_path`、`detections`、`weather` 和 `error`，供 React 前端直接渲染旧版功能区块。
+- 旧 `app.py` Streamlit 前端已删除，当前仓库只保留 `frontend/` 作为前端实现。
+- `scripts/start_demo.sh` 与 `scripts/start_px4_visual_demo.sh` 已切到启动 `Vite` React 前端，不再依赖 Streamlit。
+- `scripts/start_demo.sh` 与 `scripts/start_px4_visual_demo.sh` 现在会同时拉起 `uvicorn main:api_app`，并在脚本链路中固定使用 `127.0.0.1:18000` 作为前端 API 端口，确保 React 前端代理到真实后端 API，而不是空的 `127.0.0.1:8000`。
+- `frontend/vite.config.ts` 默认代理目标已统一为 `127.0.0.1:18000`，与当前演示脚本和手工启动说明保持一致。
+- `scripts/start_demo.sh` / `scripts/start_px4_visual_demo.sh` 已支持 `--api-port`，`scripts/start_competition_mode.sh` / `scripts/start_all_in_one.sh` 已透传该参数，便于现场避让端口冲突。
+- 新增 [`scripts/start_showtime.sh`](/home/qingking/muye/scripts/start_showtime.sh) 作为更高层的一键展示入口：
+  - 默认启动稳定的 React + backend demo stack
+  - `--with-px4` 时切换到 PX4/Gazebo 比赛演示链
+  - 默认会在可用时自动注入仓库内置样例图，减少现场手工操作
+- [`frontend/src/components/map/FieldMap.tsx`](/home/qingking/muye/frontend/src/components/map/FieldMap.tsx) 已删除旧版 3 个静态演示地块 fallback：
+  - 地图现在只展示真实当前任务地块
+  - 如有地块围栏则做归一化后渲染；无围栏时退回当前任务的覆盖区或合成轮廓
+- PX4 实时位置跟随链路已打通：
+  - [`modules/px4_simulator.py`](/home/qingking/muye/modules/px4_simulator.py) 现在会把 `telemetry.position()` 回传到任务事件
+  - [`modules/drone_controller.py`](/home/qingking/muye/modules/drone_controller.py) 会把 `position` 写入无人机状态 payload
+  - [`main.py`](/home/qingking/muye/main.py) 会在 `workflow/state` 中合并 SQLite 任务视图和 event bus 中更实时的 `drone` 字段
+  - [`frontend/src/components/map/FieldMap.tsx`](/home/qingking/muye/frontend/src/components/map/FieldMap.tsx) 现在优先跟随 `latest_task.drone.position`
+  - [`frontend/src/pages/Dashboard.tsx`](/home/qingking/muye/frontend/src/pages/Dashboard.tsx) 已把 `workflow/state` 轮询收紧到 `500ms`
+- 前端地图中的航线已改为与 PX4 执行航线对齐：
+  - [`frontend/src/components/map/FieldMap.tsx`](/home/qingking/muye/frontend/src/components/map/FieldMap.tsx) 现在优先读取 `drone.instruction.飞行路径`
+  - 只有任务指令航线缺失时，才回退到 `field.explicit_route`
+- [`frontend/src/components/map/FieldMap.tsx`](/home/qingking/muye/frontend/src/components/map/FieldMap.tsx) 已移除地图上的无人机轨迹线和系统规划航线线条：
+  - 当前只保留真实地块面、覆盖区域和无人机点位
+  - [`frontend/src/components/map/mapData.ts`](/home/qingking/muye/frontend/src/components/map/mapData.ts) 中旧的静态路线示例也已删除
+- `main.py` 中的 [`Px4MapStateSimulator`](/home/qingking/muye/main.py) 已改为静态快照：
+  - `/sim/map-state` 与 `/api/sim/map-state` 不再让无人机点位和电量随时间自行漂移
+  - 当前地图上的无人机点位保持静止，避免继续呈现“自动巡航”演示效果
+- [`config/drone_config.json`](/home/qingking/muye/config/drone_config.json) 中的 `px4.demo_field` 已调整：
+  - 演示地块面积现已放大到约 `5.6 亩`
+  - 地块名称调整为 `PX4 SITL 冬小麦演示田`
+  - `crop_cycle.crop_name` 改为 `冬小麦`
+  - `geofence` 已放大到约 `72m x 52m`
+  - `explicit_route` 已放大到约 `61.9m x 40m`
+  - `presentation_profile.lane_spacing_m` 与演示航线一并同步
+- [`/home/qingking/PX4-Autopilot/Tools/simulation/gz/worlds/muye_demo_field.sdf`](/home/qingking/PX4-Autopilot/Tools/simulation/gz/worlds/muye_demo_field.sdf) 已同步重做 PX4 农田场景：
+  - 删除会误导视感的旧小尺寸静态绿条作物
+  - 放大土地区块、边界、沟垄和周边设施间距
+  - 增加覆盖整块演示田的冬小麦冠层，让 Gazebo 中能直接看到更大的小麦田
+- `frontend/vite.config.ts` 已增加 `manualChunks`：
+  - `react` / `react-dom` 拆到 `vendor-react`
+  - `antd` / `@ant-design/*` / `rc-*` 拆到 `vendor-ui`
+  - `leaflet` / `react-leaflet` 拆到 `vendor-map`
+  - 其余第三方依赖归入 `vendor-misc`
+  - 目标是改善首屏缓存命中并降低主业务 chunk 变更频率
+- `README.md` 已补充“前端构建与缓存策略”说明：
+  - 明确记录当前代码分割方案和大包拆分边界
+  - 明确说明 `vendor-map`、`vendor-ui` 等产物使用内容 hash 文件名
+  - 明确说明浏览器长效缓存是否真正生效，还取决于部署层是否为 `dist/assets/*` 返回长期 `Cache-Control`
+- 新增 [`deploy/nginx.conf`](/home/qingking/muye/deploy/nginx.conf) 作为比赛现场优先的部署示例：
+  - `dist/assets/*` 返回一年期 `immutable` 缓存头
+  - `index.html` 明确设置为 `no-cache`
+  - `/api/` 反向代理到 `127.0.0.1:8000`
+  - 非静态资源路径回退到 `index.html`，支持 SPA history 路由
+  - 默认采用本地网络 HTTP，降低现场域名和证书依赖
+- 新增 [`deploy/muye_backend.service`](/home/qingking/muye/deploy/muye_backend.service)：
+  - 以 `systemd` 托管 `uvicorn main:api_app`
+  - 约定后端目录为 `/var/www/muye/backend`
+  - 约定 Python 为 `/usr/bin/python3`
+  - 支持开机自启、崩溃自动重启
+- `deploy/nginx.conf` 已补生产化细节：
+  - `/api/` 代理增加 WebSocket 所需升级头、长连接超时和关闭代理缓冲
+  - 新增 `client_max_body_size 20m`，避免图片上传被默认限制拦截
+- `main.py` 已补生产级后端加固：
+  - `/demo/upload-image` 现在会校验真实图片内容，并限制单文件不超过 `10MB`
+  - `/health` 不再只返回固定 `ok`，而是检查 SQLite、`data/` 目录写权限和内嵌 YOLO runner 状态；任一失败时返回 `503`
+  - `/workflow/history.total` 已改为返回“SQLite + event bus 合并后”的真实匹配总数，而不是当前页条数
+  - `/workflow/history` 现在会在合并后再应用 `limit`，避免 event-only 任务突破分页限制
+  - `/demo/reset-events` 现在必须显式传 `confirm=true`，并会同时清空 SQLite 任务运行态数据和 event bus
+- `modules/sqlite_store.py` 新增：
+  - `count_task_views()`
+  - `clear_runtime_task_data()`
+- `deploy/muye_backend.service` 已补生产化细节：
+  - 新增 `EnvironmentFile=/var/www/muye/backend/.env`
+  - 显式使用 `/var/www/muye/backend/.venv/bin/uvicorn`
+  - 在文件注释中补充 `data/` 目录 `chown` 提示
+- `requirements.txt` 已移除 `streamlit` / `streamlit-autorefresh`，并补入 `Pillow` 作为图片标注接口依赖。
+- `tests/test_main.py` 已改为直接调用 endpoint 函数校验前端 API 契约，不再依赖 `TestClient`，当前文件测试可稳定通过。
+- 新增 [`scripts/test_api.py`](/home/qingking/muye/scripts/test_api.py) 作为最小化后端接口探测脚本，可独立验证运行中的 `/api/health`、`/api/dashboard/context`、`/api/workflow/state` 与 `/api/workflow/history`。
+- 新增并确认 `frontend/` 为当前新一代前端主线：
+  - 采用 `Vite + React + TypeScript`
+  - 使用 `Ant Design` 深色大屏风格
+  - 补充 [`frontend/PROJECT_STRUCTURE.md`](/home/qingking/muye/frontend/PROJECT_STRUCTURE.md) 说明当前目录结构与中文注释
+- 新增智慧农业指挥大屏首页：
+  - [`frontend/src/pages/Dashboard.tsx`](/home/qingking/muye/frontend/src/pages/Dashboard.tsx)
+  - 顶部显示“牧野智农 · 智慧农业指挥中心”和实时时钟
+  - 左侧显示当前作业面积、在线设备数和千问建议卡片
+  - 右侧显示“当前任务 / 最近任务”列表
+  - 底部补回工作流闭环面板，恢复旧 Streamlit 的流程感
+- 新增 PX4 虚拟农田态势图组件：
+  - [`frontend/src/components/map/FieldMap.tsx`](/home/qingking/muye/frontend/src/components/map/FieldMap.tsx)
+  - 使用 React Leaflet + `CRS.Simple`，不再依赖真实地理底图
+  - 展示虚拟地块、无人机位置、航线与指挥中心
+- 新增前端工作流接口与类型：
+  - [`frontend/src/api/workflow.ts`](/home/qingking/muye/frontend/src/api/workflow.ts)
+  - [`frontend/src/types/workflow.ts`](/home/qingking/muye/frontend/src/types/workflow.ts)
+  - [`frontend/src/components/workflow/WorkflowPanel.tsx`](/home/qingking/muye/frontend/src/components/workflow/WorkflowPanel.tsx)
+- `main.py` 新增面向新前端的 API 聚合层：
+  - `api_app = FastAPI(title="Muye Frontend API", version="1.3.0")`
+  - 新增 `/health`、`/sim/map-state`、`/workflow/state`
+  - 同时提供 `/api/*` 兼容路径
+  - 新增 `/sim/ws/map-state` WebSocket 推送入口
+- `workflow/state` 现在会合并 SQLite 结构化任务与 event bus 时间线：
+  - 返回 `latest_task`
+  - 返回 `recent_tasks`
+  - 当前任务不足时会回退到可演示的 PX4 workflow fallback
+- 前端统计卡片不再使用脱离实际的固定 mock 数字：
+  - 作业面积改为优先读取 `spray_summary.spray_area_mu` 或地块 `area_mu`
+  - 在线设备数当前按 `latest_task.drone.task_id` 推导单机在线状态
+  - 千问建议直接读取结构化 `decision`
+- `/sim/map-state` 与 `/sim/ws/map-state` 仍然保留并可供前端接入：
+  - 但当前 React 大屏主地图的真实渲染来源仍是 `/workflow/state -> latest_task`
+  - 也就是说，主地图已经跟随 PX4 实时位置，但并不是直接由 `sim/map-state` 驱动
+- 当前运行环境的 WebSocket 依赖尚不完整，地图实时刷新会自动回退 HTTP polling：
+  - 功能可正常演示
+  - 但控制台存在 upgrade 失败日志噪声
+- 2026-04-16 起，将“每次项目处理后必须同步更新 [`PROJECT_MEMORY.md`](/home/qingking/muye/PROJECT_MEMORY.md)，必要时同步 [`CHANGELOG.md`](/home/qingking/muye/CHANGELOG.md)”提升为项目最高规则。
 
 - 当前仓库已正式接入 `PX4 + Gazebo SITL` 执行链路，不再只是接入方案记录：
   - 新增 [`modules/px4_simulator.py`](/home/qingking/muye/modules/px4_simulator.py)
@@ -136,6 +302,35 @@
   - 修复 `_migrate_v1_1()` 在旧库路径上的事务处理问题
 - 已创建 Release：
   - `v1.1.1 - SQLite migration support`
+
+## Unreleased
+
+- 修复 PX4 演示任务“前端不动 / 3 分钟后超时”的根因：
+  - [`modules/px4_simulator.py`](/home/qingking/muye/modules/px4_simulator.py) 不再把高频遥测抖动直接等价为 `spraying`
+  - 改为基于真实经纬度投影回预设航线，计算当前航点索引和进度百分比
+  - `current_waypoint_index` 现在回到前端 22 点喷洒航线的索引语义，不再泄露 PX4 内部插入的 pivot mission item 索引
+  - PX4 位置事件已加节流，避免单次任务向 event bus 写入数千条无效位置抖动
+  - PX4 mission timeout 改为按航线长度、速度和转向停留时长动态估算后取更大值，避免大地块演示在任务中途被错误判定为超时
+- `config/drone_config.json` 已将 PX4 冬小麦演示航线速度提升到 `4.5m/s`，默认 mission timeout 提升到 `300s`，让大地块演示既能看见实时移动，也不至于过早失败。
+- [`frontend/src/components/map/FieldMap.tsx`](/home/qingking/muye/frontend/src/components/map/FieldMap.tsx) 已从 `React Leaflet` 运行态渲染切到纯 `SVG` 作业地图：
+  - 不再依赖地图容器初始化、`fitBounds` 或 `invalidateSize`
+  - 地块、覆盖区、预设航线、起点航点和无人机位置均由 React 直接绘制
+  - 目的就是解决“文本数据在更新，但地图层不动或不可见”的现场问题
+- 前端地图 `frontend/src/components/map/FieldMap.tsx` 改为只展示当前任务驱动的 PX4 / 作业无人机，不再回退到静态演示无人机。
+- 修复前端地图坐标归一化逻辑，统一地块 geofence、覆盖区域和飞行路径的投影，避免无人机与地块错位。
+- 前端任务面板继续显示地块名、作物名，但数据优先来自当前运行时任务。
+- `frontend/src/pages/Dashboard.tsx` 去掉旧 `sim/map-state` 对地图无人机展示的主导作用，在线设备统计改为基于当前任务无人机。
+- `main.py` 新增运行时地块字段覆盖逻辑：
+  - 当 `drone.instruction` 提供 `field_id` / `field_name` / `crop_name` / `覆盖区域` 时，优先覆盖旧 SQLite 任务视图中的地块信息
+  - 数据库仍保留为补充来源，满足后续导入真实农业数据后参与决策的要求
+- 修复 PX4 前端无人机“看起来不动”的问题：
+  - 真实 PX4 任务会返回超出前端喷洒航线长度的 `current_waypoint_index`
+  - 旧实现会把该索引直接夹到最后一个航点，导致无人机长期停在终点
+  - 新实现在线路索引越界时改为基于 `drone.progress` 沿当前航线插值，保持可见移动
+- 已验证当前 `workflow state` 可返回：
+  - `field.field_name = PX4 SITL 冬小麦演示田`
+  - `field.crop_cycle.crop_name = 冬小麦`
+  - `drone.task_id = px4-*`
 
 ## v0.3-initial
 

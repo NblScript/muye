@@ -4,21 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
 PYTHON_BIN="${VENV_DIR}/bin/python"
-STREAMLIT_BIN="${VENV_DIR}/bin/streamlit"
+FRONTEND_DIR="${ROOT_DIR}/frontend"
+NPM_BIN="$(command -v npm || true)"
 FRONTEND_HOST="127.0.0.1"
 FRONTEND_PORT="8501"
+API_HOST="127.0.0.1"
+API_PORT="${MUYE_API_PORT:-18000}"
 SAMPLE_IMAGE=""
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/start_demo.sh [--sample-image <path>] [--frontend-port <port>]
+Usage: ./scripts/start_demo.sh [--sample-image <path>] [--frontend-port <port>] [--api-port <port>]
 
-Starts the Muye backend demo stack and Streamlit frontend together.
+Starts the Muye backend demo stack and Vite React frontend together.
 
 Options:
   --sample-image <path>   Copy a sample image into data/images after startup.
                           Relative paths are resolved from the project root.
-  --frontend-port <port>  Streamlit port, default is 8501.
+  --frontend-port <port>  Frontend port, default is 8501.
+  --api-port <port>       Frontend API port, default is 18000.
   -h, --help              Show this help message.
 EOF
 }
@@ -33,6 +37,11 @@ while [[ $# -gt 0 ]]; do
     --frontend-port)
       [[ $# -ge 2 ]] || { echo "Missing value for --frontend-port" >&2; exit 1; }
       FRONTEND_PORT="$2"
+      shift 2
+      ;;
+    --api-port)
+      [[ $# -ge 2 ]] || { echo "Missing value for --api-port" >&2; exit 1; }
+      API_PORT="$2"
       shift 2
       ;;
     -h|--help)
@@ -52,8 +61,13 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$STREAMLIT_BIN" ]]; then
-  echo "Missing streamlit executable: $STREAMLIT_BIN" >&2
+if [[ -z "$NPM_BIN" ]]; then
+  echo "Missing npm in PATH." >&2
+  exit 1
+fi
+
+if [[ ! -f "${FRONTEND_DIR}/package.json" ]]; then
+  echo "Missing frontend package.json: ${FRONTEND_DIR}/package.json" >&2
   exit 1
 fi
 
@@ -68,6 +82,7 @@ if [[ -n "$SAMPLE_IMAGE" ]]; then
 fi
 
 BACKEND_PID=""
+API_PID=""
 FRONTEND_PID=""
 
 cleanup() {
@@ -75,6 +90,10 @@ cleanup() {
   if [[ -n "$BACKEND_PID" ]] && kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
     kill "$BACKEND_PID" >/dev/null 2>&1 || true
     wait "$BACKEND_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$API_PID" ]] && kill -0 "$API_PID" >/dev/null 2>&1; then
+    kill "$API_PID" >/dev/null 2>&1 || true
+    wait "$API_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$FRONTEND_PID" ]] && kill -0 "$FRONTEND_PID" >/dev/null 2>&1; then
     kill "$FRONTEND_PID" >/dev/null 2>&1 || true
@@ -128,20 +147,29 @@ echo "Starting Muye backend demo stack..."
 ) &
 BACKEND_PID=$!
 
+echo "Starting Muye frontend API..."
+(
+  cd "$ROOT_DIR"
+  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m uvicorn main:api_app \
+    --host "$API_HOST" \
+    --port "$API_PORT" \
+    --log-level warning
+) &
+API_PID=$!
+
+wait_for_url "http://${API_HOST}:${API_PORT}/health" "Frontend API"
 wait_for_url "http://127.0.0.1:8010/health" "YOLO API"
 wait_for_url "http://127.0.0.1:9010/health" "Virtual Drone API"
 
-echo "Starting Streamlit frontend..."
+echo "Starting Vite React frontend..."
 (
-  cd "$ROOT_DIR"
-  PYTHONPATH="$ROOT_DIR" "$STREAMLIT_BIN" run app.py \
-    --server.headless true \
-    --server.address "$FRONTEND_HOST" \
-    --server.port "$FRONTEND_PORT"
+  cd "$FRONTEND_DIR"
+  MUYE_API_TARGET="http://${API_HOST}:${API_PORT}" \
+    "$NPM_BIN" run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT"
 ) &
 FRONTEND_PID=$!
 
-wait_for_url "http://${FRONTEND_HOST}:${FRONTEND_PORT}" "Streamlit frontend"
+wait_for_url "http://${FRONTEND_HOST}:${FRONTEND_PORT}" "Vite frontend"
 
 if [[ -n "$SAMPLE_IMAGE" ]]; then
   timestamp="$(date +%Y%m%d-%H%M%S)"
@@ -153,12 +181,13 @@ fi
 echo
 echo "Muye demo is running."
 echo "Frontend: http://${FRONTEND_HOST}:${FRONTEND_PORT}"
+echo "API:      http://${API_HOST}:${API_PORT}/health"
 echo "YOLO API:  http://127.0.0.1:8010/health"
 echo "Drone API: http://127.0.0.1:9010/health"
 echo "Press Ctrl+C to stop."
 
 set +e
-wait -n "$BACKEND_PID" "$FRONTEND_PID"
+wait -n "$BACKEND_PID" "$API_PID" "$FRONTEND_PID"
 status=$?
 set -e
 

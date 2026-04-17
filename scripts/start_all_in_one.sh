@@ -17,7 +17,7 @@ Usage: ./scripts/start_all_in_one.sh [options]
 
 One-click competition launcher. It brings up:
   - Muye backend
-  - Streamlit frontend
+  - React frontend
   - Browser dashboard page
   - PX4 SITL + Gazebo
   - QGroundControl drone page when available
@@ -31,7 +31,8 @@ Options:
   --skip-browser            Do not auto-open the dashboard page
   --keep-px4                Keep PX4 SITL running after exit
   --px4-dir <path>          PX4-Autopilot directory
-  --frontend-port <port>    Streamlit port, default 8501
+  --frontend-port <port>    Frontend port, default 8501
+  --api-port <port>         Frontend API port, default 18000
   --system-address <addr>   MAVSDK system address
   --world <name>            Gazebo world name
   --browser-cmd <path>      Explicit browser executable
@@ -59,7 +60,7 @@ while [[ $# -gt 0 ]]; do
       PASSTHROUGH_ARGS+=("$1")
       shift
       ;;
-    --px4-dir|--frontend-port|--system-address|--world|--browser-cmd)
+    --px4-dir|--frontend-port|--api-port|--system-address|--world|--browser-cmd)
       [[ $# -ge 2 ]] || { echo "Missing value for $1" >&2; exit 1; }
       PASSTHROUGH_ARGS+=("$1" "$2")
       shift 2

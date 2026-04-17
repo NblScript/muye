@@ -135,6 +135,7 @@ class DroneController:
                 instruction=plan,
                 medication=decision["用药"],
                 current_waypoint_index=0,
+                position=None,
             )
             final_payload = await self._track_remote_mission(
                 request_id=request_id,
@@ -185,7 +186,7 @@ class DroneController:
                 execution_plan=plan,
                 medication=medication,
                 current_weather=current_weather,
-                on_status=lambda status, message, progress, current_waypoint_index: self._publish_drone_update(
+                on_status=lambda status, message, progress, current_waypoint_index, position=None: self._publish_drone_update(
                     request_id=request_id,
                     task_id=f"px4-{request_id[:8]}",
                     status=status,
@@ -194,6 +195,7 @@ class DroneController:
                     instruction=plan,
                     medication=medication,
                     current_waypoint_index=current_waypoint_index,
+                    position=position,
                 ),
             )
         except PX4SimulationError as exc:
@@ -254,6 +256,7 @@ class DroneController:
                     instruction=instruction,
                     medication=medication,
                     current_waypoint_index=int(payload.get("current_waypoint_index", 0)),
+                    position=payload.get("position") if isinstance(payload.get("position"), dict) else None,
                 )
             if status == "completed":
                 return payload
@@ -286,6 +289,7 @@ class DroneController:
                 instruction=payload["instruction"],
                 medication=payload["medication"],
                 current_waypoint_index=0,
+                position=None,
             )
             await asyncio.sleep(0.25)
 
@@ -300,6 +304,7 @@ class DroneController:
         instruction: dict[str, Any],
         medication: dict[str, Any],
         current_waypoint_index: int,
+        position: dict[str, float] | None,
     ) -> None:
         payload = {
             "task_id": task_id,
@@ -307,6 +312,7 @@ class DroneController:
             "instruction": instruction,
             "medication": medication,
             "current_waypoint_index": current_waypoint_index,
+            "position": position,
         }
         if self.event_bus:
             self.event_bus.publish(

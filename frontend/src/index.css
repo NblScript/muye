@@ -1,0 +1,107 @@
+:root {
+  font-family:
+    'IBM Plex Sans', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #102a43;
+  background:
+    radial-gradient(circle at top left, rgba(21, 101, 192, 0.15), transparent 28%),
+    linear-gradient(180deg, #f5f7fb 0%, #eef3f8 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+}
+
+code,
+pre {
+  font-family:
+    'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 96px;
+  height: auto;
+  padding: 24px 32px;
+  background: rgba(255, 255, 255, 0.84);
+  border-bottom: 1px solid rgba(16, 42, 67, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.app-content {
+  padding: 28px 32px 40px;
+}
+
+.eyebrow {
+  display: inline-block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #486581;
+}
+
+.header-title {
+  margin: 0 !important;
+}
+
+.panel-card {
+  height: 100%;
+  border-radius: 20px;
+  border: 1px solid rgba(16, 42, 67, 0.08);
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+}
+
+.muted-text {
+  margin-bottom: 0;
+  color: #486581;
+}
+
+.response-block,
+.structure-block {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .app-content {
+    padding: 20px;
+  }
+}

@@ -1220,6 +1220,106 @@ class SqliteStore:
             "crop_cycle": crop_cycle,
         }
 
+    def fetch_decision_support_context(
+        self,
+        *,
+        field_id: str,
+        crop_name: str | None = None,
+        pest_types: list[str] | None = None,
+        weather_history_limit: int = 5,
+        pesticide_limit: int = 5,
+    ) -> dict[str, Any]:
+        field_row = self.fetch_one(
+            """
+            SELECT field_id, field_name, province, city, county, area_mu, soil_type, irrigation_type
+            FROM fields
+            WHERE field_id = ?
+            """,
+            (field_id,),
+        )
+        if field_row is None:
+            return {}
+
+        soil_row = self.fetch_one(
+            """
+            SELECT sample_date, depth_cm, ph, organic_matter_gkg, alkali_hydrolyzable_nitrogen_mgkg,
+                   available_phosphorus_mgkg, available_potassium_mgkg, moisture_percent,
+                   salinity_gkg, texture
+            FROM soil_records
+            WHERE field_id = ?
+            ORDER BY COALESCE(sample_date, '') DESC, id DESC
+            LIMIT 1
+            """,
+            (field_id,),
+        )
+        weather_rows = self.fetch_all(
+            """
+            SELECT observation_date, weather_summary, temperature_avg_c, temperature_min_c,
+                   temperature_max_c, humidity_avg_percent, precipitation_mm,
+                   wind_speed_avg_mps, wind_direction, sunshine_hours
+            FROM weather_history_daily
+            WHERE field_id = ?
+            ORDER BY observation_date DESC, id DESC
+            LIMIT ?
+            """,
+            (field_id, max(1, int(weather_history_limit))),
+        )
+
+        pesticide_rows: list[dict[str, Any]] = []
+        normalized_pest_types = [item for item in (pest_types or []) if item]
+        if crop_name or normalized_pest_types:
+            filters: list[str] = []
+            params: list[Any] = []
+            if crop_name:
+                filters.append("LOWER(COALESCE(target_crops, '')) LIKE ?")
+                params.append(f"%{crop_name.lower()}%")
+            if normalized_pest_types:
+                pest_filters = []
+                for pest_type in normalized_pest_types:
+                    pest_filters.append("LOWER(COALESCE(target_pests, '')) LIKE ?")
+                    params.append(f"%{pest_type.lower()}%")
+                filters.append(f"({' OR '.join(pest_filters)})")
+            pesticide_rows = self.fetch_all(
+                f"""
+                SELECT pesticide_id, product_name, active_ingredient, formulation, toxicity,
+                       manufacturer, target_crops, target_pests, dilution_guidance
+                FROM pesticide_catalog
+                WHERE {' AND '.join(filters)}
+                ORDER BY product_name ASC
+                LIMIT ?
+                """,
+                (*params, max(1, int(pesticide_limit))),
+            )
+
+        return {
+            "source": "sqlite",
+            "field_profile": {
+                "field_id": str(field_row["field_id"]),
+                "field_name": field_row.get("field_name"),
+                "province": field_row.get("province"),
+                "city": field_row.get("city"),
+                "county": field_row.get("county"),
+                "area_mu": self._to_float(field_row.get("area_mu")),
+                "soil_type": field_row.get("soil_type"),
+                "irrigation_type": field_row.get("irrigation_type"),
+                "crop_name": crop_name,
+            },
+            "latest_soil_record": soil_row or {},
+            "recent_weather_history": weather_rows,
+            "candidate_pesticides": [
+                {
+                    **row,
+                    "target_crops": self._parse_json_value(row.get("target_crops"), default=row.get("target_crops")),
+                    "target_pests": self._parse_json_value(row.get("target_pests"), default=row.get("target_pests")),
+                    "raw_match_keywords": {
+                        "crop_name": crop_name,
+                        "pest_types": normalized_pest_types,
+                    },
+                }
+                for row in pesticide_rows
+            ],
+        }
+
     def find_nearest_field_id(
         self,
         *,
@@ -1289,13 +1389,12 @@ class SqliteStore:
             rows = self._connection.execute(query, params).fetchall()
         return [dict(row) for row in rows]
 
-    def fetch_task_views(
+    def _build_task_filter_clause(
         self,
         *,
-        limit: int = 20,
         status: str | None = None,
         search: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[str, list[Any]]:
         filters: list[str] = []
         params: list[Any] = []
 
@@ -1323,6 +1422,33 @@ class SqliteStore:
             params.extend([keyword, keyword, keyword, keyword])
 
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        return where_clause, params
+
+    def count_task_views(
+        self,
+        *,
+        status: str | None = None,
+        search: str | None = None,
+    ) -> int:
+        where_clause, params = self._build_task_filter_clause(status=status, search=search)
+        row = self.fetch_one(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM tasks
+            {where_clause}
+            """,
+            tuple(params),
+        )
+        return int(row["total"]) if row and row.get("total") is not None else 0
+
+    def fetch_task_views(
+        self,
+        *,
+        limit: int = 20,
+        status: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
+        where_clause, params = self._build_task_filter_clause(status=status, search=search)
         query = f"""
             SELECT request_id, field_id, image_path, start_time, end_time, status
             FROM tasks
@@ -1396,22 +1522,42 @@ class SqliteStore:
         )
         field_by_id: dict[str, dict[str, Any]] = {}
         if field_ids:
-            field_placeholders = ",".join("?" for _ in field_ids)
-            field_rows = self.fetch_all(
-                f"""
-                SELECT field_id, field_code, field_name, province, city, county,
-                       latitude, longitude, area_mu, area_hectare, geofence
-                FROM fields
-                WHERE field_id IN ({field_placeholders})
-                """,
-                tuple(field_ids),
-            )
-            for row in field_rows:
-                field_id = str(row["field_id"])
+            for field_id in field_ids:
+                field_context = self.fetch_field_context(field_id)
+                if field_context:
+                    location = field_context.get("location") or {}
+                    field_by_id[field_id] = {
+                        "field_id": field_id,
+                        "field_name": field_context.get("name"),
+                        "name": field_context.get("name"),
+                        "province": location.get("province"),
+                        "city": location.get("city"),
+                        "county": location.get("county"),
+                        "latitude": location.get("latitude"),
+                        "longitude": location.get("longitude"),
+                        "area_mu": self._to_float(field_context.get("area_mu")),
+                        "soil_type": field_context.get("soil_type"),
+                        "geofence": field_context.get("geofence") or [],
+                        "crop_cycle": field_context.get("crop_cycle") or {},
+                    }
+                    continue
+
+                row = self.fetch_one(
+                    """
+                    SELECT field_id, field_code, field_name, province, city, county,
+                           latitude, longitude, area_mu, area_hectare, geofence
+                    FROM fields
+                    WHERE field_id = ?
+                    """,
+                    (field_id,),
+                )
+                if row is None:
+                    continue
                 field_by_id[field_id] = {
                     "field_id": field_id,
                     "field_code": row.get("field_code"),
                     "field_name": row.get("field_name"),
+                    "name": row.get("field_name"),
                     "province": row.get("province"),
                     "city": row.get("city"),
                     "county": row.get("county"),
@@ -1420,6 +1566,7 @@ class SqliteStore:
                     "area_mu": self._to_float(row.get("area_mu")),
                     "area_hectare": self._to_float(row.get("area_hectare")),
                     "geofence": self._parse_json_value(row.get("geofence"), default=[]),
+                    "crop_cycle": {},
                 }
 
         detections_by_request: dict[str, list[dict[str, Any]]] = {}
@@ -1587,4 +1734,14 @@ class SqliteStore:
             [round(longitude + lon_delta, 6), round(latitude - lat_delta, 6)],
             [round(longitude + lon_delta, 6), round(latitude + lat_delta, 6)],
             [round(longitude - lon_delta, 6), round(latitude + lat_delta, 6)],
-        ]
+            ]
+
+    def clear_runtime_task_data(self) -> None:
+        with self._lock:
+            self._connection.execute("DELETE FROM spray_records WHERE request_id IS NOT NULL")
+            self._connection.execute("DELETE FROM drone_mission_updates")
+            self._connection.execute("DELETE FROM decisions")
+            self._connection.execute("DELETE FROM weather_snapshots")
+            self._connection.execute("DELETE FROM detections")
+            self._connection.execute("DELETE FROM tasks")
+            self._connection.commit()

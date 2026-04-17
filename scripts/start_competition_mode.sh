@@ -24,7 +24,8 @@ Pass-through options:
   --sample-image <path>     Seed image copied into data/images after startup
   --system-address <addr>   MAVSDK system address
   --world <name>            Gazebo world name
-  --frontend-port <port>    Streamlit port, default 8501
+  --frontend-port <port>    Frontend port, default 8501
+  --api-port <port>         Frontend API port, default 18000
   --qgc-path <path>         Explicit QGroundControl executable/AppImage path
   --skip-px4                Reuse an already-running PX4 SITL
   --skip-qgc                Do not launch QGroundControl
@@ -51,6 +52,11 @@ while [[ $# -gt 0 ]]; do
     --frontend-port)
       [[ $# -ge 2 ]] || { echo "Missing value for --frontend-port" >&2; exit 1; }
       FRONTEND_PORT="$2"
+      VISUAL_ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --api-port)
+      [[ $# -ge 2 ]] || { echo "Missing value for --api-port" >&2; exit 1; }
       VISUAL_ARGS+=("$1" "$2")
       shift 2
       ;;

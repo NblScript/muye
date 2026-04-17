@@ -10,6 +10,7 @@ import httpx
 from jsonschema import ValidationError, validate
 
 from modules.common import log_event, strip_code_fence
+from modules.decision_context import DecisionContextProvider
 from modules.event_bus import FileEventBus
 from modules.weather_integration import WeatherClient
 
@@ -58,6 +59,7 @@ class DecisionEngine:
         timeout_seconds: float = 30,
         logger: logging.Logger | None = None,
         event_bus: FileEventBus | None = None,
+        decision_context_provider: DecisionContextProvider | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.api_url = api_url
@@ -67,6 +69,7 @@ class DecisionEngine:
         self.use_mock = use_mock
         self.logger = logger or logging.getLogger("muye.decision")
         self.event_bus = event_bus
+        self.decision_context_provider = decision_context_provider
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
@@ -106,6 +109,13 @@ class DecisionEngine:
                 request_id=request_id,
                 client_ip=client_ip,
             )
+            decision_context = self._build_decision_context(
+                pest_detections=pest_detections,
+                weather_data=weather,
+                field_context=field_context,
+                request_id=request_id,
+                client_ip=client_ip,
+            )
             if self.event_bus:
                 self.event_bus.publish(
                     request_id=request_id,
@@ -118,6 +128,7 @@ class DecisionEngine:
                 pest_detections=pest_detections,
                 weather_data=weather,
                 field_context=field_context,
+                decision_context=decision_context,
             )
             if self.event_bus:
                 self.event_bus.publish(
@@ -163,6 +174,7 @@ class DecisionEngine:
                 "weather": weather,
                 "decision": decision,
                 "structured_input_text": structured_input_text,
+                "decision_context": decision_context,
             }
         except Exception as exc:
             if self.event_bus:
@@ -189,6 +201,7 @@ class DecisionEngine:
         pest_detections: list[dict[str, Any]],
         weather_data: dict[str, Any],
         field_context: dict[str, Any],
+        decision_context: dict[str, Any] | None = None,
     ) -> str:
         detection_lines = []
         for index, detection in enumerate(pest_detections, start=1):
@@ -202,6 +215,12 @@ class DecisionEngine:
 
         location = field_context.get("location", {})
         geofence = json.dumps(field_context.get("geofence", []), ensure_ascii=False)
+        optional_context_text = ""
+        if decision_context:
+            optional_context_text = (
+                "补充决策参考（可选，不存在时可忽略）：\n"
+                f"{json.dumps(decision_context, ensure_ascii=False)}\n"
+            )
         return (
             "请基于以下农田结构化信息输出严格 JSON，不要输出解释。\n"
             f"地块名称：{field_context.get('name', '未知地块')}\n"
@@ -217,12 +236,42 @@ class DecisionEngine:
             f"天气概况={weather_data['summary']}\n"
             "害虫检测结果：\n"
             f"{chr(10).join(detection_lines)}\n"
+            f"{optional_context_text}"
             "注意：飞行路径、高度、速度、喷洒速率、覆盖区域和气象限制由系统 planner 生成，"
             "不要输出任何飞控参数。\n"
             "输出 JSON Schema 关键字段："
             "用药.农药名称/浓度/配比/总量/安全提示，"
             "可选字段为农事建议。"
         )
+
+    def _build_decision_context(
+        self,
+        *,
+        pest_detections: list[dict[str, Any]],
+        weather_data: dict[str, Any],
+        field_context: dict[str, Any],
+        request_id: str,
+        client_ip: str,
+    ) -> dict[str, Any]:
+        if self.decision_context_provider is None:
+            return {}
+        try:
+            return self.decision_context_provider.build_context(
+                request_id=request_id,
+                pest_detections=pest_detections,
+                weather_data=weather_data,
+                field_context=field_context,
+            )
+        except Exception as exc:
+            log_event(
+                self.logger,
+                logging.WARNING,
+                "决策增强上下文构建失败，已退回基础决策输入",
+                request_id=request_id,
+                client_ip=client_ip,
+                error=str(exc),
+            )
+            return {}
 
     async def _request_qwen_decision(
         self,

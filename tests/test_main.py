@@ -1,11 +1,36 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
 import sys
+from pathlib import Path
 
-from main import MuyeApplication, _build_local_yolo_urls, _resolve_loopback_host, parse_args
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+from PIL import Image
+import pytest
+
+import main as main_module
+from main import (
+    HistoryTaskEntry,
+    MuyeApplication,
+    WorkflowHistoryResponse,
+    _build_local_yolo_urls,
+    _build_history_response,
+    _collect_health_status,
+    _resolve_loopback_host,
+    api_health,
+    get_dashboard_context,
+    get_sim_map_state,
+    get_task_annotated_image,
+    get_task_original_image,
+    get_workflow_history,
+    reset_demo_events,
+    upload_demo_image,
+    parse_args,
+)
 
 
 def test_resolve_loopback_host() -> None:
@@ -19,6 +44,350 @@ def test_build_local_yolo_urls() -> None:
 
     assert detect_url == "http://127.0.0.1:8010/detect"
     assert health_url == "http://127.0.0.1:8010/health"
+
+
+def test_sim_map_state_route_returns_expected_shape() -> None:
+    payload = asyncio.run(get_sim_map_state()).model_dump()
+
+    assert "timestamp" in payload
+    assert len(payload["drones"]) == 2
+    assert payload["drones"][0]["status"] in {"作业中", "返航"}
+    assert {"x", "y"} <= set(payload["drones"][0]["position"].keys())
+    assert len(payload["drones"][0]["route"]) >= 2
+
+
+def test_dashboard_context_route_returns_current_modes(monkeypatch) -> None:
+    monkeypatch.setenv("QWEATHER_USE_MOCK", "true")
+    monkeypatch.setenv("QWEN_USE_MOCK", "true")
+    monkeypatch.setenv("DRONE_BACKEND", "px4")
+
+    payload = asyncio.run(get_dashboard_context()).model_dump()
+    assert payload["modes"] == {
+        "yolo": "real",
+        "weather": "mock",
+        "qwen": "mock",
+        "drone": "px4",
+    }
+    assert payload["upload_accept"] == ["jpg", "jpeg", "png"]
+
+
+def test_workflow_history_route_uses_query_parameters(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_build_history_response(*, limit: int, status: str | None, search: str | None) -> WorkflowHistoryResponse:
+        captured["limit"] = limit
+        captured["status"] = status
+        captured["search"] = search
+        return WorkflowHistoryResponse(
+            total=1,
+            items=[
+                HistoryTaskEntry(
+                    request_id="req-history-1",
+                    current_stage="decision",
+                    status="completed",
+                    message="历史任务",
+                    updated_at="2026-04-17T12:00:00Z",
+                    image_path="/tmp/sample.jpg",
+                    field={"field_name": "郑州示范田 1 号"},
+                    detections=[{"pest_type": "aphid", "confidence": 0.9}],
+                    weather={"summary": "多云"},
+                    spray_summary={"spray_area_mu": 18},
+                    decision={"用药": {"农药名称": "吡虫啉"}},
+                    drone={"task_id": "sim-1"},
+                    error=None,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(main_module, "_build_history_response", fake_build_history_response)
+
+    payload = asyncio.run(
+        get_workflow_history(
+            limit=5,
+            status="completed",
+            search="aphid",
+        )
+    ).model_dump()
+
+    assert captured == {
+        "limit": 5,
+        "status": "completed",
+        "search": "aphid",
+    }
+    assert payload["total"] == 1
+    assert payload["items"][0]["request_id"] == "req-history-1"
+    assert payload["items"][0]["decision"]["用药"]["农药名称"] == "吡虫啉"
+
+
+def _build_png_bytes(color: str = "red") -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color=color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_upload_demo_image_route_saves_file(monkeypatch, tmp_path) -> None:
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+
+    class FakeUploadFile:
+        def __init__(self, filename: str, content: bytes) -> None:
+            self.filename = filename
+            self._content = content
+
+        async def read(self) -> bytes:
+            return self._content
+
+    def fake_save_uploaded_image(uploaded_file, content: bytes) -> Path:
+        target = uploads_dir / uploaded_file.filename
+        target.write_bytes(content)
+        return target
+
+    monkeypatch.setattr(main_module, "_save_uploaded_image", fake_save_uploaded_image)
+
+    upload_file = FakeUploadFile("sample.png", _build_png_bytes())
+    payload = asyncio.run(upload_demo_image(upload_file))
+
+    assert payload["filename"] == "sample.png"
+    saved = uploads_dir / "sample.png"
+    assert saved.exists()
+    assert saved.read_bytes() == _build_png_bytes()
+    assert payload["path"] == str(saved)
+
+
+def test_upload_demo_image_route_rejects_invalid_image_content() -> None:
+    class FakeUploadFile:
+        filename = "fake.jpg"
+
+        async def read(self) -> bytes:
+            return b"not-a-real-image"
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(upload_demo_image(FakeUploadFile()))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "invalid_image_content"
+
+
+def test_upload_demo_image_route_rejects_large_file() -> None:
+    class FakeUploadFile:
+        filename = "large.png"
+
+        async def read(self) -> bytes:
+            return b"x" * (main_module.MAX_UPLOAD_BYTES + 1)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(upload_demo_image(FakeUploadFile()))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "file_too_large"
+
+
+def test_reset_demo_events_route_requires_confirm() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(reset_demo_events())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "confirm_required"
+
+
+def test_reset_demo_events_route_clears_bus_and_sqlite(monkeypatch) -> None:
+    state = {"cleared": False}
+    sqlite_state = {"cleared": False}
+
+    class FakeEventBus:
+        def clear(self) -> None:
+            state["cleared"] = True
+
+    monkeypatch.setattr(main_module, "FileEventBus", FakeEventBus)
+    monkeypatch.setattr(
+        main_module,
+        "_clear_demo_runtime_state",
+        lambda: sqlite_state.__setitem__("cleared", True),
+    )
+
+    payload = asyncio.run(reset_demo_events(confirm=True))
+    assert payload == {"status": "cleared"}
+    assert state["cleared"] is True
+    assert sqlite_state["cleared"] is True
+
+
+def test_health_status_collects_check_results(monkeypatch) -> None:
+    monkeypatch.setattr(main_module, "_check_sqlite_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(main_module, "_check_data_dir_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(main_module, "_check_embedded_yolo_health", lambda: {"status": "skipped"})
+
+    payload, healthy = _collect_health_status()
+
+    assert healthy is True
+    assert payload["status"] == "ok"
+    assert payload["checks"]["embedded_yolo"]["status"] == "skipped"
+
+
+def test_health_route_returns_503_when_dependency_fails(monkeypatch) -> None:
+    monkeypatch.setattr(
+        main_module,
+        "_collect_health_status",
+        lambda: (
+            {
+                "status": "error",
+                "failures": ["sqlite"],
+                "checks": {
+                    "sqlite": {"status": "error", "detail": "db_down"},
+                    "data_dir": {"status": "ok"},
+                    "embedded_yolo": {"status": "skipped"},
+                },
+            },
+            False,
+        ),
+    )
+
+    response = asyncio.run(api_health())
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 503
+    assert b'"failures":["sqlite"]' in response.body
+
+
+def test_build_history_response_uses_real_total(monkeypatch) -> None:
+    monkeypatch.setattr(main_module, "_count_sqlite_tasks", lambda **kwargs: 2)
+    monkeypatch.setattr(
+        main_module,
+        "_load_sqlite_task_views",
+        lambda **kwargs: [
+            {
+                "request_id": "req-1",
+                "current_stage": "decision",
+                "status": "completed",
+                "message": "历史任务 1",
+                "updated_at": "2026-04-17T12:00:00Z",
+                "image_path": "/tmp/1.jpg",
+                "field": {},
+                "detections": [{"pest_type": "aphid", "confidence": 0.9}],
+                "weather": {},
+                "spray_summary": {},
+                "decision": {},
+                "drone": {},
+                "error": None,
+            },
+            {
+                "request_id": "req-2",
+                "current_stage": "drone",
+                "status": "running",
+                "message": "历史任务 2",
+                "updated_at": "2026-04-17T11:00:00Z",
+                "image_path": "/tmp/2.jpg",
+                "field": {},
+                "detections": [{"pest_type": "aphid", "confidence": 0.8}],
+                "weather": {},
+                "spray_summary": {},
+                "decision": {},
+                "drone": {},
+                "error": None,
+            },
+        ],
+    )
+    monkeypatch.setattr(main_module, "load_events", lambda limit=500: [])
+    monkeypatch.setattr(main_module, "build_task_views", lambda events: [])
+
+    payload = _build_history_response(limit=2, status="completed", search="aphid")
+
+    assert payload.total == 1
+    assert len(payload.items) == 1
+    assert payload.items[0].request_id == "req-1"
+
+
+def test_build_history_response_applies_limit_after_merge(monkeypatch) -> None:
+    monkeypatch.setattr(main_module, "_count_sqlite_tasks", lambda **kwargs: 1)
+    monkeypatch.setattr(
+        main_module,
+        "_load_sqlite_task_views",
+        lambda **kwargs: [
+            {
+                "request_id": "req-sqlite",
+                "current_stage": "decision",
+                "status": "completed",
+                "message": "sqlite task",
+                "updated_at": "2026-04-17T12:00:00Z",
+                "image_path": "/tmp/sqlite.jpg",
+                "field": {},
+                "detections": [],
+                "weather": {},
+                "spray_summary": {},
+                "decision": {},
+                "drone": {},
+                "error": None,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        main_module,
+        "load_events",
+        lambda limit=500: [
+            {
+                "request_id": "req-event-only",
+                "timestamp": "2026-04-17T12:01:00Z",
+                "stage": "decision",
+                "status": "completed",
+                "message": "event only task",
+                "payload": {
+                    "image_path": "/tmp/event.jpg",
+                    "detections": [{"pest_type": "aphid", "confidence": 0.8}],
+                },
+            }
+        ],
+    )
+    monkeypatch.setattr(main_module, "build_task_views", main_module.build_task_views)
+
+    payload = _build_history_response(limit=1, status=None, search=None)
+
+    assert payload.total == 2
+    assert len(payload.items) == 1
+    assert payload.items[0].request_id == "req-event-only"
+
+
+def test_task_original_image_route_returns_file(monkeypatch, tmp_path) -> None:
+    image_path = tmp_path / "original.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    monkeypatch.setattr(
+        main_module,
+        "_load_task_by_request_id",
+        lambda request_id: {
+            "request_id": request_id,
+            "image_path": str(image_path),
+            "detections": [],
+        },
+    )
+
+    response = asyncio.run(get_task_original_image("req-1"))
+
+    assert response.path == image_path
+    assert response.media_type == "image/jpeg"
+
+
+def test_task_annotated_image_route_returns_png(monkeypatch, tmp_path) -> None:
+    image_path = tmp_path / "original.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    monkeypatch.setattr(
+        main_module,
+        "_load_task_by_request_id",
+        lambda request_id: {
+            "request_id": request_id,
+            "image_path": str(image_path),
+            "detections": [{"pest_type": "aphid"}],
+        },
+    )
+    monkeypatch.setattr(
+        main_module,
+        "_annotate_image",
+        lambda image_path, detections: Image.new("RGB", (4, 4), color="red"),
+    )
+
+    response = asyncio.run(get_task_annotated_image("req-2"))
+
+    assert response.media_type == "image/png"
+    assert response.body_iterator is not None
 
 
 def test_main_reads_qwen_mock_flag(monkeypatch, tmp_path) -> None:

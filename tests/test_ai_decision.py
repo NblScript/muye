@@ -20,6 +20,19 @@ class StubWeatherClient:
         }
 
 
+class StubDecisionContextProvider:
+    def build_context(self, *, request_id, pest_detections, weather_data, field_context):
+        assert request_id == "req-ai-context"
+        assert pest_detections[0]["pest_type"] == "aphid"
+        assert weather_data["temperature"] == 27.5
+        assert field_context["name"] == "牧野示范田"
+        return {
+            "source": "stub",
+            "latest_soil_record": {"ph": 6.8, "moisture_percent": 24.0},
+            "candidate_pesticides": [{"product_name": "吡虫啉", "dilution_guidance": "1:1200"}],
+        }
+
+
 def test_ai_decision_resolves_dashscope_base_url() -> None:
     engine = DecisionEngine(
         api_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -250,3 +263,42 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
 
     assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
     assert result["decision"]["农事建议"] == ["佩戴防护具"]
+
+
+@pytest.mark.asyncio
+async def test_ai_decision_includes_optional_decision_context_when_provider_enabled() -> None:
+    engine = DecisionEngine(
+        api_url="https://qwen.test/chat",
+        api_key="qwen-key",
+        model="qwen-max",
+        weather_client=StubWeatherClient(),
+        use_mock=True,
+        decision_context_provider=StubDecisionContextProvider(),
+    )
+    try:
+        result = await engine.generate_decision(
+            pest_detections=[
+                {
+                    "pest_type": "aphid",
+                    "confidence": 0.95,
+                    "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+                }
+            ],
+            field_context={
+                "name": "牧野示范田",
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
+                "geofence": [
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
+                ],
+            },
+            request_id="req-ai-context",
+        )
+    finally:
+        await engine.close()
+
+    assert result["decision_context"]["source"] == "stub"
+    assert "补充决策参考" in result["structured_input_text"]
+    assert "吡虫啉" in result["structured_input_text"]

@@ -4,23 +4,28 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
 PYTHON_BIN="${VENV_DIR}/bin/python"
-STREAMLIT_BIN="${VENV_DIR}/bin/streamlit"
+FRONTEND_DIR="${ROOT_DIR}/frontend"
+NPM_BIN="$(command -v npm || true)"
 PX4_DIR="${HOME}/PX4-Autopilot"
 SAMPLE_IMAGE=""
 SYSTEM_ADDRESS="udpin://0.0.0.0:14540"
 WORLD_NAME="muye_demo_field"
 FRONTEND_HOST="127.0.0.1"
 FRONTEND_PORT="8501"
+API_HOST="127.0.0.1"
+API_PORT="${MUYE_API_PORT:-18000}"
 START_PX4="true"
 START_QGC="true"
 KEEP_PX4="false"
 QGC_PATH="${QGC_PATH:-}"
 
 APP_PID=""
+API_PID=""
 FRONTEND_PID=""
 PX4_PID=""
 QGC_PID=""
 APP_LOG=""
+API_LOG=""
 FRONTEND_LOG=""
 PX4_LOG=""
 QGC_LOG=""
@@ -32,7 +37,7 @@ Usage: ./scripts/start_px4_visual_demo.sh [options]
 Starts a visual PX4 demo stack for competition demos:
   - PX4 SITL + Gazebo world
   - Muye backend in PX4 mode
-  - Streamlit dashboard
+  - Vite React dashboard
   - QGroundControl when available
 
 Options:
@@ -40,7 +45,8 @@ Options:
   --sample-image <path>     Optional image copied into data/images after startup
   --system-address <addr>   MAVSDK system address. Default: udpin://0.0.0.0:14540
   --world <name>            Gazebo world name. Default: muye_demo_field
-  --frontend-port <port>    Streamlit port. Default: 8501
+  --frontend-port <port>    Frontend port. Default: 8501
+  --api-port <port>         Frontend API port. Default: 18000
   --qgc-path <path>         Explicit QGroundControl executable/AppImage path
   --skip-px4                Assume PX4 SITL is already running
   --skip-qgc                Do not attempt to launch QGroundControl
@@ -74,6 +80,11 @@ while [[ $# -gt 0 ]]; do
     --frontend-port)
       [[ $# -ge 2 ]] || { echo "Missing value for --frontend-port" >&2; exit 1; }
       FRONTEND_PORT="$2"
+      shift 2
+      ;;
+    --api-port)
+      [[ $# -ge 2 ]] || { echo "Missing value for --api-port" >&2; exit 1; }
+      API_PORT="$2"
       shift 2
       ;;
     --qgc-path)
@@ -110,8 +121,13 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$STREAMLIT_BIN" ]]; then
-  echo "Missing streamlit executable: $STREAMLIT_BIN" >&2
+if [[ -z "$NPM_BIN" ]]; then
+  echo "Missing npm in PATH." >&2
+  exit 1
+fi
+
+if [[ ! -f "${FRONTEND_DIR}/package.json" ]]; then
+  echo "Missing frontend package.json: ${FRONTEND_DIR}/package.json" >&2
   exit 1
 fi
 
@@ -139,6 +155,10 @@ cleanup() {
   if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" >/dev/null 2>&1; then
     kill "$APP_PID" >/dev/null 2>&1 || true
     wait "$APP_PID" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$API_PID" ]] && kill -0 "$API_PID" >/dev/null 2>&1; then
+    kill "$API_PID" >/dev/null 2>&1 || true
+    wait "$API_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$QGC_PID" ]] && kill -0 "$QGC_PID" >/dev/null 2>&1; then
     kill "$QGC_PID" >/dev/null 2>&1 || true
@@ -247,6 +267,7 @@ detect_qgc() {
 mkdir -p "${ROOT_DIR}/data/logs"
 APP_LOG="${ROOT_DIR}/data/logs/muye-px4-backend-$(date +%Y%m%d-%H%M%S).log"
 FRONTEND_LOG="${ROOT_DIR}/data/logs/muye-px4-frontend-$(date +%Y%m%d-%H%M%S).log"
+API_LOG="${ROOT_DIR}/data/logs/muye-frontend-api-$(date +%Y%m%d-%H%M%S).log"
 PX4_LOG="${ROOT_DIR}/data/logs/px4-visual-sitl-$(date +%Y%m%d-%H%M%S).log"
 QGC_LOG="${ROOT_DIR}/data/logs/qgc-$(date +%Y%m%d-%H%M%S).log"
 
@@ -287,19 +308,28 @@ echo "Starting Muye backend in PX4 mode..."
 ) >"$APP_LOG" 2>&1 &
 APP_PID=$!
 
-wait_for_url "http://127.0.0.1:8010/health" "YOLO API"
-
-echo "Starting Streamlit frontend..."
+echo "Starting Muye frontend API..."
 (
   cd "$ROOT_DIR"
-  PYTHONPATH="$ROOT_DIR" "$STREAMLIT_BIN" run app.py \
-    --server.headless true \
-    --server.address "$FRONTEND_HOST" \
-    --server.port "$FRONTEND_PORT"
+  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m uvicorn main:api_app \
+    --host "$API_HOST" \
+    --port "$API_PORT" \
+    --log-level warning
+) >"$API_LOG" 2>&1 &
+API_PID=$!
+
+wait_for_url "http://${API_HOST}:${API_PORT}/health" "Frontend API"
+wait_for_url "http://127.0.0.1:8010/health" "YOLO API"
+
+echo "Starting Vite React frontend..."
+(
+  cd "$FRONTEND_DIR"
+  MUYE_API_TARGET="http://${API_HOST}:${API_PORT}" \
+    "$NPM_BIN" run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT"
 ) >"$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
 
-wait_for_url "http://${FRONTEND_HOST}:${FRONTEND_PORT}" "Streamlit frontend"
+wait_for_url "http://${FRONTEND_HOST}:${FRONTEND_PORT}" "Vite frontend"
 
 if [[ -n "$SAMPLE_IMAGE" ]]; then
   timestamp="$(date +%Y%m%d-%H%M%S)"
@@ -329,10 +359,12 @@ fi
 echo
 echo "PX4 visual demo is running."
 echo "Frontend:   http://${FRONTEND_HOST}:${FRONTEND_PORT}"
+echo "API:        http://${API_HOST}:${API_PORT}/health"
 echo "YOLO API:   http://127.0.0.1:8010/health"
 echo "PX4 world:  ${WORLD_NAME}"
 echo "PX4 log:    ${PX4_LOG}"
 echo "Backend log:${APP_LOG}"
+echo "API log:    ${API_LOG}"
 echo "UI log:     ${FRONTEND_LOG}"
 if [[ -n "$QGC_PID" ]]; then
   echo "QGC log:    ${QGC_LOG}"
