@@ -5,6 +5,6 @@
 - 和风天气实时数据
 - 千问（Qwen）结构化决策
 - 虚拟无人机任务执行
-- Streamlit 可视化面板
+- React 指挥大屏与 FastAPI 接口层
 
 更多背景与快速上手参见 01-quickstart。
