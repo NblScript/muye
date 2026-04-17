@@ -1,0 +1,13 @@
+field_id,crop_code,year,season,planting_date,harvest_date,area_mu,expected_yield_kg,actual_yield_kg,status,source,notes
+henan-zz-001,summer_corn,2025,summer,2025-06-15,2025-09-28,74.02,3108.84,2997.81,harvested,generated_seed,过去一年内的夏玉米已完成收获。
+henan-zz-001,winter_wheat,2025,winter,2025-10-10,2026-06-05,74.02,2664.72,,growing,generated_seed,当前生产季冬小麦记录。
+henan-kf-002,summer_corn,2025,summer,2025-06-15,2025-09-28,109.11,4582.62,4418.95,harvested,generated_seed,过去一年内的夏玉米已完成收获。
+henan-kf-002,winter_wheat,2025,winter,2025-10-10,2026-06-05,109.11,3927.96,,growing,generated_seed,当前生产季冬小麦记录。
+henan-xx-003,summer_corn,2025,summer,2025-06-15,2025-09-28,87.09,3657.78,3527.14,harvested,generated_seed,过去一年内的夏玉米已完成收获。
+henan-xx-003,winter_wheat,2025,winter,2025-10-10,2026-06-05,87.09,3135.24,,growing,generated_seed,当前生产季冬小麦记录。
+henan-zmd-004,summer_corn,2025,summer,2025-06-15,2025-09-28,96.91,4070.22,3924.86,harvested,generated_seed,过去一年内的夏玉米已完成收获。
+henan-zmd-004,winter_wheat,2025,winter,2025-10-10,2026-06-05,96.91,3488.76,,growing,generated_seed,当前生产季冬小麦记录。
+henan-ly-005,summer_corn,2025,summer,2025-06-15,2025-09-28,97.58,4098.36,3951.99,harvested,generated_seed,过去一年内的夏玉米已完成收获。
+henan-ly-005,winter_wheat,2025,winter,2025-10-10,2026-06-05,97.58,3512.88,,growing,generated_seed,当前生产季冬小麦记录。
+henan-ny-006,summer_corn,2025,summer,2025-06-15,2025-09-28,77.3,3246.6,3130.65,harvested,generated_seed,过去一年内的夏玉米已完成收获。
+henan-ny-006,winter_wheat,2025,winter,2025-10-10,2026-06-05,77.3,2782.8,,growing,generated_seed,当前生产季冬小麦记录。

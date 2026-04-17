@@ -1,0 +1,70 @@
+[
+  {
+    "pesticide_id": "seed-imidacloprid",
+    "registration_no": "SEED-PD-IMI-001",
+    "product_name": "吡虫啉",
+    "active_ingredient": "吡虫啉",
+    "formulation": "10% 可湿性粉剂",
+    "toxicity": "低毒",
+    "manufacturer": "牧野示例目录",
+    "target_crops": ["冬小麦", "夏玉米"],
+    "target_pests": ["蚜虫", "飞虱"],
+    "dilution_guidance": "1000-1500倍液",
+    "source": "henan_pesticide_catalog_seed",
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
+  },
+  {
+    "pesticide_id": "seed-chlorantraniliprole",
+    "registration_no": "SEED-PD-CLA-002",
+    "product_name": "氯虫苯甲酰胺",
+    "active_ingredient": "氯虫苯甲酰胺",
+    "formulation": "20% 悬浮剂",
+    "toxicity": "低毒",
+    "manufacturer": "牧野示例目录",
+    "target_crops": ["夏玉米"],
+    "target_pests": ["草地贪夜蛾", "玉米螟"],
+    "dilution_guidance": "1500-2500倍液",
+    "source": "henan_pesticide_catalog_seed",
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
+  },
+  {
+    "pesticide_id": "seed-emamectin-benzoate",
+    "registration_no": "SEED-PD-EMA-003",
+    "product_name": "甲维盐",
+    "active_ingredient": "甲氨基阿维菌素苯甲酸盐",
+    "formulation": "5% 水分散粒剂",
+    "toxicity": "低毒",
+    "manufacturer": "牧野示例目录",
+    "target_crops": ["冬小麦", "夏玉米"],
+    "target_pests": ["粘虫", "玉米螟"],
+    "dilution_guidance": "2000-3000倍液",
+    "source": "henan_pesticide_catalog_seed",
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
+  },
+  {
+    "pesticide_id": "seed-lambda-cyhalothrin",
+    "registration_no": "SEED-PD-LCY-004",
+    "product_name": "高效氯氟氰菊酯",
+    "active_ingredient": "高效氯氟氰菊酯",
+    "formulation": "2.5% 乳油",
+    "toxicity": "中等毒",
+    "manufacturer": "牧野示例目录",
+    "target_crops": ["冬小麦"],
+    "target_pests": ["蚜虫", "麦蜘蛛"],
+    "dilution_guidance": "1500-2000倍液",
+    "source": "henan_pesticide_catalog_seed",
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
+  }
+]

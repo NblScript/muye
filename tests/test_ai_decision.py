@@ -8,7 +8,7 @@ from modules.ai_decision import DecisionEngine, DecisionEngineError
 
 class StubWeatherClient:
     async def fetch_current_weather(self, location_query, request_id, client_ip="127.0.0.1"):
-        assert location_query == "上海"
+        assert location_query == "郑州"
         return {
             "temperature": 27.5,
             "humidity": 58.0,
@@ -17,6 +17,19 @@ class StubWeatherClient:
             "wind_scale_text": "3",
             "wind_speed": 2.3,
             "summary": "sunny",
+        }
+
+
+class StubDecisionContextProvider:
+    def build_context(self, *, request_id, pest_detections, weather_data, field_context):
+        assert request_id == "req-ai-context"
+        assert pest_detections[0]["pest_type"] == "aphid"
+        assert weather_data["temperature"] == 27.5
+        assert field_context["name"] == "牧野示范田"
+        return {
+            "source": "stub",
+            "latest_soil_record": {"ph": 6.8, "moisture_percent": 24.0},
+            "candidate_pesticides": [{"product_name": "吡虫啉", "dilution_guidance": "1:1200"}],
         }
 
 
@@ -55,17 +68,12 @@ def test_ai_decision_builds_mock_decision() -> None:
                     "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
                 }
             ],
-            field_context={
-                "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
-                ]
-            },
+            field_context={"name": "牧野示范田"},
             weather_data={
                 "temperature": 26,
                 "humidity": 58,
                 "wind_speed": 3.3,
+                "summary": "多云",
             },
         )
     finally:
@@ -74,8 +82,9 @@ def test_ai_decision_builds_mock_decision() -> None:
         asyncio.run(engine.close())
 
     assert decision["用药"]["农药名称"] == "示范药剂-aphid"
-    assert decision["指令"]["飞行路径"][0] == [121.4728, 31.2298]
-    assert decision["指令"]["喷洒速率"] == 1.1
+    assert "优先针对aphid高发区域安排喷洒作业" in decision["农事建议"][0]
+
+
 @pytest.mark.asyncio
 async def test_ai_decision_generates_valid_schema() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
@@ -94,22 +103,7 @@ async def test_ai_decision_generates_valid_schema() -> None:
                                 "总量": "12L",
                                 "安全提示": ["作业人员佩戴防护服", "远离水源喷洒"]
                               },
-                              "指令": {
-                                "飞行路径": [[121.4729, 31.2300], [121.4740, 31.2308]],
-                                "高度": 3.5,
-                                "速度": 2.4,
-                                "喷洒速率": 1.2,
-                                "覆盖区域": {
-                                  "type": "polygon",
-                                  "coordinates": [[121.4729, 31.2300], [121.4740, 31.2300], [121.4740, 31.2308]]
-                                },
-                                "气象限制": {
-                                  "最大风速": 4.5,
-                                  "最低温度": 15,
-                                  "最高温度": 33,
-                                  "最大湿度": 85
-                                }
-                              }
+                              "农事建议": ["优先处理高风险区", "作业前核验实时风速"]
                             }
                             """
                         }
@@ -136,12 +130,12 @@ async def test_ai_decision_generates_valid_schema() -> None:
             ],
             field_context={
                 "name": "牧野示范田",
-                "weather_location": "上海",
-                "location": {"city": "上海", "latitude": 31.2304, "longitude": 121.4737},
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
                 ],
             },
             request_id="req-ai-1",
@@ -150,7 +144,7 @@ async def test_ai_decision_generates_valid_schema() -> None:
         await engine.close()
 
     assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
-    assert result["decision"]["指令"]["喷洒速率"] == 1.2
+    assert result["decision"]["农事建议"] == ["优先处理高风险区", "作业前核验实时风速"]
     assert "害虫检测结果" in result["structured_input_text"]
     assert "风向=东南风" in result["structured_input_text"]
     assert result["weather"]["temperature"] == 27.5
@@ -165,7 +159,7 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
                 "choices": [
                     {
                         "message": {
-                            "content": '{"用药": {"农药名称": "吡虫啉"}, "指令": {}}'
+                            "content": '{"用药": {"农药名称": "吡虫啉"}}'
                         }
                     }
                 ]
@@ -190,12 +184,12 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
             ],
             field_context={
                 "name": "牧野示范田",
-                "weather_location": "上海",
-                "location": {"city": "上海", "latitude": 31.2304, "longitude": 121.4737},
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
                 ],
             },
             request_id="req-ai-2",
@@ -204,7 +198,7 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
         await engine.close()
 
     assert result["decision"]["用药"]["农药名称"]
-    assert result["decision"]["指令"]["飞行路径"]
+    assert result["decision"]["用药"]["安全提示"]
 
 
 @pytest.mark.asyncio
@@ -227,22 +221,7 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
                                 "总量": "12L",
                                 "安全提示": ["佩戴口罩"]
                               },
-                              "指令": {
-                                "飞行路径": [[121.4729, 31.2300], [121.4740, 31.2308]],
-                                "高度": 3.5,
-                                "速度": 2.4,
-                                "喷洒速率": 1.2,
-                                "覆盖区域": {
-                                  "type": "polygon",
-                                  "coordinates": [[121.4729, 31.2300], [121.4740, 31.2300], [121.4740, 31.2308]]
-                                },
-                                "气象限制": {
-                                  "最大风速": 4.5,
-                                  "最低温度": 15,
-                                  "最高温度": 33,
-                                  "最大湿度": 85
-                                }
-                              }
+                              "农事建议": ["佩戴防护具"]
                             }
                             """
                         }
@@ -269,12 +248,12 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
             ],
             field_context={
                 "name": "牧野示范田",
-                "weather_location": "上海",
-                "location": {"city": "上海", "latitude": 31.2304, "longitude": 121.4737},
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
-                    [121.4728, 31.2298],
-                    [121.4746, 31.2298],
-                    [121.4748, 31.2312],
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
                 ],
             },
             request_id="req-ai-3",
@@ -283,3 +262,43 @@ async def test_ai_decision_accepts_extra_top_level_fields_if_core_keys_exist() -
         await engine.close()
 
     assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
+    assert result["decision"]["农事建议"] == ["佩戴防护具"]
+
+
+@pytest.mark.asyncio
+async def test_ai_decision_includes_optional_decision_context_when_provider_enabled() -> None:
+    engine = DecisionEngine(
+        api_url="https://qwen.test/chat",
+        api_key="qwen-key",
+        model="qwen-max",
+        weather_client=StubWeatherClient(),
+        use_mock=True,
+        decision_context_provider=StubDecisionContextProvider(),
+    )
+    try:
+        result = await engine.generate_decision(
+            pest_detections=[
+                {
+                    "pest_type": "aphid",
+                    "confidence": 0.95,
+                    "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+                }
+            ],
+            field_context={
+                "name": "牧野示范田",
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
+                "geofence": [
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
+                ],
+            },
+            request_id="req-ai-context",
+        )
+    finally:
+        await engine.close()
+
+    assert result["decision_context"]["source"] == "stub"
+    assert "补充决策参考" in result["structured_input_text"]
+    assert "吡虫啉" in result["structured_input_text"]

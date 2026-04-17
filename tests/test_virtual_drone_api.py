@@ -23,7 +23,7 @@ async def test_virtual_drone_service_advances_mission() -> None:
         MissionRequest(
             request_id="req-drone-1",
             medication={"农药名称": "吡虫啉"},
-            instruction={"飞行路径": [[121.1, 31.1], [121.2, 31.2]]},
+            instruction={"飞行路径": [[113.6241, 34.7467], [113.6257, 34.7479]]},
             weather={"temperature": 25},
         )
     )

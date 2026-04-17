@@ -4,6 +4,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -32,7 +33,11 @@ class ImageProcessor:
         self.headers = headers or {}
         self.api_key = api_key or ""
         self.logger = logger or logging.getLogger("muye.image")
-        self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
+        self._client = httpx.AsyncClient(
+            timeout=timeout_seconds,
+            transport=transport,
+            trust_env=not _is_loopback_url(api_url),
+        )
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -206,3 +211,8 @@ class ImageProcessor:
             }
 
         raise ImageProcessingError("YOLO 检测框格式不合法")
+
+
+def _is_loopback_url(url: str) -> bool:
+    host = (urlparse(url).hostname or "").strip().lower()
+    return host in {"127.0.0.1", "localhost", "::1", "0.0.0.0"}

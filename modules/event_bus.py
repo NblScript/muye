@@ -97,6 +97,7 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "weather": {},
                 "decision": {},
                 "drone": {},
+                "drone_timeline": [],
                 "events": [],
                 "error": None,
             }
@@ -131,6 +132,22 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "status": event.get("status"),
                 "message": event.get("message"),
             }
+            timeline_entry = {
+                "timestamp": event.get("timestamp"),
+                "status": event.get("status"),
+                "message": event.get("message"),
+                "progress": payload.get("progress"),
+                "current_waypoint_index": payload.get("current_waypoint_index"),
+                "task_id": payload.get("task_id"),
+            }
+            timeline = task["drone_timeline"]
+            if timeline and timeline[-1].get("status") == timeline_entry["status"]:
+                timeline[-1] = {
+                    **timeline[-1],
+                    **timeline_entry,
+                }
+            else:
+                timeline.append(timeline_entry)
 
         if event.get("status") == "error":
             task["error"] = payload.get("error") or event.get("message")
