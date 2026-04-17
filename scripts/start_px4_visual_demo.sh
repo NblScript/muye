@@ -29,6 +29,9 @@ API_LOG=""
 FRONTEND_LOG=""
 PX4_LOG=""
 QGC_LOG=""
+PX4_LOG_GUARD_PID=""
+PX4_LOG_MAX_BYTES="${MUYE_PX4_LOG_MAX_BYTES:-104857600}"
+PX4_LOG_KEEP_BYTES="${MUYE_PX4_LOG_KEEP_BYTES:-52428800}"
 
 usage() {
   cat <<'EOF'
@@ -148,6 +151,10 @@ fi
 
 cleanup() {
   local exit_code=$?
+  if [[ -n "$PX4_LOG_GUARD_PID" ]] && kill -0 "$PX4_LOG_GUARD_PID" >/dev/null 2>&1; then
+    kill "$PX4_LOG_GUARD_PID" >/dev/null 2>&1 || true
+    wait "$PX4_LOG_GUARD_PID" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$FRONTEND_PID" ]] && kill -0 "$FRONTEND_PID" >/dev/null 2>&1; then
     kill "$FRONTEND_PID" >/dev/null 2>&1 || true
     wait "$FRONTEND_PID" >/dev/null 2>&1 || true
@@ -236,6 +243,34 @@ wait_for_px4_startup() {
   return 1
 }
 
+start_log_size_guard() {
+  local log_file="$1"
+  local watched_pid="$2"
+  local label="$3"
+  local max_bytes="${4:-104857600}"
+  local keep_bytes="${5:-52428800}"
+
+  if (( keep_bytes >= max_bytes )); then
+    keep_bytes=$(( max_bytes / 2 ))
+  fi
+
+  (
+    while kill -0 "$watched_pid" >/dev/null 2>&1; do
+      if [[ -f "$log_file" ]]; then
+        current_size="$(wc -c <"$log_file" 2>/dev/null || echo 0)"
+        if (( current_size > max_bytes )); then
+          tmp_file="${log_file}.tmp"
+          tail -c "$keep_bytes" "$log_file" >"$tmp_file" 2>/dev/null || true
+          mv "$tmp_file" "$log_file" 2>/dev/null || true
+          printf '[log-guard] Truncated %s log to last %s bytes\n' "$label" "$keep_bytes" >>"$log_file"
+        fi
+      fi
+      sleep 5
+    done
+  ) &
+  PX4_LOG_GUARD_PID=$!
+}
+
 detect_qgc() {
   if [[ -n "$QGC_PATH" ]]; then
     echo "$QGC_PATH"
@@ -290,6 +325,7 @@ if [[ "$START_PX4" == "true" ]]; then
       make px4_sitl gz_x500
   ) >"$PX4_LOG" 2>&1 &
   PX4_PID=$!
+  start_log_size_guard "$PX4_LOG" "$PX4_PID" "PX4 SITL" "$PX4_LOG_MAX_BYTES" "$PX4_LOG_KEEP_BYTES"
   wait_for_px4_startup "$PX4_LOG"
 else
   echo "Skipping PX4 startup. Expecting an existing SITL instance."

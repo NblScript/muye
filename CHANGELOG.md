@@ -14,6 +14,7 @@
   - `modules/px4_simulator.py` 现在按真实遥测位置反算航线进度
   - 前端作业地图已切换为纯 `SVG` 渲染，避免运行态地图容器导致的不可见问题
   - `config/drone_config.json` 更新了冬小麦演示地块、演示航线和超时参数
+  - `scripts/start_px4_visual_demo.sh` 与 `scripts/run_px4_demo.sh` 已增加 PX4 日志大小守卫，避免 `px4-visual-sitl-*.log` 与 `px4-sitl-*.log` 单次运行暴涨到数 GB
 - 新增比赛与部署辅助能力：
   - 新增 `scripts/start_showtime.sh`
   - 新增 `deploy/nginx.conf` 与 `deploy/muye_backend.service`

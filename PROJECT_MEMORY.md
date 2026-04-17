@@ -145,9 +145,11 @@
   - 一键跑通 `PX4 SITL -> Muye backend -> 示例图注入 -> 等待任务完成`
   - 会清理代理环境变量，避免 PX4 本地构建/运行受代理干扰
   - 支持 `--skip-px4`、`--keep-px4`、`--system-address`、`--world`
+  - 已增加 PX4 日志大小守卫，默认将单个 PX4 日志限制在 `100MB` 内，超限时仅保留最近 `50MB`
 - `scripts/start_px4_visual_demo.sh`
   - 一键拉起 `PX4 SITL + Gazebo + Muye backend + frontend API + React frontend`
   - 可选自动拉起 `QGroundControl`
+  - 已增加 PX4 日志大小守卫，默认将单个 PX4 日志限制在 `100MB` 内，超限时仅保留最近 `50MB`
 - `scripts/start_competition_mode.sh`
   - 包装 visual demo，并尝试自动打开浏览器，面向比赛现场展示
 - `scripts/start_all_in_one.sh`
@@ -216,6 +218,8 @@
   - 当前采用 `Vite + React + TypeScript`
   - 已接入 `Ant Design` 深色指挥大屏样式
   - 已落地 `Dashboard.tsx` 作为首页
+  - 已清理未使用的 Vite 初始化模板残留文件（`App.css`、`src/assets/*`、`public/icons.svg`），当前前端静态资源以实际页面所需文件为准
+  - 仓库级运行缓存与构建产物（如根目录/模块 `__pycache__`、`.pytest_cache`、`frontend/dist`）不属于源码结构，可按需清理
   - 左栏已改为真实结构化数据驱动，而不是伪造的“18 台设备 / 固定喷洒面积”
   - 中间已接入 PX4 虚拟农田态势图 `FieldMap.tsx`
   - 地图当前只展示真实当前任务地块；静态 3 地块演示数据已删除
