@@ -41,6 +41,9 @@ muye/
 │   ├── api_keys.env                 # 本地密钥和接口地址
 │   ├── drone_config.json            # 地块、围栏、飞行约束、PX4 demo field
 │   └── yolo_config.yaml             # YOLO 推理服务配置
+├── core/                            # 核心配置与依赖
+│   ├── config.py                    # 环境解析与配置工具
+│   └── deps.py                      # 运行时依赖访问辅助
 ├── data/                            # 运行期数据
 │   ├── images/                      # 上传 / 自动采集图片
 │   ├── logs/                        # 系统日志和 JSONL 事件流
@@ -61,20 +64,36 @@ muye/
 │   └── PROJECT_STRUCTURE.md         # 前端结构说明
 ├── models/                          # 本地模型与农业数据模型说明
 │   ├── agri_models.py               # SQLAlchemy 农业数据参考模型
+│   ├── schemas.py                   # 前端 API Pydantic schema
 │   └── README.md                    # 模型文件放置说明
 ├── modules/                         # 核心业务模块
-│   ├── ai_decision.py               # 千问决策与结构化输出
+│   ├── ai_decision.py               # 千问决策与结构化输出（含 RAG 集成）
 │   ├── common.py                    # 公共路径、日志、配置加载
 │   ├── data_collector.py            # 图片采集与目录监听
+│   ├── decision_context.py          # 决策增强上下文抽象
 │   ├── drone_controller.py          # 无人机任务执行与状态回写
 │   ├── event_bus.py                 # JSONL 事件总线
 │   ├── image_processor.py           # YOLO 识别调用与校验
 │   ├── local_yolo_api.py            # 嵌入式 YOLO API
 │   ├── mission_planner.py           # 飞行 / 喷洒规划
 │   ├── px4_simulator.py             # PX4 SITL / MAVSDK 执行链路
+│   ├── rag/                         # RAG 决策增强模块
+│   │   ├── embeddings.py            # QwenEmbeddings 封装 DashScope API
+│   │   ├── vectorstore.py           # VectorStoreManager 管理 ChromaDB
+│   │   ├── retriever.py             # DecisionRAGRetriever 检索逻辑
+│   │   ├── knowledge_loader.py      # 农药知识加载器
+│   │   └── __init__.py              # 统一导出入口
 │   ├── sqlite_store.py              # SQLite schema / 读写封装
 │   ├── virtual_drone_api.py         # 虚拟无人机 HTTP 服务
 │   └── weather_integration.py       # 和风天气接入与映射
+├── routes/                          # FastAPI 路由层
+│   ├── health.py                    # /health 健康检查
+│   ├── workflow.py                  # /workflow/state, /workflow/history
+│   ├── dashboard.py                 # /dashboard/context
+│   ├── demo.py                      # /demo/upload-image, /demo/reset-events
+│   ├── tasks.py                     # /tasks/{request_id} 图片接口
+│   ├── sim.py                       # /sim/map-state, WebSocket 推送
+│   └── __init__.py                  # 路由层统一导出
 ├── scripts/                         # 启动、导入、验证辅助脚本
 │   ├── start_demo.sh                # main + api_app + React demo
 │   ├── start_px4_visual_demo.sh     # PX4 + Gazebo + api_app + React demo
@@ -82,12 +101,19 @@ muye/
 │   ├── start_all_in_one.sh          # 一键比赛模式入口
 │   ├── run_px4_demo.sh              # PX4 SITL 联调验证
 │   ├── test_api.py                  # 最小化后端 API 探测脚本
+│   ├── build_rag_knowledge.py       # 构建 RAG 向量知识库
 │   └── import_*.py / generate_*.py  # 河南数据 seed 生成与导入
+├── services/                        # 服务层
+│   ├── workflow_service.py          # 工作流聚合服务
+│   ├── map_simulator.py             # PX4 地图状态模拟器
+│   └── __init__.py                  # 服务层统一导出
 └── tests/                           # 自动化测试
     ├── test_main.py                 # 主入口 / API 契约 / 主流程测试
     ├── test_drone_controller.py     # 无人机 backend 测试
     ├── test_mission_planner.py      # 航线与演示 profile 测试
     ├── test_sqlite_migration.py     # SQLite schema / migration 测试
+    ├── test_rag_embeddings.py       # RAG Embeddings API 契约测试
+    ├── test_rag_retriever.py        # RAG Retriever 测试
     └── ...                          # 其余 AI / 天气 / YOLO / 虚拟无人机测试
 ```
 
@@ -159,9 +185,10 @@ muye/
 
 6. `ai_decision.py`
    - 将害虫检测和天气信息整合成结构化文本。
-   - 调用千问 API 输出“用药建议 + 农事建议”JSON。
+   - 调用千问 API 输出"用药建议 + 农事建议"JSON。
    - 飞行路径、高度、喷洒速率和气象限制不再由 LLM 生成。
    - 使用 `jsonschema` 强制校验返回结构。
+   - 已集成 RAG 检索增强：决策前自动检索农药知识库和历史案例，失败时降级不中断。
 
 7. `drone_controller.py` + `mission_planner.py`
    - `mission_planner.py` 负责从地块围栏、天气和飞控约束生成系统执行参数。
@@ -184,6 +211,20 @@ muye/
 11. `virtual_drone_api.py` + `drone_api.py`
    - 提供虚拟无人机任务创建与任务状态查询接口。
    - 自动模拟排队、起飞、前往作业区、喷洒、返航和完成状态。
+
+12. `modules/rag/`
+    - RAG 决策增强模块，基于 LangChain + ChromaDB。
+    - `QwenEmbeddings` 封装阿里云 DashScope text-embedding-v3 API。
+    - `VectorStoreManager` 管理 ChromaDB 向量库，支持农药知识库和历史决策两个 collection。
+    - `DecisionRAGRetriever` 根据害虫类型和作物名称检索相关农药推荐和历史案例。
+    - `knowledge_loader` 从 SQLite 或 JSON 文件加载农药知识。
+
+13. `routes/` + `services/` + `core/`
+    - 后端已从单文件入口向模块化 FastAPI 结构演进。
+    - `routes/` 按领域注册 API 接口（health / workflow / dashboard / demo / tasks / sim）。
+    - `services/` 承接工作流聚合与地图状态服务。
+    - `core/` 承接配置解析与运行时依赖访问。
+    - `models/schemas.py` 承接前端 API 的 Pydantic schema。
 
 ## 安装依赖
 
