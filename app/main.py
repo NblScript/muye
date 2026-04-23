@@ -1274,7 +1274,7 @@ async def _async_main(args: argparse.Namespace) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="牧野智能农业害虫防治系统")
+    parser = argparse.ArgumentParser(prog="app.main", description="牧野智能农业害虫防治系统")
     parser.add_argument("--once", action="store_true", help="执行一次采集与处理流程后退出")
     parser.add_argument(
         "--with-yolo-api",

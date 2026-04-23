@@ -445,7 +445,7 @@ def test_parse_args_supports_no_capture_on_startup(monkeypatch) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
-        ["main.py", "--with-yolo-api", "--drone-backend", "px4", "--no-capture-on-startup"],
+        ["app.main", "--with-yolo-api", "--drone-backend", "px4", "--no-capture-on-startup"],
     )
 
     args = parse_args()

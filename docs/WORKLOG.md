@@ -22,7 +22,7 @@
 
 ## Backend/API Changes
 
-- `main.py -> api_app` 已补齐 React 前端所需接口：
+- `app/main.py -> api_app` 已补齐 React 前端所需接口：
   - `GET /dashboard/context`
   - `GET /workflow/history`
   - `POST /demo/upload-image`
@@ -105,7 +105,7 @@
     - `vendor-map-ulfx7UOW.js`
     - `vendor-ui-Cdj0xTTn.js`
 - 已通过 Python 语法检查：
-  - `python -m py_compile main.py`
+  - `python -m py_compile app/main.py`
 - 已通过 `tests/test_main.py`：
   - `25 passed in 1.18s`
 - 已通过全量测试：

@@ -569,14 +569,14 @@ python -m app.main --with-demo-stack --once
 
 ```bash
 cd /home/qingking/muye
-python yolo_api.py
+python -m app.yolo_api
 ```
 
 再启动虚拟无人机 API：
 
 ```bash
 cd /home/qingking/muye
-python drone_api.py
+python -m app.drone_api
 ```
 
 可选检查：
