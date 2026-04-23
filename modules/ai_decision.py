@@ -12,6 +12,7 @@ from jsonschema import ValidationError, validate
 from modules.common import log_event, strip_code_fence
 from modules.decision_context import DecisionContextProvider
 from modules.event_bus import FileEventBus
+from modules.rag.retriever import DecisionRAGRetriever
 from modules.weather_integration import WeatherClient
 
 
@@ -60,6 +61,7 @@ class DecisionEngine:
         logger: logging.Logger | None = None,
         event_bus: FileEventBus | None = None,
         decision_context_provider: DecisionContextProvider | None = None,
+        rag_retriever: DecisionRAGRetriever | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.api_url = api_url
@@ -70,6 +72,7 @@ class DecisionEngine:
         self.logger = logger or logging.getLogger("muye.decision")
         self.event_bus = event_bus
         self.decision_context_provider = decision_context_provider
+        self.rag_retriever = rag_retriever
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
@@ -124,11 +127,18 @@ class DecisionEngine:
                     message="天气信息获取完成",
                     payload={"location_query": str(weather_location), "weather": weather},
                 )
+            rag_context_text = self._build_rag_context_text(
+                pest_detections=pest_detections,
+                field_context=field_context,
+                request_id=request_id,
+                client_ip=client_ip,
+            )
             structured_input_text = self.build_structured_input_text(
                 pest_detections=pest_detections,
                 weather_data=weather,
                 field_context=field_context,
                 decision_context=decision_context,
+                rag_context_text=rag_context_text,
             )
             if self.event_bus:
                 self.event_bus.publish(
@@ -202,6 +212,7 @@ class DecisionEngine:
         weather_data: dict[str, Any],
         field_context: dict[str, Any],
         decision_context: dict[str, Any] | None = None,
+        rag_context_text: str = "",
     ) -> str:
         detection_lines = []
         for index, detection in enumerate(pest_detections, start=1):
@@ -221,6 +232,7 @@ class DecisionEngine:
                 "补充决策参考（可选，不存在时可忽略）：\n"
                 f"{json.dumps(decision_context, ensure_ascii=False)}\n"
             )
+        rag_context_block = f"{rag_context_text}\n" if rag_context_text else ""
         return (
             "请基于以下农田结构化信息输出严格 JSON，不要输出解释。\n"
             f"地块名称：{field_context.get('name', '未知地块')}\n"
@@ -237,12 +249,91 @@ class DecisionEngine:
             "害虫检测结果：\n"
             f"{chr(10).join(detection_lines)}\n"
             f"{optional_context_text}"
+            f"{rag_context_block}"
             "注意：飞行路径、高度、速度、喷洒速率、覆盖区域和气象限制由系统 planner 生成，"
             "不要输出任何飞控参数。\n"
             "输出 JSON Schema 关键字段："
             "用药.农药名称/浓度/配比/总量/安全提示，"
             "可选字段为农事建议。"
         )
+
+    def _build_rag_context_text(
+        self,
+        *,
+        pest_detections: list[dict[str, Any]],
+        field_context: dict[str, Any],
+        request_id: str,
+        client_ip: str,
+    ) -> str:
+        if self.rag_retriever is None:
+            return ""
+
+        pest_types = [
+            str(detection.get("pest_type", "")).strip()
+            for detection in pest_detections
+            if str(detection.get("pest_type", "")).strip()
+        ]
+        crop_cycle = field_context.get("crop_cycle")
+        crop_name = None
+        if isinstance(crop_cycle, dict):
+            crop_candidate = crop_cycle.get("crop_name")
+            if isinstance(crop_candidate, str) and crop_candidate.strip():
+                crop_name = crop_candidate.strip()
+
+        if self.event_bus:
+            self.event_bus.publish(
+                request_id=request_id,
+                stage="rag",
+                status="running",
+                message="正在检索 RAG 决策知识",
+                payload={"pest_types": pest_types, "crop_name": crop_name},
+            )
+
+        try:
+            retrieved = self.rag_retriever.retrieve(
+                pest_types=pest_types,
+                crop_name=crop_name,
+                field_context=field_context,
+            )
+            rag_context_text = retrieved.to_prompt_text()
+            if self.event_bus:
+                self.event_bus.publish(
+                    request_id=request_id,
+                    stage="rag",
+                    status="completed",
+                    message="RAG 决策知识检索完成",
+                    payload={
+                        "pest_types": pest_types,
+                        "crop_name": crop_name,
+                        "pesticide_count": len(retrieved.pesticides),
+                        "historical_case_count": len(retrieved.historical_cases),
+                    },
+                )
+            return rag_context_text
+        except Exception as exc:
+            if self.event_bus:
+                self.event_bus.publish(
+                    request_id=request_id,
+                    stage="rag",
+                    status="error",
+                    message="RAG 决策知识检索失败，已降级为基础决策",
+                    payload={
+                        "pest_types": pest_types,
+                        "crop_name": crop_name,
+                        "error": str(exc),
+                    },
+                )
+            log_event(
+                self.logger,
+                logging.WARNING,
+                "RAG 决策知识检索失败，已退回基础决策输入",
+                request_id=request_id,
+                client_ip=client_ip,
+                error=str(exc),
+                pest_types=pest_types,
+                crop_name=crop_name or "",
+            )
+            return ""
 
     def _build_decision_context(
         self,

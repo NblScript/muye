@@ -75,6 +75,11 @@
   - `modules/event_bus.py` 继续保留，负责实时事件流和日志
   - `modules/sqlite_store.py` 负责结构化任务摘要、历史记录和农业数据
   - `main.py -> api_app` 负责把 SQLite、JSONL 事件流和图片/上传操作统一暴露给 React 前端
+- 当前 FastAPI 入口已经开始做模块化拆分，而不是继续把所有 API 与辅助逻辑堆在 `main.py`：
+  - `routes/` 负责按领域注册接口
+  - `services/` 负责工作流聚合与地图状态服务
+  - `core/` 负责配置与依赖访问
+  - `models/schemas.py` 负责 API 的 Pydantic schema
 - 新前端面向大屏的后端接口已进入 `main.py -> api_app`：
   - `GET /health` 与 `GET /api/health`
   - `GET /sim/map-state` 与 `GET /api/sim/map-state`
@@ -125,11 +130,38 @@
 ### Main Flow
 
 - `main.py`
-  - 负责系统装配、worker 队列、embedded YOLO / virtual drone 服务启动
+  - 当前主要负责系统装配、worker 队列、embedded YOLO / virtual drone 服务启动，以及 FastAPI app 组装
   - 支持 `--with-yolo-api`、`--with-virtual-drone-api`、`--with-demo-stack`
   - 支持 `--drone-backend simulated|remote_api|px4`
   - 支持 `--no-capture-on-startup`
   - 已内建 PX4 环境变量覆盖和 demo field 切换逻辑
+  - 当前已把 health / workflow / dashboard / demo / tasks / sim 路由注册下放到 `routes/*.py`
+- `core/config.py`
+  - 当前承接 loopback host、YOLO URL 与环境布尔值解析等配置工具
+- `core/deps.py`
+  - 当前承接 runtime dependency 访问，如 embedded YOLO runner 和时间格式化辅助
+- `models/schemas.py`
+  - 当前承接前端 API 的主要 Pydantic schema：
+    - `WorkflowStateResponse`
+    - `WorkflowHistoryResponse`
+    - `DashboardContextResponse`
+    - `SimMapStateResponse`
+- `services/workflow_service.py`
+  - 当前承接工作流状态、历史记录、SQLite/event bus 聚合、上传文件名清洗等服务层逻辑
+- `services/map_simulator.py`
+  - 当前承接 `Px4MapStateSimulator`
+- `routes/health.py`
+  - 当前承接 `/health` 与 `/api/health`
+- `routes/workflow.py`
+  - 当前承接 `/workflow/state` 与 `/workflow/history`
+- `routes/dashboard.py`
+  - 当前承接 `/dashboard/context`
+- `routes/demo.py`
+  - 当前承接 `/demo/upload-image` 与 `/demo/reset-events`
+- `routes/tasks.py`
+  - 当前承接任务原图 / 标注图读取接口
+- `routes/sim.py`
+  - 当前承接 `/sim/map-state` 与 `/sim/ws/map-state`
 - `modules/drone_controller.py`
   - 已支持 simulated、remote API、PX4 三种执行路径
   - 无人机状态流会写入 SQLite `drone_mission_updates`
@@ -237,6 +269,7 @@
 - `tests/test_main.py`
   - 已补 React 前端 API 契约测试
   - 当前策略是不依赖 `TestClient`，而是直接调用 endpoint 函数，降低 pytest 在当前环境中的阻塞概率
+  - 当前 monkeypatch 仍主要通过 `main.*` 注入，因此拆分后的路由 / 服务层需要显式桥接这些测试替换点
 - `frontend/PROJECT_STRUCTURE.md`
   - 已随当前 Vite 前端真实目录同步
   - 各目录均带中文注释，供后续继续扩展
@@ -428,6 +461,14 @@
     - 数据层当前以 `SQLite + JSONL event bus + 本地文件存储` 为主，而非 `PostgreSQL + Neo4j + MinIO`
     - 无人机演示链当前强调 `simulated / remote_api / px4` 三套后端与 PX4 可视化演示
     - 明确保留“数据库导入真实农业数据后参与决策”的后续规划
+- 2026-04-22 已确认后端正在从单文件入口向模块化 FastAPI 结构演进：
+  - `main.py` 已明显瘦身
+  - 新增 `core/`、`routes/`、`services/`、`models/schemas.py`
+  - 当前这轮重构的重点不是改接口语义，而是拆分组织结构
+  - 测试兼容策略也已同步调整：
+    - `routes/health.py -> collect_health_status()` 会检查 `main._check_*` monkeypatch，并兼容无参 lambda / 正常有参函数
+    - `services/workflow_service.py -> build_history_response()` 已加入对 `main` 模块 monkeypatch 的桥接，避免测试替换失效
+    - `routes/tasks.py` 已通过 `_get_annotate_fn()` 优先使用 `main._annotate_image`
 
 ## Next Work
 

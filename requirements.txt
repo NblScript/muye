@@ -11,3 +11,9 @@ Pillow>=10.4.0
 ultralytics>=8.3.0
 pytest>=8.2.0
 pytest-asyncio>=0.23.7
+# LangChain RAG
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.3.0
+chromadb>=0.5.0
+langchain-chroma>=0.2.0
