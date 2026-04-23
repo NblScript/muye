@@ -29,84 +29,109 @@
 
 ```text
 muye/
-├── .env.example                     # 环境变量模板
-├── CHANGELOG.md                     # 高层修改日志
+├── AGENTS.md                        # AI Agent 导航入口（~100行）
+├── ARCHITECTURE.md                  # 架构总览（分层 + 数据流）
+├── QUALITY_SCORE.md                 # 模块质量评分
+├── CHANGELOG.md                     # 发行变更日志
 ├── PROJECT_MEMORY.md                # 当前优先级、架构决策和下一步计划
 ├── README.md                        # 项目总说明
-├── main.py                          # 后端主入口 + FastAPI 聚合 API
 ├── requirements.txt                 # Python 依赖清单
-├── drone_api.py                     # 虚拟无人机 API 启动入口
-├── yolo_api.py                      # 本地 YOLO API 启动入口
+│
+├── app/                             # FastAPI 应用层
+│   ├── main.py                      # 主入口 + 路由注册
+│   ├── drone_api.py                 # 虚拟无人机 API（独立服务）
+│   ├── yolo_api.py                  # 本地 YOLO API（独立服务）
+│   ├── config.py                    # 环境解析与配置工具
+│   ├── deps.py                      # 运行时依赖访问辅助
+│   ├── routes/                      # API 路由
+│   │   ├── health.py                # /health 健康检查
+│   │   ├── workflow.py              # /workflow/* 工作流接口
+│   │   ├── dashboard.py             # /dashboard/context
+│   │   ├── demo.py                  # /demo/* 演示接口
+│   │   ├── tasks.py                 # /tasks/* 图片接口
+│   │   ├── sim.py                   # /sim/* 模拟接口 + WebSocket
+│   │   └── __init__.py
+│   └── services/                    # 应用服务
+│       ├── workflow_service.py      # 工作流聚合服务
+│       ├── map_simulator.py         # 地图状态模拟器
+│       └── __init__.py
+│
+├── modules/                         # 核心业务逻辑（按领域分组）
+│   ├── decision/                    # 决策域
+│   │   ├── ai_decision.py           # 千问决策 + jsonschema 校验
+│   │   ├── decision_context.py      # 决策增强上下文
+│   │   └── rag/                     # RAG 知识增强
+│   │       ├── embeddings.py        # QwenEmbeddings (DashScope)
+│   │       ├── vectorstore.py       # ChromaDB 向量库
+│   │       ├── retriever.py         # DecisionRAGRetriever 检索
+│   │       ├── knowledge_loader.py  # 农药知识加载
+│   │       └── __init__.py
+│   ├── drone/                       # 无人机域
+│   │   ├── controller.py            # 无人机任务执行与状态回写
+│   │   ├── mission_planner.py       # 飞行/喷洒规划
+│   │   ├── px4_simulator.py         # PX4 SITL / MAVSDK 执行链路
+│   │   ├── virtual_api.py           # 虚拟无人机 HTTP 服务
+│   │   └── __init__.py
+│   ├── detection/                   # 检测域
+│   │   ├── image_processor.py       # YOLO 识别调用与校验
+│   │   ├── local_yolo_api.py        # 嵌入式 YOLO API
+│   │   ├── data_collector.py        # 图片采集与目录监听
+│   │   └── __init__.py
+│   ├── infra/                       # 基础设施域
+│   │   ├── common.py                # 公共路径、日志、配置加载
+│   │   ├── event_bus.py             # JSONL 事件总线
+│   │   ├── sqlite_store.py          # SQLite schema/读写封装
+│   │   ├── weather.py               # 和风天气接入 (原 weather_integration)
+│   │   └── __init__.py
+│   └── __init__.py
+│
+├── models/                          # 数据模型
+│   ├── schemas.py                   # 前端 API Pydantic schema
+│   ├── agri_models.py               # SQLAlchemy 农业数据参考模型
+│   └── README.md
+│
 ├── config/                          # 运行配置
 │   ├── api_keys.env                 # 本地密钥和接口地址
-│   ├── drone_config.json            # 地块、围栏、飞行约束、PX4 demo field
+│   ├── drone_config.json            # 地块、围栏、飞行约束
 │   └── yolo_config.yaml             # YOLO 推理服务配置
-├── core/                            # 核心配置与依赖
-│   ├── config.py                    # 环境解析与配置工具
-│   └── deps.py                      # 运行时依赖访问辅助
+│
 ├── data/                            # 运行期数据
-│   ├── images/                      # 上传 / 自动采集图片
+│   ├── images/                      # 上传/自动采集图片
 │   ├── logs/                        # 系统日志和 JSONL 事件流
-│   ├── seeds/                       # 河南参考 seed / CSV / JSON
+│   ├── seeds/                       # 河南参考 seed/CSV/JSON
+│   ├── chroma_db/                   # RAG 向量知识库
 │   └── muye.db                      # SQLite 结构化业务库
-├── docs/                            # 项目文档分层目录
-│   ├── 00-overview/                 # 总览
-│   ├── 01-quickstart/               # 快速开始
-│   ├── 08-testing/                  # 测试相关文档
-│   ├── 11-changelog/                # 变更记录文档分册
-│   ├── 12-project-memory/           # 项目记忆文档分册
-│   └── WORKLOG.md                   # 最近会话级工作记录
-├── frontend/                        # 唯一前端：Vite + React + TypeScript
+│
+├── docs/                            # 精简文档系统 (Harness-style)
+│   ├── design/                      # 设计文档
+│   │   └── index.md                 # 核心信念 + 架构原则
+│   ├── plans/                       # 执行计划
+│   │   ├── active/                  # 正在执行的计划
+│   │   ├── completed/               # 已完成的计划
+│   │   ├── tech-debt.md             # 技术债务追踪
+│   │   └── *.md                     # 历史计划
+│   ├── reference/                   # 参考
+│   │   ├── api.md                   # API 端点列表
+│   │   └── data-model.md            # SQLite schema
+│   ├── operations/                  # 运维
+│   │   └── runbooks/                # 操作手册
+│   └── WORKLOG.md                   # 会话级工作记录
+│
+├── frontend/                        # React 前端
 │   ├── src/                         # 前端源码
 │   ├── public/                      # 静态资源
 │   ├── package.json                 # 前端依赖和脚本
 │   ├── vite.config.ts               # Vite 配置与 API 代理
 │   └── PROJECT_STRUCTURE.md         # 前端结构说明
-├── models/                          # 本地模型与农业数据模型说明
-│   ├── agri_models.py               # SQLAlchemy 农业数据参考模型
-│   ├── schemas.py                   # 前端 API Pydantic schema
-│   └── README.md                    # 模型文件放置说明
-├── modules/                         # 核心业务模块
-│   ├── ai_decision.py               # 千问决策与结构化输出（含 RAG 集成）
-│   ├── common.py                    # 公共路径、日志、配置加载
-│   ├── data_collector.py            # 图片采集与目录监听
-│   ├── decision_context.py          # 决策增强上下文抽象
-│   ├── drone_controller.py          # 无人机任务执行与状态回写
-│   ├── event_bus.py                 # JSONL 事件总线
-│   ├── image_processor.py           # YOLO 识别调用与校验
-│   ├── local_yolo_api.py            # 嵌入式 YOLO API
-│   ├── mission_planner.py           # 飞行 / 喷洒规划
-│   ├── px4_simulator.py             # PX4 SITL / MAVSDK 执行链路
-│   ├── rag/                         # RAG 决策增强模块
-│   │   ├── embeddings.py            # QwenEmbeddings 封装 DashScope API
-│   │   ├── vectorstore.py           # VectorStoreManager 管理 ChromaDB
-│   │   ├── retriever.py             # DecisionRAGRetriever 检索逻辑
-│   │   ├── knowledge_loader.py      # 农药知识加载器
-│   │   └── __init__.py              # 统一导出入口
-│   ├── sqlite_store.py              # SQLite schema / 读写封装
-│   ├── virtual_drone_api.py         # 虚拟无人机 HTTP 服务
-│   └── weather_integration.py       # 和风天气接入与映射
-├── routes/                          # FastAPI 路由层
-│   ├── health.py                    # /health 健康检查
-│   ├── workflow.py                  # /workflow/state, /workflow/history
-│   ├── dashboard.py                 # /dashboard/context
-│   ├── demo.py                      # /demo/upload-image, /demo/reset-events
-│   ├── tasks.py                     # /tasks/{request_id} 图片接口
-│   ├── sim.py                       # /sim/map-state, WebSocket 推送
-│   └── __init__.py                  # 路由层统一导出
-├── scripts/                         # 启动、导入、验证辅助脚本
-│   ├── start_demo.sh                # main + api_app + React demo
-│   ├── start_px4_visual_demo.sh     # PX4 + Gazebo + api_app + React demo
-│   ├── start_competition_mode.sh    # 比赛模式包装脚本
-│   ├── start_all_in_one.sh          # 一键比赛模式入口
-│   ├── run_px4_demo.sh              # PX4 SITL 联调验证
-│   ├── test_api.py                  # 最小化后端 API 探测脚本
+│
+├── scripts/                         # 辅助脚本
+│   ├── start_demo.sh                # 演示模式启动
+│   ├── start_px4_visual_demo.sh     # PX4 + Gazebo 演示
+│   ├── start_competition_mode.sh    # 比赛模式
+│   ├── start_all_in_one.sh          # 一键启动
 │   ├── build_rag_knowledge.py       # 构建 RAG 向量知识库
-│   └── import_*.py / generate_*.py  # 河南数据 seed 生成与导入
-├── services/                        # 服务层
-│   ├── workflow_service.py          # 工作流聚合服务
-│   ├── map_simulator.py             # PX4 地图状态模拟器
-│   └── __init__.py                  # 服务层统一导出
+│   └── import_*.py / generate_*.py  # 数据导入脚本
+│
 └── tests/                           # 自动化测试
     ├── test_main.py                 # 主入口 / API 契约 / 主流程测试
     ├── test_drone_controller.py     # 无人机 backend 测试
@@ -121,110 +146,85 @@ muye/
 
 当前仓库推荐按下面的心智模型理解：
 
-- `main.py`
+- `app/main.py`
   负责两件事：
   1. 农业处理主流程编排
   2. 给 React 大屏提供 `api_app`
+- `app/drone_api.py`
+  独立无人机 API 服务，负责虚拟任务状态机。
+- `app/yolo_api.py`
+  独立 YOLO 推理服务，接收图片返回害虫检测结果。
+- `modules/` 核心业务逻辑按领域分组：`decision/`、`drone/`、`detection/`、`infra/`。
 - `frontend/`
   是唯一前端主线，不再存在 Streamlit 页面
-- `modules/sqlite_store.py + modules/event_bus.py`
+- `modules/infra/sqlite_store.py + modules/infra/event_bus.py`
   分别负责结构化历史和实时事件
 - `scripts/start_demo.sh`
   是最直接的本地演示入口，会同时启动：
-  - `main.py --with-demo-stack`
-  - `uvicorn main:api_app`
+  - `app/main.py --with-demo-stack`
+  - `uvicorn app.main:api_app`
   - `frontend` 的 Vite 开发服务器
 
 ## 目录导读
 
 如果你是第一次接手这个仓库，建议按这个顺序看：
 
-1. [README.md](/home/qingking/muye/README.md)
-2. [PROJECT_MEMORY.md](/home/qingking/muye/PROJECT_MEMORY.md)
-3. [main.py](/home/qingking/muye/main.py)
-4. [frontend/PROJECT_STRUCTURE.md](/home/qingking/muye/frontend/PROJECT_STRUCTURE.md)
-5. [tests/test_main.py](/home/qingking/muye/tests/test_main.py)
+1. [AGENTS.md](AGENTS.md) — AI Agent 导航入口
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — 架构总览
+3. [README.md](README.md) — 项目总说明
+4. [PROJECT_MEMORY.md](PROJECT_MEMORY.md) — 当前优先级和决策
+5. [frontend/PROJECT_STRUCTURE.md](frontend/PROJECT_STRUCTURE.md) — 前端结构
+6. [tests/test_main.py](tests/test_main.py) — 主流程测试
 
 ## 功能说明
 
-1. `main.py`
+### 应用层（app/）
+
+1. `app/main.py`
    - 装配 YOLO、天气、决策、无人机执行和 SQLite 写入链路。
-   - 暴露前端聚合 API：
-     - `/health`
-     - `/workflow/state`
-     - `/workflow/history`
-     - `/dashboard/context`
-     - `/tasks/{request_id}/original-image`
-     - `/tasks/{request_id}/annotated-image`
+   - 暴露前端聚合 API：`/health`、`/workflow/*`、`/dashboard/*`、`/tasks/*`、`/demo/*`、`/sim/*`。
    - 在一键演示模式下可同时接管本地 YOLO API 和虚拟无人机 API。
-   - 生产加固已补齐：
-     - `/demo/upload-image` 现在会校验真实图片内容，并限制单文件不超过 `10MB`
-     - `/health` 现在会检查 SQLite、`data/` 目录写权限和内嵌 YOLO runner 状态
-     - `/demo/reset-events` 现在必须显式传 `confirm=true`，且会同时清空事件流和任务运行态数据
 
-2. `data_collector.py`
-   - 每 24 小时自动触发无人机采图。
-   - 使用 `watchdog` 实时监听 `data/images/` 新图片。
-   - 图片命名格式为 `YYYYMMDD-HHMMSS.jpg`。
-
-3. `image_processor.py`
-   - 异步调用 YOLO API。
-   - 校验害虫类型、置信度、位置信息。
-   - 过滤低于置信度阈值的检测结果。
-   - 已默认接到本地 YOLO `best.pt` API。
-
-4. `local_yolo_api.py` + `yolo_api.py`
-   - 将本地 `models/best.pt` 封装为 HTTP API。
-   - 暴露 `/health` 和 `/detect` 两个接口。
-   - 支持 Bearer Token 鉴权、IP 白名单、速率限制和批量推理。
-
-5. `weather_integration.py`
-   - 先调用和风天气城市查询接口获取 `Location ID`。
-   - 再调用和风天气实况天气接口获取天气数据。
-   - 将返回字段统一映射为项目内部格式：温度、湿度、风向、风力、天气概况。
-
-6. `ai_decision.py`
-   - 将害虫检测和天气信息整合成结构化文本。
-   - 调用千问 API 输出"用药建议 + 农事建议"JSON。
-   - 飞行路径、高度、喷洒速率和气象限制不再由 LLM 生成。
-   - 使用 `jsonschema` 强制校验返回结构。
-   - 已集成 RAG 检索增强：决策前自动检索农药知识库和历史案例，失败时降级不中断。
-
-7. `drone_controller.py` + `mission_planner.py`
-   - `mission_planner.py` 负责从地块围栏、天气和飞控约束生成系统执行参数。
-   - `drone_controller.py` 负责校验气象限制、地理围栏和飞行控制参数。
-   - 支持 `simulated`、虚拟无人机 API 和 `PX4 SITL / MAVSDK` 三种执行链路。
-
-8. `event_bus.py`
-   - 采用 `JSONL` 文件作为简单事件总线。
-   - 后端关键节点会写入带时间戳、阶段和状态的事件。
-   - React 前端通过 `main.py -> api_app` 聚合读取 SQLite、JSONL 事件流和仿真地图状态。
-
-9. `sqlite_store.py`
-   - 负责 SQLite schema 初始化、迁移兼容、任务视图聚合读取和农业数据落库。
-   - 当前主链路会写入任务、检测、天气、决策、无人机状态和喷洒摘要。
-
-10. `frontend/`
-    - 基于 `Vite + React + TypeScript` 的唯一前端。
-    - 统一承接图片上传、原图/识别图对比、天气/决策卡片、无人机工作流、态势图、任务历史和实时日志。
-
-11. `virtual_drone_api.py` + `drone_api.py`
-   - 提供虚拟无人机任务创建与任务状态查询接口。
+2. `app/drone_api.py`
+   - 独立虚拟无人机 API 服务（端口 8001）。
+   - 提供任务创建与任务状态查询接口。
    - 自动模拟排队、起飞、前往作业区、喷洒、返航和完成状态。
 
-12. `modules/rag/`
-    - RAG 决策增强模块，基于 LangChain + ChromaDB。
-    - `QwenEmbeddings` 封装阿里云 DashScope text-embedding-v3 API。
-    - `VectorStoreManager` 管理 ChromaDB 向量库，支持农药知识库和历史决策两个 collection。
-    - `DecisionRAGRetriever` 根据害虫类型和作物名称检索相关农药推荐和历史案例。
-    - `knowledge_loader` 从 SQLite 或 JSON 文件加载农药知识。
+3. `app/yolo_api.py`
+   - 独立本地 YOLO 推理 API 服务（端口 8002）。
+   - 接收图片，返回害虫类型、置信度、位置信息。
 
-13. `routes/` + `services/` + `core/`
-    - 后端已从单文件入口向模块化 FastAPI 结构演进。
-    - `routes/` 按领域注册 API 接口（health / workflow / dashboard / demo / tasks / sim）。
-    - `services/` 承接工作流聚合与地图状态服务。
-    - `core/` 承接配置解析与运行时依赖访问。
-    - `models/schemas.py` 承接前端 API 的 Pydantic schema。
+### 核心业务层（modules/）
+
+4. `modules/detection/` — 检测域
+   - `image_processor.py`：异步调用 YOLO API，校验害虫类型、置信度、位置信息。
+   - `local_yolo_api.py`：嵌入式 YOLO API，支持直接加载 `best.pt` 权重。
+   - `data_collector.py`：每 24 小时自动触发无人机采图，使用 watchdog 监听新图片。
+
+5. `modules/decision/` — 决策域
+   - `ai_decision.py`：将害虫检测和天气信息整合成结构化文本，调用千问 API 输出用药建议 + 农事建议 JSON。使用 jsonschema 强制校验返回结构。已集成 RAG 检索增强：决策前自动检索农药知识库和历史案例，失败时降级不中断。
+   - `decision_context.py`：决策增强上下文抽象。
+   - `rag/`：RAG 决策增强模块（LangChain + ChromaDB）。
+     - `embeddings.py`：QwenEmbeddings 封装阿里云 DashScope text-embedding-v3 API。
+     - `vectorstore.py`：VectorStoreManager 管理 ChromaDB 向量库。
+     - `retriever.py`：DecisionRAGRetriever 根据害虫类型和作物名称检索。
+     - `knowledge_loader.py`：从 SQLite 或 JSON 文件加载农药知识。
+
+6. `modules/drone/` — 无人机域
+   - `controller.py`：无人机任务执行与状态回写。
+   - `mission_planner.py`：飞行/喷洒规划。
+   - `px4_simulator.py`：PX4 SITL / MAVSDK 执行链路。
+   - `virtual_api.py`：虚拟无人机 HTTP 服务。
+
+7. `modules/infra/` — 基础设施域
+   - `common.py`：公共路径、日志、配置加载。
+   - `event_bus.py`：JSONL 事件总线，跨模块通信的唯一通道。
+   - `sqlite_store.py`：SQLite schema 和读写封装。
+   - `weather.py`：和风天气接入与映射，支持 real/mock 双模式。
+
+8. `frontend/`
+   - 基于 Vite + React + TypeScript 的唯一前端。
+   - 统一承接图片上传、原图/识别图对比、天气/决策卡片、无人机工作流、态势图、任务历史和实时日志。
 
 ## 安装依赖
 

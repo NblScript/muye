@@ -17,7 +17,7 @@ import logging
 import os
 from pathlib import Path
 
-from modules.sqlite_store import SqliteStore
+from modules.infra.sqlite_store import SqliteStore
 
 
 def run(db_path: Path) -> None:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from langchain_core.documents import Document
 
-from modules.rag.retriever import DecisionRAGRetriever, RetrievedContext
-from modules.rag.vectorstore import COLLECTION_DECISIONS, COLLECTION_PESTICIDES
+from modules.decision.rag.retriever import DecisionRAGRetriever, RetrievedContext
+from modules.decision.rag.vectorstore import COLLECTION_DECISIONS, COLLECTION_PESTICIDES
 
 
 def test_retrieved_context_to_prompt_text_formats_sections() -> None:

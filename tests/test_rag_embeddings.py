@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from modules.rag.embeddings import QwenEmbeddings
+from modules.decision.rag.embeddings import QwenEmbeddings
 
 
 class StubResponse:
@@ -61,7 +61,7 @@ def test_qwen_embeddings_embed_documents_sends_expected_request(
             }
         )
 
-    monkeypatch.setattr("modules.rag.embeddings.httpx.post", fake_post)
+    monkeypatch.setattr("modules.decision.rag.embeddings.httpx.post", fake_post)
 
     embeddings = QwenEmbeddings(
         api_url="https://dashscope.test/v1",

@@ -4,9 +4,9 @@ import asyncio
 
 import pytest
 
-from modules.drone_controller import DroneController
-from modules.px4_simulator import PX4Simulator
-from modules.sqlite_store import SqliteStore
+from modules.drone.controller import DroneController
+from modules.drone.px4_simulator import PX4Simulator
+from modules.infra.sqlite_store import SqliteStore
 
 
 def build_drone_config() -> dict:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from modules.image_processor import ImageProcessingError, ImageProcessor
+from modules.detection.image_processor import ImageProcessingError, ImageProcessor
 
 
 @pytest.mark.asyncio

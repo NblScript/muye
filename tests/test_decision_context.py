@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from modules.decision_context import SqliteDecisionContextProvider
-from modules.sqlite_store import SqliteStore
+from modules.decision.decision_context import SqliteDecisionContextProvider
+from modules.infra.sqlite_store import SqliteStore
 
 
 def test_sqlite_decision_context_provider_builds_context_from_imported_data(tmp_path) -> None:

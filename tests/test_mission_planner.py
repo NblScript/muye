@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modules.mission_planner import MissionPlanner
+from modules.drone.mission_planner import MissionPlanner
 
 
 def build_planner() -> MissionPlanner:

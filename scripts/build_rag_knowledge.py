@@ -12,20 +12,20 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from modules.common import DATA_DIR, load_environment
-from modules.rag.knowledge_loader import (
+from modules.infra.common import DATA_DIR, load_environment
+from modules.decision.rag.knowledge_loader import (
     load_historical_decisions,
     load_knowledge_from_docs,
     load_pesticide_from_json,
     load_pesticide_from_sqlite,
 )
-from modules.rag.vectorstore import (
+from modules.decision.rag.vectorstore import (
     COLLECTION_DECISIONS,
     COLLECTION_KNOWLEDGE,
     COLLECTION_PESTICIDES,
     VectorStoreManager,
 )
-from modules.sqlite_store import SqliteStore
+from modules.infra.sqlite_store import SqliteStore
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from modules.ai_decision import DecisionEngine, DecisionEngineError
+from modules.decision.ai_decision import DecisionEngine, DecisionEngineError
 
 
 class StubWeatherClient:

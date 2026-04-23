@@ -9,7 +9,7 @@ import pytest
 fastapi = pytest.importorskip("fastapi")
 from fastapi import HTTPException, UploadFile
 
-from modules.local_yolo_api import LocalYoloApiService, LocalYoloSettings
+from modules.detection.local_yolo_api import LocalYoloApiService, LocalYoloSettings
 
 
 class FakePredictor:

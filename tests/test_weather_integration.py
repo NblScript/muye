@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from modules.weather_integration import WeatherClient, WeatherIntegrationError
+from modules.infra.weather import WeatherClient, WeatherIntegrationError
 
 
 @pytest.mark.asyncio

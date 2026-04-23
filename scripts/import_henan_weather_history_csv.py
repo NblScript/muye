@@ -10,8 +10,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from modules.common import DATA_DIR
-from modules.sqlite_store import SqliteStore
+from modules.infra.common import DATA_DIR
+from modules.infra.sqlite_store import SqliteStore
 
 
 def _first_value(row: dict[str, Any], *keys: str) -> Any:

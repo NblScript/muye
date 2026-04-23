@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modules.event_bus import FileEventBus, build_task_views, load_events
+from modules.infra.event_bus import FileEventBus, build_task_views, load_events
 
 
 def test_file_event_bus_publishes_and_loads_events(tmp_path) -> None:

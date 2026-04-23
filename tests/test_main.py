@@ -12,8 +12,8 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 import pytest
 
-import main as main_module
-from main import (
+import app.main as main_module
+from app.main import (
     HistoryTaskEntry,
     MuyeApplication,
     WorkflowHistoryResponse,

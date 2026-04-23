@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from modules.virtual_drone_api import MissionRequest, VirtualDroneService, VirtualDroneSettings
+from modules.drone.virtual_api import MissionRequest, VirtualDroneService, VirtualDroneSettings
 
 
 def build_settings() -> VirtualDroneSettings:

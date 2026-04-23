@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from modules.sqlite_store import SqliteStore
+from modules.infra.sqlite_store import SqliteStore
 from scripts.generate_henan_field_crop_seed_csv import generate_seed_csvs
 from scripts.generate_henan_soil_seed_csv import generate_soil_seed_csv
 from scripts.import_henan_field_crop_seed_csv import import_henan_field_crop_seed_csv
