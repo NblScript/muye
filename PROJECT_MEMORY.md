@@ -124,6 +124,15 @@
   - 再从 SQLite `fields / field_crop_cycles` 解析
   - 最后才回退到 `config/drone_config.json`
   - 当回退配置被使用时，会自动 seed 到 SQLite，避免外键缺失
+- RAG 决策增强链路已落地：
+  - `modules/rag/` 已实现完整的 LangChain RAG 框架
+  - `QwenEmbeddings` 封装阿里云 DashScope text-embedding-v3 API
+  - `VectorStoreManager` 管理 ChromaDB 向量库，支持 `pesticides` 与 `decisions` 两个 collection
+  - `DecisionRAGRetriever` 根据害虫类型 + 作物名称检索相关农药推荐和历史案例
+  - `DecisionEngine` 已集成 `rag_retriever` 注入，RAG 检索文本拼入决策 prompt
+  - RAG 失败时只记录 warning 和 `rag:error` 事件，不中断原决策流程
+  - 通过 `event_bus` 发布 `rag:running/completed/error` 事件供前端展示
+  - `scripts/build_rag_knowledge.py` 用于构建向量知识库，首启时自动灌入农药目录
 
 ## Current Code Status
 
@@ -170,6 +179,27 @@
   - 已通过 `mavsdk` 接 PX4 SITL
   - 已支持连接、等待定位、上传任务、自动解锁、自动起飞、任务完成监听
   - 已支持航点接受半径、停留时间、飞越航点、原地转弯等演示控制参数
+- `modules/rag/__init__.py`
+  - RAG 模块统一导出入口
+- `modules/rag/embeddings.py`
+  - `QwenEmbeddings` 类封装阿里云 DashScope text-embedding-v3 API
+  - 支持 API key、dimensions、timeout 配置
+- `modules/rag/vectorstore.py`
+  - `VectorStoreManager` 管理 ChromaDB 持久化向量库
+  - 支持 `COLLECTION_PESTICIDES` 和 `COLLECTION_DECISIONS` 两个 collection
+  - 提供文档添加、相似度检索、批量导入等能力
+- `modules/rag/retriever.py`
+  - `DecisionRAGRetriever` 根据害虫类型 + 作物名称检索相关农药和历史案例
+  - `RetrievedContext` 格式化检索结果为 prompt 文本
+  - 支持按害虫类型过滤农药推荐结果
+- `modules/rag/knowledge_loader.py`
+  - 从 SQLite `pesticide_catalog` 或 JSON 文件加载农药知识
+  - 支持从 `docs/` 目录加载 markdown 文档
+- `modules/ai_decision.py`
+  - 已集成 `rag_retriever` 注入
+  - 新增 `_build_rag_context_text()` 方法，在决策前检索相关知识
+  - RAG 检索文本拼入 `build_structured_input_text()` 的 prompt
+  - 失败降级：只记录 warning 和 `rag:error` 事件，不中断原流程
 
 ### PX4 Scripts
 
@@ -227,6 +257,13 @@
   - 代表 SQLite migration support 发布线，相关说明已进入 `CHANGELOG.md`
 - `models/agri_models.py`
   - 已定义 `CropCatalog`、`Field`、`FieldCropCycle` SQLAlchemy 模型，作为农业数据层参考模型
+
+### RAG Knowledge Build
+
+- `scripts/build_rag_knowledge.py`
+  - 独立脚本用于构建 RAG 向量知识库
+  - 支持 `--rebuild` 清空后重建
+  - 默认加载农药目录和 docs 知识文档
 
 ### Seed / Import Scripts
 
@@ -363,7 +400,7 @@
     - `MUYE_ENABLE_SQLITE_DECISION_CONTEXT=true` 时，才会启用 `SqliteDecisionContextProvider`
 - 历史已验证的本地测试记录：
   - `PYTHONPATH=/home/qingking/muye /home/qingking/muye/.venv/bin/pytest -q`
-  - 当前最近结果：`66 passed in 5.23s`
+  - 当前最近结果：`77 passed in 9.13s`（含 RAG 测试）
   - `PYTHONPATH=. .venv/bin/pytest tests/test_ai_decision.py tests/test_decision_context.py`
   - 当前最近结果：`7 passed in 0.11s`
 - 2026-04-17 已追加完成一次真实运行态核对：
@@ -401,6 +438,14 @@
   - `tests/test_decision_context.py`
     - SQLite 决策增强上下文聚合
     - 土壤 / 历史天气 / 候选农药读取
+  - `tests/test_rag_embeddings.py`
+    - QwenEmbeddings API 请求/响应契约测试
+    - API key 校验、空输入处理、请求体格式验证
+  - `tests/test_rag_retriever.py`
+    - DecisionRAGRetriever 查询参数测试
+    - 害虫类型过滤测试
+    - crop_name 从 field_context 提取测试
+    - RetrievedContext 格式化测试
 
 ## Known Gaps / Risks
 
@@ -418,9 +463,14 @@
 - 本次会话没有重新实际启动 `make px4_sitl gz_x500` 做端到端现场验证；本次验证重点是“仓库代码状态”和“记忆同步”。
 - `pesticide_catalog` 当前仍是示例 seed，用于联调和字段关联，不是正式官方登记全量库。
 - 河南历史天气导入能力已具备，但真实 CSV 仍需用户后续提供再做真实入库验证。
-- `SqliteDecisionContextProvider` 当前只是“预留并可启用”的增强层，不应被误解为正式农业知识决策引擎：
+- `SqliteDecisionContextProvider` 当前只是"预留并可启用"的增强层，不应被误解为正式农业知识决策引擎：
   - 当前更多是把导入后的结构化数据喂给 LLM
   - 真正的规则引擎、权重体系和可解释决策仍需后续继续收敛
+- RAG 链路虽然已落地，但当前仍有几个待收敛点：
+  - 向量库默认只灌入农药目录，历史决策案例需要真实任务积累后才能有效检索
+  - `QwenEmbeddings` 依赖阿里云 DashScope API，需要 `QWEN_API_KEY` 环境变量
+  - ChromaDB 数据存储在 `data/chroma_db/`，当前未加入 `.gitignore`，大库场景需注意
+  - embedding 维度默认 1024，与 Qwen text-embedding-v3 的推荐配置一致，但可根据需求调整
 - 2026-04-17 已再次核对前端重写后的地图链路，确认当前展示原则更新为：
   - 地图不再展示静态三地块
   - 地图不再展示独立仿真移动无人机或旧航线回放
@@ -452,6 +502,12 @@
   - 该问题现已从后端 PX4 进度源头修正：
     - 前端拿到的 `current_waypoint_index` 已尽量保持为真实喷洒航线索引
     - 位置展示优先使用 PX4 实时遥测位置，避免继续依赖越界索引回退策略
+- 2026-04-23 已完成 RAG 决策增强链路集成：
+  - `modules/rag/` 全套落地：QwenEmbeddings、VectorStoreManager、DecisionRAGRetriever、knowledge_loader
+  - `modules/ai_decision.py` 已集成 RAG 检索，失败时降级不中断
+  - 新增 `tests/test_rag_embeddings.py` 和 `tests/test_rag_retriever.py`
+  - 全量回归：77 passed in 9.13s
+  - Git 提交：`ee27b87 feat(rag): integrate DecisionRAGRetriever into DecisionEngine pipeline`
 - 2026-04-17 已按当前 `muye` 仓库真实状态修订一份对外项目计划书：
   - 修订文件：`/home/qingking/牧野智农(1)-muye修订版.docx`
   - 并已复制回用户微信文件目录，文件名为 `牧野智农(1)-muye修订版.docx`
@@ -490,6 +546,11 @@
    - 正式农药目录
    - 真实河南天气 CSV
    - 更细的土壤/地块/作物属性
+6. 继续完善 RAG 链路：
+   - 将历史决策自动灌入向量库，积累检索语料
+   - 考虑将 `docs/` 知识文档纳入向量检索
+   - 评估是否需要增加重排序（reranking）层
+   - 将 `data/chroma_db/` 加入 `.gitignore`
 
 ## Update Rule
 
