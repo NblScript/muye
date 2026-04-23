@@ -555,14 +555,14 @@ QWEN_USE_MOCK="false"
 
 ```bash
 cd /home/qingking/muye
-python main.py --with-demo-stack
+python -m app.main --with-demo-stack
 ```
 
 执行一次完整链路后退出：
 
 ```bash
 cd /home/qingking/muye
-python main.py --with-demo-stack --once
+python -m app.main --with-demo-stack --once
 ```
 
 如果你希望分开启动，也可以先启动本地 YOLO API：
@@ -590,7 +590,7 @@ curl http://127.0.0.1:9010/health
 
 ```bash
 cd /home/qingking/muye
-python main.py
+python -m app.main
 ```
 
 ## 可视化演示面板
@@ -609,7 +609,7 @@ python main.py
 ```bash
 cd /home/qingking/muye
 . .venv/bin/activate
-python main.py --with-demo-stack
+python -m app.main --with-demo-stack
 ```
 
 终端 2，启动前端 API：
@@ -617,7 +617,7 @@ python main.py --with-demo-stack
 ```bash
 cd /home/qingking/muye
 . .venv/bin/activate
-python -m uvicorn main:api_app --host 127.0.0.1 --port 18000
+python -m uvicorn app.main:api_app --host 127.0.0.1 --port 18000
 ```
 
 终端 3，启动 React 前端：

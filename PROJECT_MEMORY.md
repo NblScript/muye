@@ -20,7 +20,7 @@
 - 当前仓库已经不是“准备接 PX4”，而是“PX4 backend 已落地”：
   - `modules/px4_simulator.py` 已存在。
   - `modules/drone_controller.py` 已支持 `backend=px4`。
-  - `main.py` 已支持 `--drone-backend px4` 与 PX4 环境变量覆盖。
+  - `app/main.py` 已支持 `--drone-backend px4` 与 PX4 环境变量覆盖。
   - `config/drone_config.json` 与 `.env.example` 已包含 PX4 配置。
 - 当前仓库已经提供完整的 PX4 一键演示脚本族：
   - `scripts/run_px4_demo.sh`
@@ -29,8 +29,8 @@
   - `scripts/start_all_in_one.sh`
   - `scripts/start_showtime.sh`
   - 其中 `start_demo.sh` / `start_px4_visual_demo.sh` 已明确改为同时启动：
-    - `main.py` 主流程
-    - `uvicorn main:api_app`（脚本当前固定使用 `127.0.0.1:18000`）
+    - `app/main.py` 主流程
+    - `uvicorn app.main:api_app`（脚本当前固定使用 `127.0.0.1:18000`）
     - `frontend/` 下的 Vite React 前端
   - 当前脚本已继续优化为支持 `--api-port`，方便现场环境避让端口冲突
 - 当前仓库已经结束“双前端并存”阶段：
@@ -42,7 +42,7 @@
   - 适合继续走 `with-demo-stack + virtual drone` 的稳定演示路径
 - PX4 演示默认采用仓库内置 Zurich SITL 演示地块，而不是直接飞业务配置里的河南地块：
   - `config/drone_config.json -> px4.demo_field`
-  - `main.py -> _build_px4_demo_field_context()`
+  - `app/main.py -> _build_px4_demo_field_context()`
   - `PX4_USE_SITL_DEMO_FIELD=true` 时会自动启用
   - 当前 demo field 已调整为更大的 `冬小麦` 演示田，名称为 `PX4 SITL 冬小麦演示田`
   - 当前配置中的演示田面积约为 `5.6 亩`，围栏约 `72m x 52m`，显式演示航线约 `61.9m x 40m`
@@ -74,13 +74,13 @@
 - 主处理链和前端的存储边界已经稳定：
   - `modules/event_bus.py` 继续保留，负责实时事件流和日志
   - `modules/sqlite_store.py` 负责结构化任务摘要、历史记录和农业数据
-  - `main.py -> api_app` 负责把 SQLite、JSONL 事件流和图片/上传操作统一暴露给 React 前端
-- 当前 FastAPI 入口已经开始做模块化拆分，而不是继续把所有 API 与辅助逻辑堆在 `main.py`：
+  - `app/main.py -> api_app` 负责把 SQLite、JSONL 事件流和图片/上传操作统一暴露给 React 前端
+- 当前 FastAPI 入口已经开始做模块化拆分，而不是继续把所有 API 与辅助逻辑堆在 `app/main.py`：
   - `routes/` 负责按领域注册接口
   - `services/` 负责工作流聚合与地图状态服务
   - `core/` 负责配置与依赖访问
   - `models/schemas.py` 负责 API 的 Pydantic schema
-- 新前端面向大屏的后端接口已进入 `main.py -> api_app`：
+- 新前端面向大屏的后端接口已进入 `app/main.py -> api_app`：
   - `GET /health` 与 `GET /api/health`
   - `GET /sim/map-state` 与 `GET /api/sim/map-state`
   - `GET /workflow/state` 与 `GET /api/workflow/state`
@@ -101,7 +101,7 @@
   - 旧版 3 个静态演示地块已经从前端源码删除，不再作为 fallback 展示
   - 当前地图会展示当前任务的执行航线、地块面、覆盖区域和无人机点位
   - 航线来源当前优先使用 `latest_task.drone.instruction.飞行路径`，以匹配 PX4 实际执行航线；只有任务指令缺失时才回退 `field.explicit_route`
-  - `main.py -> Px4MapStateSimulator` 当前也已改为静态快照，不再让无人机点位和电量随时间自行变化
+  - `app/main.py -> Px4MapStateSimulator` 当前也已改为静态快照，不再让无人机点位和电量随时间自行变化
   - 这是为了匹配 PX4 SITL / 虚拟农田演示场景，而不是现实经纬度地图
 - 新前端的仿真态势刷新策略已经确定：
   - 后端仍提供 `/sim/map-state` 与 `/sim/ws/map-state`
@@ -138,7 +138,7 @@
 
 ### Main Flow
 
-- `main.py`
+- `app/main.py`
   - 当前主要负责系统装配、worker 队列、embedded YOLO / virtual drone 服务启动，以及 FastAPI app 组装
   - 支持 `--with-yolo-api`、`--with-virtual-drone-api`、`--with-demo-stack`
   - 支持 `--drone-backend simulated|remote_api|px4`
@@ -340,7 +340,7 @@
 ## Last Verified State
 
 - 2026-04-17 已重新逐项核对当前仓库中的源码、配置、脚本、测试与文档：
-  - `main.py`
+  - `app/main.py`
   - `modules/*.py`
   - `scripts/*.sh`
   - `scripts/*.py`
@@ -378,7 +378,7 @@
     - `/api/` -> 反向代理到后端，并保留 SPA history fallback
     - 默认采用比赛现场优先的 HTTP 配置，而不是强依赖 HTTPS
   - 仓库已新增 `deploy/muye_backend.service` 示例，当前推荐的后端生产托管口径是：
-    - 通过 `systemd` 运行 `uvicorn main:api_app`
+    - 通过 `systemd` 运行 `uvicorn app.main:api_app`
     - 监听 `127.0.0.1:8000`
     - 由 Nginx 统一反代 `/api/`
     - 保持单进程 Uvicorn，避免当前内存态 map/workflow 数据在多 worker 下分裂
@@ -454,7 +454,7 @@
   - Gazebo Sim
   - `mavsdk`
   - 可选 `QGroundControl`
-- `main.py` 中虽然已提供 WebSocket 地图推送接口，但当前运行环境缺少 `websockets` / `wsproto` 时会出现 upgrade 失败：
+- `app/main.py` 中虽然已提供 WebSocket 地图推送接口，但当前运行环境缺少 `websockets` / `wsproto` 时会出现 upgrade 失败：
   - 前端已内建 polling fallback，因此功能可用
   - 但控制台和代理日志会有噪声，后续可通过补依赖或关闭 WS 尝试来收敛
 - 新前端当前仍存在少量 Ant Design v6 deprecation warning：
@@ -518,7 +518,7 @@
     - 无人机演示链当前强调 `simulated / remote_api / px4` 三套后端与 PX4 可视化演示
     - 明确保留“数据库导入真实农业数据后参与决策”的后续规划
 - 2026-04-22 已确认后端正在从单文件入口向模块化 FastAPI 结构演进：
-  - `main.py` 已明显瘦身
+  - `app/main.py` 已明显瘦身
   - 新增 `core/`、`routes/`、`services/`、`models/schemas.py`
   - 当前这轮重构的重点不是改接口语义，而是拆分组织结构
   - 测试兼容策略也已同步调整：

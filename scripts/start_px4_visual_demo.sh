@@ -340,14 +340,14 @@ echo "Starting Muye backend in PX4 mode..."
   PX4_SYSTEM_ADDRESS="$SYSTEM_ADDRESS" \
   QWEN_USE_MOCK=true \
   QWEATHER_USE_MOCK=true \
-  "$PYTHON_BIN" main.py --with-yolo-api --drone-backend px4 --no-capture-on-startup
+  "$PYTHON_BIN" -m app.main --with-yolo-api --drone-backend px4 --no-capture-on-startup
 ) >"$APP_LOG" 2>&1 &
 APP_PID=$!
 
 echo "Starting Muye frontend API..."
 (
   cd "$ROOT_DIR"
-  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m uvicorn main:api_app \
+  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m uvicorn app.main:api_app \
     --host "$API_HOST" \
     --port "$API_PORT" \
     --log-level warning

@@ -381,7 +381,7 @@ echo "Starting Muye PX4 backend..."
   PX4_SYSTEM_ADDRESS="$SYSTEM_ADDRESS" \
   QWEN_USE_MOCK=true \
   QWEATHER_USE_MOCK=true \
-  "$PYTHON_BIN" main.py --with-yolo-api --drone-backend px4 --no-capture-on-startup
+  "$PYTHON_BIN" -m app.main --with-yolo-api --drone-backend px4 --no-capture-on-startup
 ) >"$APP_LOG" 2>&1 &
 APP_PID=$!
 

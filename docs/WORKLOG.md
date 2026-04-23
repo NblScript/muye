@@ -53,13 +53,13 @@
 
 - `scripts/start_demo.sh`
   - 已改为同时启动：
-    - `main.py` 主流程
-    - `uvicorn main:api_app`
+    - `app/main.py` 主流程
+    - `uvicorn app.main:api_app`
     - `Vite` React 前端
 - `scripts/start_px4_visual_demo.sh`
   - 已改为同时启动：
-    - `main.py` 主流程
-    - `uvicorn main:api_app`
+    - `app/main.py` 主流程
+    - `uvicorn app.main:api_app`
     - `Vite` React 前端
 - `scripts/start_competition_mode.sh`
   - 文案已同步为前端通用表述
@@ -86,7 +86,7 @@
   - 为 `/api/` 配置反向代理，并支持 SPA history 路由回退
   - 默认按比赛现场优先口径提供 HTTP 版本，降低证书依赖
   - 新增 `deploy/muye_backend.service`
-  - 用 `systemd` 托管 `uvicorn main:api_app`
+  - 用 `systemd` 托管 `uvicorn app.main:api_app`
   - 明确当前后端走单进程部署，避免内存态实时数据在多 worker 下不一致
   - 为 `/api/` 代理补上 WebSocket、长超时和上传体积限制
   - 为 `systemd` 服务补上 `EnvironmentFile`、`.venv/bin/uvicorn` 和 `data/` 目录权限提示

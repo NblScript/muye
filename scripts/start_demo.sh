@@ -143,14 +143,14 @@ PY
 echo "Starting Muye backend demo stack..."
 (
   cd "$ROOT_DIR"
-  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" main.py --with-demo-stack
+  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m app.main --with-demo-stack
 ) &
 BACKEND_PID=$!
 
 echo "Starting Muye frontend API..."
 (
   cd "$ROOT_DIR"
-  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m uvicorn main:api_app \
+  PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" -m uvicorn app.main:api_app \
     --host "$API_HOST" \
     --port "$API_PORT" \
     --log-level warning
