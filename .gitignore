@@ -20,6 +20,7 @@ __pycache__/
 !/data/logs/.gitkeep
 /data/*.db-wal
 /data/*.db-shm
+/data/chroma_db/
 
 # Streamlit / editor noise
 .streamlit/

@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.5
+
+- RAG 决策增强链路已落地：
+  - 新增 `modules/rag/` 完整 LangChain RAG 框架：
+    - `embeddings.py` — `QwenEmbeddings` 封装阿里云 DashScope text-embedding-v3 API
+    - `vectorstore.py` — `VectorStoreManager` 管理 ChromaDB 持久化向量库，支持 `pesticides` 与 `decisions` 两个 collection
+    - `retriever.py` — `DecisionRAGRetriever` 根据害虫类型 + 作物名称检索相关农药推荐和历史案例；`RetrievedContext` 格式化检索结果为 prompt 文本
+    - `knowledge_loader.py` — 从 SQLite `pesticide_catalog` 或 JSON 文件加载农药知识，支持从 `docs/` 目录加载 markdown 文档
+    - `__init__.py` — 统一导出入口
+  - `modules/ai_decision.py` 已集成 `rag_retriever` 注入：
+    - 新增 `_build_rag_context_text()` 方法，在决策前检索相关知识
+    - RAG 检索文本拼入 `build_structured_input_text()` 的 prompt
+    - 失败降级：只记录 warning 和 `rag:error` 事件，不中断原决策流程
+    - 通过 `event_bus` 发布 `rag:running/completed/error` 事件供前端展示
+  - `main.py` 已集成 RAG 初始化 helper，默认启用但完全容错；首启时自动灌入农药目录知识库
+  - 新增 `scripts/build_rag_knowledge.py` 用于构建 RAG 向量知识库，支持 `--rebuild` 清空重建
+  - `requirements.txt` 新增 LangChain RAG 依赖：
+    - `langchain>=0.3.0`
+    - `langchain-community>=0.3.0`
+    - `langchain-openai>=0.3.0`
+    - `chromadb>=0.5.0`
+    - `langchain-chroma>=0.2.0`
+  - 新增测试覆盖：
+    - `tests/test_rag_embeddings.py` — QwenEmbeddings API 请求/响应契约测试
+    - `tests/test_rag_retriever.py` — DecisionRAGRetriever 查询参数、害虫类型过滤、crop_name 提取、RetrievedContext 格式化测试
+- 后端继续模块化拆分：
+  - `main.py` 进一步瘦身，路由注册下放到 `routes/*.py`
+  - 新增 `core/config.py` 承接配置工具
+  - 新增 `core/deps.py` 承接运行时依赖访问
+  - 新增 `models/schemas.py` 承接前端 API Pydantic schema
+  - 新增 `services/workflow_service.py` 承接工作流聚合服务层
+- 全量回归测试：77 passed in 9.13s
+
 ## v1.4
 
 - SQLite 决策增强上下文已正式接入当前主线：
