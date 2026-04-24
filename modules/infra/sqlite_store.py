@@ -402,7 +402,14 @@ class SqliteStore:
         self._ensure_table_column("fields", "owner_user_id", "TEXT")
         self._ensure_table_column("crop_catalog", "water_demand_coefficient", "REAL")
 
+    _ALLOWED_TABLES = frozenset({"tasks", "fields", "detections", "weather_snapshots", "crop_catalog", "soil_records", "reference_data", "weather_history"})
+
     def _ensure_table_column(self, table_name: str, column_name: str, column_definition: str) -> None:
+        if table_name not in self._ALLOWED_TABLES:
+            raise ValueError(f"Unknown table: {table_name!r}")
+        # column_name is only ever called with hardcoded literals; validate anyway
+        if not column_name.isidentifier():
+            raise ValueError(f"Invalid column name: {column_name!r}")
         with self._lock:
             rows = self._connection.execute(f"PRAGMA table_info('{table_name}')").fetchall()
             existing_columns = {str(row["name"]) for row in rows}

@@ -28,11 +28,11 @@
 | 模块 | 等级 | 测试 | 说明 |
 |------|------|------|------|
 | ai_decision.py | B | 有 | jsonschema 校验 + API mock |
-| decision_context.py | C | 无 | 新增模块，待补测试 |
+| decision_context.py | B | 有 | test_decision_context.py |
 | rag/embeddings.py | B | 有 | test_rag_embeddings.py |
 | rag/vectorstore.py | B | 有 | ChromaDB 交互 |
 | rag/retriever.py | B | 有 | test_rag_retriever.py |
-| rag/knowledge_loader.py | C | 间接 | 通过 retriever 测试覆盖 |
+| rag/knowledge_loader.py | B | 有 | test_knowledge_loader.py |
 
 ### modules/drone/（无人机域）
 
@@ -64,7 +64,7 @@
 
 | 维度 | 评分 | 说明 |
 |------|------|------|
-| 测试覆盖 | B+ | 77 个测试，核心链路全覆盖 |
+| 测试覆盖 | B+ | 145 个测试，核心链路全覆盖 |
 | 文档完整 | B | 架构/设计/API 文档齐全，模块内文档待补充 |
 | 代码规范 | B | 类型注解 + jsonschema，部分模块缺少 docstring |
 | 可维护性 | A- | 领域分组清晰，依赖方向正确 |
@@ -72,8 +72,7 @@
 
 ## 待改进项（按优先级）
 
-1. **decision_context.py** — 无测试，需补充
-2. **knowledge_loader.py** — 缺少独立测试
-3. **px4_simulator.py** — 需要 SITL 集成测试
-4. **data_collector.py** — 缺少独立单元测试
-5. **app/main.py** — 缺少启动流程的单元测试
+1. **px4_simulator.py** — 需要 SITL 集成测试
+2. **data_collector.py** — 缺少独立单元测试
+3. **app/main.py** — 缺少启动流程的单元测试
+4. **sqlite_store.py** — 1786 行/47 方法，建议按功能拆分 mixin

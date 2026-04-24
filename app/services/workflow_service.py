@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -26,19 +27,26 @@ from app.deps import iso_utc_offset
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
+@lru_cache(maxsize=1)
+def _get_sqlite_path() -> Path:
+    """Get the SQLite path (cached)."""
+    return Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+
+
+@lru_cache(maxsize=1)
+def get_sqlite_store() -> SqliteStore:
+    """Get the shared SqliteStore instance (singleton)."""
+    return SqliteStore(_get_sqlite_path())
+
+
 def load_sqlite_task_views(
     limit: int = 40,
     *,
     status: str | None = None,
     search: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Load task views from SQLite."""
-    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-    store = SqliteStore(sqlite_path)
-    try:
-        return store.fetch_task_views(limit=limit, status=status, search=search)
-    finally:
-        store.close()
+    """Load task views from SQLite using shared store."""
+    return get_sqlite_store().fetch_task_views(limit=limit, status=status, search=search)
 
 
 def count_sqlite_tasks(
@@ -46,23 +54,13 @@ def count_sqlite_tasks(
     status: str | None = None,
     search: str | None = None,
 ) -> int:
-    """Count tasks in SQLite."""
-    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-    store = SqliteStore(sqlite_path)
-    try:
-        return store.count_task_views(status=status, search=search)
-    finally:
-        store.close()
+    """Count tasks in SQLite using shared store."""
+    return get_sqlite_store().count_task_views(status=status, search=search)
 
 
 def clear_demo_runtime_state() -> None:
-    """Clear demo runtime state from SQLite."""
-    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-    store = SqliteStore(sqlite_path)
-    try:
-        store.clear_runtime_task_data()
-    finally:
-        store.close()
+    """Clear demo runtime state from SQLite using shared store."""
+    get_sqlite_store().clear_runtime_task_data()
 
 
 def task_history_status(task: dict[str, Any]) -> str:
@@ -466,14 +464,13 @@ def build_history_response(
     search: str | None = None,
 ) -> WorkflowHistoryResponse:
     """Build the workflow history response."""
-    import app.services.workflow_service as _ws
     import modules.infra.event_bus as _eb
 
     normalized_status = None if status in {None, "", "all"} else status
 
     # Use module-level attribute references so tests can monkeypatch
-    count_fn = _ws.count_sqlite_tasks
-    load_fn = _ws.load_sqlite_task_views
+    count_fn = count_sqlite_tasks
+    load_fn = load_sqlite_task_views
     load_events_fn = _eb.load_events
     build_task_views_fn = _eb.build_task_views
 

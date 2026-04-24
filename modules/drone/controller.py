@@ -594,11 +594,13 @@ class DroneController:
             unit = unit_match.group(2).lower()
             if unit in ("ml", "毫升"):
                 return round(amount / 1000, 6)
-            # 固体农药单位（假设密度为1，按1:1换算）
+            # 固体农药单位 — 粗略估算：假设密度≈1 g/mL（实际粉剂~0.5、颗粒剂~0.8），
+            # 此换算仅用于喷洒速率近似，极端场景可能有±50%偏差；
+            # 后续应让 Qwen 直接返回体积单位(mL/L)以消除密度假设
             if unit in ("g", "克"):
-                return round(amount / 1000, 6)  # 克 → 升
+                return round(amount / 1000, 6)  # 克 → 升（密度≈1 粗略换算）
             if unit in ("kg", "千克"):
-                return amount  # 千克 → 升
+                return amount  # 千克 → 升（密度≈1 粗略换算）
             return amount
 
         return self._extract_numeric_value(text)
