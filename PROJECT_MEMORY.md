@@ -103,13 +103,18 @@
   - 航线来源当前优先使用 `latest_task.drone.instruction.飞行路径`，以匹配 PX4 实际执行航线；只有任务指令缺失时才回退 `field.explicit_route`
   - `app/main.py -> Px4MapStateSimulator` 当前也已改为静态快照，不再让无人机点位和电量随时间自行变化
   - 这是为了匹配 PX4 SITL / 虚拟农田演示场景，而不是现实经纬度地图
-- 新前端的仿真态势刷新策略已经确定：
-  - 后端仍提供 `/sim/map-state` 与 `/sim/ws/map-state`
-  - 若运行环境缺少 WebSocket 支持库，则 `useSimMapState()` 会自动回退到 HTTP polling
-  - 但当前 `Dashboard.tsx` 的主地图展示并不直接消费 `sim/map-state`
-  - 当前前端主展示以 `/workflow/state -> latest_task` 为准
-  - `frontend/src/components/map/FieldMap.tsx` 会优先使用 `latest_task.drone.position` 中的 PX4 实时遥测位置；没有实时位置时才回退到任务航线推演
-  - `frontend/src/pages/Dashboard.tsx` 当前将 `workflow/state` 轮询间隔收紧到 `500ms`，以匹配 PX4 实时移动
+- 新前端的仿真态势刷新策略已完成重构（2026-04-24）：
+  - 后端 WebSocket `/sim/ws/map-state` 现在推送合并状态 `WsCombinedState`（sim_map + workflow_state）
+  - 前端 `useWebSocket` hook 已重写，支持：
+    - 指数退避自动重连（1s → 2s → 4s → ... → 30s 上限）
+    - 连接断开时自动降级到 HTTP polling
+    - 重连成功时显示 toast 提示
+  - `Dashboard.tsx` 现在通过 WebSocket 统一接收 `sim_map` 与 `workflow_state`
+  - 断连时降级为并行调用 `/sim/map-state` + `/workflow/state` 轮询
+  - `FieldMap.tsx` 无人机位置数据源优先级调整为：
+    - 优先使用 `simMapState.drones`（仿真推送）
+    - 回退到 `latest_task.drone.position`（任务驱动）
+  - 前端顶部增加连接状态指示器（"实时" 绿色 / "轮询" 橙色）
 - LLM 与 planner 的职责边界已经收敛：
   - `ai_decision.py` 只输出用药建议与农事建议
   - `mission_planner.py` 负责飞行路径、高度、速度、喷洒速率与气象限制
@@ -155,6 +160,7 @@
     - `WorkflowHistoryResponse`
     - `DashboardContextResponse`
     - `SimMapStateResponse`
+    - `WsCombinedState`（合并 WebSocket 推送 schema）
 - `services/workflow_service.py`
   - 当前承接工作流状态、历史记录、SQLite/event bus 聚合、上传文件名清洗等服务层逻辑
 - `services/map_simulator.py`
@@ -171,6 +177,7 @@
   - 当前承接任务原图 / 标注图读取接口
 - `routes/sim.py`
   - 当前承接 `/sim/map-state` 与 `/sim/ws/map-state`
+  - WebSocket 推送已改为合并 `WsCombinedState`（sim_map + workflow_state），workflow 构建失败时降级为 null
 - `modules/drone_controller.py`
   - 已支持 simulated、remote API、PX4 三种执行路径
   - 无人机状态流会写入 SQLite `drone_mission_updates`
@@ -303,10 +310,15 @@
     - 千问建议与安全提示
     - 任务历史检索
     - 运行模式展示
+  - `useWebSocket` hook 已重写，支持指数退避自动重连、轮询降级、重连 toast
+  - Dashboard 通过 WebSocket 统一接收合并状态，断连降级轮询
+  - FieldMap 优先使用 simMapState 无人机数据，回退任务驱动
+  - 连接状态指示器：实时（绿）/ 轮询（橙）
 - `tests/test_main.py`
   - 已补 React 前端 API 契约测试
   - 当前策略是不依赖 `TestClient`，而是直接调用 endpoint 函数，降低 pytest 在当前环境中的阻塞概率
   - 当前 monkeypatch 仍主要通过 `main.*` 注入，因此拆分后的路由 / 服务层需要显式桥接这些测试替换点
+  - 已新增 WebSocket 合并推送韧性测试：workflow 构建失败时 sim_map 仍正常推送、workflow_state 降级为 null
 - `frontend/PROJECT_STRUCTURE.md`
   - 已随当前 Vite 前端真实目录同步
   - 各目录均带中文注释，供后续继续扩展
@@ -386,7 +398,7 @@
     - 显式使用 `/var/www/muye/backend/.venv/bin/uvicorn`
   - 当前后端没有额外挂载独立静态目录；任务图片仍经由 API 动态返回
   - 后端已提供 `/api/sim/ws/map-state`，因此 Nginx `/api/` 代理仍需要支持 WebSocket upgrade
-  - 但当前前端主地图真实渲染来源仍是 `/api/workflow/state -> latest_task`，不是直接消费 `sim/ws/map-state`
+  - 但当前前端主地图真实渲染来源已改为 WebSocket 合并推送 `WsCombinedState`，不再是单独轮询 `/workflow/state`
   - 上传安全校验已补齐：
     - `/demo/upload-image` 现在要求真实可解码图片内容
     - 单文件默认上限 `10MB`
@@ -455,7 +467,7 @@
   - `mavsdk`
   - 可选 `QGroundControl`
 - `app/main.py` 中虽然已提供 WebSocket 地图推送接口，但当前运行环境缺少 `websockets` / `wsproto` 时会出现 upgrade 失败：
-  - 前端已内建 polling fallback，因此功能可用
+  - 前端已内建指数退避重连 + polling fallback，因此功能可用
   - 但控制台和代理日志会有噪声，后续可通过补依赖或关闭 WS 尝试来收敛
 - 新前端当前仍存在少量 Ant Design v6 deprecation warning：
   - 不影响构建和演示
