@@ -686,6 +686,10 @@ def test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path) -> None:
     assert "农药名称=吡虫啉" in spray_row["notes"]
 
 
+def test_main_persists_pipeline_to_sqlite(monkeypatch, tmp_path) -> None:
+    test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path)
+
+
 def test_main_pipeline_uses_mission_final_status_for_spray_record(monkeypatch, tmp_path) -> None:
     """Test that mission final status is used for spray records via MuyeConfig."""
     config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
