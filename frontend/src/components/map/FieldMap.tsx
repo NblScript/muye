@@ -361,9 +361,9 @@ export default function FieldMap({ transport = 'polling', latestTask, simMapStat
   const displayFieldPlots = primaryFieldPlot ? [primaryFieldPlot] : []
   const simRoutePoints = buildSimRoutePoints(simMapState)
   const routePoints = taskRoutePoints.length >= 2 ? taskRoutePoints : simRoutePoints
-  const activeDrones = simMapState?.drones.length
-    ? simMapState.drones
-    : buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition)
+  const activeDrones = latestTask
+    ? buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition)
+    : (simMapState?.drones.length ? simMapState.drones : [])
   const activeDroneCount = activeDrones.filter((item) => item.status === '作业中').length
   const totalAreaMu = displayFieldPlots.reduce((sum, item) => sum + item.areaMu, 0)
   const activeDronePointGroups = activeDrones.map((item) => [toLatLngPoint(item.position.x, item.position.y)])
