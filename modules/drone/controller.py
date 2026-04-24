@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import re
 import time
 from typing import Any
 
@@ -474,3 +475,129 @@ class DroneController:
             raise DroneExecutionError("无人机接口拒绝执行任务")
         if status and status not in {"accepted", "queued", "running"}:
             raise DroneExecutionError(f"无人机接口返回异常状态: {status}")
+
+    def build_spray_record(
+        self,
+        *,
+        request_id: str,
+        field_context: dict[str, Any],
+        decision: dict[str, Any],
+        weather: dict[str, Any],
+        execution_plan: dict[str, Any],
+        mission_result: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """
+        从执行结果构建喷洒记录。
+        返回 None 表示无法构建有效记录（如 field_id 缺失）。
+        """
+        field_id = str(field_context.get("field_id") or "").strip()
+        if not field_id:
+            return None
+
+        medication = decision.get("用药") or {}
+        crop_cycle = field_context.get("crop_cycle") or {}
+        crop_cycle_id = crop_cycle.get("id")
+        pesticide_name = str(medication.get("农药名称") or "").strip()
+        pesticide_id = None
+        if pesticide_name and self.sqlite_store:
+            pesticide_id = self.sqlite_store.resolve_pesticide_id_by_name(pesticide_name)
+
+        total_dosage = self._parse_total_dosage_liters(medication.get("总量"))
+        spray_area_mu = self._extract_numeric_value(field_context.get("area_mu"))
+        dosage_per_mu = None
+        if total_dosage is not None and spray_area_mu and spray_area_mu > 0:
+            dosage_per_mu = round(total_dosage / spray_area_mu, 4)
+
+        notes_parts = []
+        if pesticide_name:
+            notes_parts.append(f"农药名称={pesticide_name}")
+        if medication.get("浓度"):
+            notes_parts.append(f"浓度={medication['浓度']}")
+        if medication.get("安全提示"):
+            notes_parts.append(
+                "安全提示=" + "；".join(str(item) for item in medication.get("安全提示", []))
+            )
+        if decision.get("农事建议"):
+            notes_parts.append(
+                "农事建议=" + "；".join(str(item) for item in decision.get("农事建议", []))
+            )
+
+        return {
+            "request_id": request_id,
+            "field_id": field_id,
+            "crop_cycle_id": crop_cycle_id,
+            "drone_task_id": mission_result.get("task_id") or mission_result.get("mission_id"),
+            "pesticide_id": pesticide_id,
+            "spray_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "spray_area_mu": spray_area_mu,
+            "dosage_per_mu": dosage_per_mu,
+            "total_dosage": total_dosage,
+            "dilution_ratio": medication.get("配比"),
+            "spray_rate_lpm": execution_plan.get("喷洒速率"),
+            "flight_height_m": execution_plan.get("高度"),
+            "flight_speed_mps": execution_plan.get("速度"),
+            "weather_snapshot": weather,
+            "result_status": self._normalize_spray_result_status(mission_result),
+            "source": "main_pipeline",
+            "notes": " | ".join(notes_parts) if notes_parts else None,
+        }
+
+    def _normalize_spray_result_status(self, mission_result: dict[str, Any]) -> str:
+        status = str(
+            mission_result.get("final_status")
+            or mission_result.get("last_known_status")
+            or mission_result.get("status")
+            or "planned"
+        ).strip().lower()
+        if status in {"completed", "simulated"}:
+            return "completed"
+        if status in {"failed", "error"}:
+            return "failed"
+        if status in {"cancelled", "canceled"}:
+            return "cancelled"
+        if status in {
+            "takeoff",
+            "enroute",
+            "spraying",
+            "returning",
+            "running",
+            "in_progress",
+            "processing",
+        }:
+            return "in_progress"
+        return "planned"
+
+    def _extract_numeric_value(self, value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+        if not match:
+            return None
+        return float(match.group(0))
+
+    def _parse_total_dosage_liters(self, value: Any) -> float | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        text = str(value).strip()
+        if not text:
+            return None
+
+        normalized = text.replace(" ", "")
+        unit_match = re.search(r"(-?\d+(?:\.\d+)?)(mL|ml|ML|毫升|L|l|升|g|G|kg|KG|克|千克)", normalized)
+        if unit_match:
+            amount = float(unit_match.group(1))
+            unit = unit_match.group(2).lower()
+            if unit in ("ml", "毫升"):
+                return round(amount / 1000, 6)
+            if unit in ("g", "克"):
+                return round(amount / 1000, 6)
+            if unit in ("kg", "千克"):
+                return amount
+            return amount
+
+        return self._extract_numeric_value(text)

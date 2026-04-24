@@ -1,37 +1,14 @@
 """Workflow state and history endpoints."""
 
-import sys
-
 from fastapi import FastAPI, Query
 
 from models.schemas import WorkflowHistoryResponse, WorkflowStateResponse
-from app.services.workflow_service import (
-    build_history_response as _original_build_history,
-    build_workflow_state_response,
-)
-
-
-def _get_main_module():
-    return (
-        sys.modules.get("app.main")
-        or sys.modules.get("main")
-        or sys.modules.get("__main__")
-    )
-
-
-def _get_history_builder():
-    """Get the history builder function, checking for monkeypatching."""
-    main_module = _get_main_module()
-    if main_module is not None:
-        patched = getattr(main_module, "_build_history_response", None)
-        if patched is not None:
-            return patched
-    return _original_build_history
+import app.services.workflow_service as workflow_service
 
 
 async def get_workflow_state() -> WorkflowStateResponse:
     """Workflow state endpoint handler."""
-    return build_workflow_state_response()
+    return workflow_service.build_workflow_state_response()
 
 
 async def get_workflow_history(
@@ -40,8 +17,7 @@ async def get_workflow_history(
     search: str | None = Query(default=None),
 ) -> WorkflowHistoryResponse:
     """Workflow history endpoint handler."""
-    builder = _get_history_builder()
-    return builder(limit=limit, status=status, search=search)
+    return workflow_service.build_history_response(limit=limit, status=status, search=search)
 
 
 def register_workflow_routes(app: FastAPI) -> None:

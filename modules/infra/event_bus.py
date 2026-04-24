@@ -15,11 +15,56 @@ EVENTS_FILE = LOGS_DIR / "demo_events.jsonl"
 
 
 class FileEventBus:
-    def __init__(self, path: Path | None = None) -> None:
+    def __init__(
+        self,
+        path: Path | None = None,
+        *,
+        max_file_size_mb: float = 10.0,
+        max_backup_files: int = 5,
+    ) -> None:
         ensure_runtime_dirs()
         self.path = path or EVENTS_FILE
+        self.max_file_size_mb = max_file_size_mb
+        self.max_backup_files = max_backup_files
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.touch(exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Log rotation helpers
+    # ------------------------------------------------------------------
+
+    def _should_rotate(self) -> bool:
+        """Return True if the current log file exceeds *max_file_size_mb*."""
+        try:
+            size = self.path.stat().st_size
+        except OSError:
+            return False
+        return size >= self.max_file_size_mb * 1024 * 1024
+
+    def _rotate_log(self) -> None:
+        """Rotate the log file: events.jsonl → .1, .1 → .2, … drop oldest."""
+        # Delete the oldest backup if it would exceed the limit.
+        oldest = self.path.parent / f"{self.path.name}.{self.max_backup_files}"
+        if oldest.exists():
+            oldest.unlink()
+
+        # Shift existing backup files up by one index.
+        for i in range(self.max_backup_files - 1, 0, -1):
+            src = self.path.parent / f"{self.path.name}.{i}"
+            dst = self.path.parent / f"{self.path.name}.{i + 1}"
+            if src.exists():
+                src.rename(dst)
+
+        # Rename the current file to .1.
+        backup_1 = self.path.parent / f"{self.path.name}.1"
+        self.path.rename(backup_1)
+
+        # Create a fresh, empty log file.
+        self.path.touch(exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def publish(
         self,
@@ -30,6 +75,10 @@ class FileEventBus:
         message: str,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Check file size before writing; rotate if needed.
+        if self._should_rotate():
+            self._rotate_log()
+
         event = {
             "event_id": uuid4().hex,
             "timestamp": datetime.now(timezone.utc).isoformat(),

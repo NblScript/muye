@@ -14,8 +14,8 @@ import argparse
 import asyncio
 import logging
 import os
-import re
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -40,6 +40,7 @@ from modules.infra.common import (
 from modules.detection.data_collector import DataCollectorService
 from modules.decision.decision_context import SqliteDecisionContextProvider
 from modules.drone.controller import DroneController
+from modules.drone.field_context_resolver import FieldContextResolver
 from modules.infra.event_bus import FileEventBus
 from modules.detection.image_processor import ImageProcessor
 from modules.detection.local_yolo_api import create_app as create_local_yolo_app
@@ -94,64 +95,8 @@ from app.services.workflow_service import (
 
 # Import core configuration
 from app.config import build_local_yolo_urls, parse_env_bool, resolve_loopback_host
+from app.config_types import MuyeConfig
 from app.deps import embedded_yolo_runner_for_health
-
-# Re-export for backward compatibility with tests
-# These are internal functions that tests monkeypatch
-def _load_sqlite_task_views(*args, **kwargs):
-    return load_sqlite_task_views(*args, **kwargs)
-
-def _count_sqlite_tasks(*args, **kwargs):
-    return count_sqlite_tasks(*args, **kwargs)
-
-def _load_task_by_request_id(*args, **kwargs):
-    return load_task_by_request_id(*args, **kwargs)
-
-def _build_history_response(*args, **kwargs):
-    return build_history_response(*args, **kwargs)
-
-def _clear_demo_runtime_state():
-    return clear_demo_runtime_state()
-
-_build_local_yolo_urls = build_local_yolo_urls
-_resolve_loopback_host = resolve_loopback_host
-
-# Re-export from modules for test monkeypatching
-from modules.infra.common import DATA_DIR, IMAGES_DIR, ensure_runtime_dirs, load_environment
-from modules.infra.event_bus import FileEventBus, build_task_views, load_events
-
-# Re-export health check functions for test monkeypatching
-from app.routes.health import check_data_dir_health, check_embedded_yolo_health, check_sqlite_health, collect_health_status
-
-_check_sqlite_health = check_sqlite_health
-_check_data_dir_health = check_data_dir_health
-_check_embedded_yolo_health = check_embedded_yolo_health
-_collect_health_status = collect_health_status
-
-# Import annotation function for tests
-from app.routes.tasks import annotate_image, get_task_annotated_image, get_task_original_image
-from app.routes.sim import register_sim_routes, get_sim_map_state
-from app.routes.workflow import get_workflow_history, get_workflow_state
-from app.routes.demo import upload_demo_image, reset_demo_events, MAX_UPLOAD_BYTES as DEMO_MAX_UPLOAD_BYTES
-from app.routes.health import api_health
-from app.routes.dashboard import get_dashboard_context
-
-_annotate_image = annotate_image
-MAX_UPLOAD_BYTES = DEMO_MAX_UPLOAD_BYTES
-
-# For test monkeypatching of _save_uploaded_image
-from app.services.workflow_service import sanitize_filename
-from modules.infra.common import IMAGES_DIR, ensure_runtime_dirs
-import time as _time_module
-
-def _save_uploaded_image(file, content: bytes):
-    """Save uploaded image for test monkeypatching."""
-    ensure_runtime_dirs()
-    timestamp = _time_module.strftime("%Y%m%d-%H%M%S", _time_module.localtime())
-    filename = sanitize_filename(file.filename)
-    target = IMAGES_DIR / f"{timestamp}-{filename}"
-    target.write_bytes(content)
-    return target
 
 
 # ============================================================================
@@ -177,157 +122,182 @@ register_sim_routes(api_app, simulator)
 # Embedded API Runners
 # ============================================================================
 
-class EmbeddedYoloApiRunner:
+
+class EmbeddedApiRunner(ABC):
+    """Abstract base class for embedded API runners."""
+
+    def __init__(self, logger: logging.Logger) -> None:
+        self.logger = logger
+        self.settings = self._load_settings()
+        self.server: uvicorn.Server | None = None
+        self.server_task: asyncio.Task[None] | None = None
+
+    @abstractmethod
+    def _load_settings(self) -> Any:
+        """Load and return the settings object for this runner."""
+        ...
+
+    @abstractmethod
+    def _create_app(self) -> FastAPI:
+        """Create and return the FastAPI application."""
+        ...
+
+    @abstractmethod
+    def _get_health_url(self) -> str:
+        """Return the health check URL for this API."""
+        ...
+
+    @abstractmethod
+    def _get_startup_message(self) -> str:
+        """Return the startup success log message."""
+        ...
+
+    @abstractmethod
+    def _get_startup_error_prefix(self) -> str:
+        """Return the prefix for startup error messages."""
+        ...
+
+    @abstractmethod
+    def _get_log_extra(self) -> dict[str, Any]:
+        """Return extra fields for the startup log message."""
+        ...
+
+    async def start(self) -> None:
+        started = time.perf_counter()
+        request_id = generate_request_id()
+        app = self._create_app()
+        config = uvicorn.Config(
+            app=app,
+            host=self.settings.host,
+            port=self.settings.port,
+            log_level="info",
+            access_log=False,
+        )
+        server = uvicorn.Server(config)
+        server.install_signal_handlers = lambda: None
+        self.server = server
+        self.server_task = asyncio.create_task(server.serve())
+
+        try:
+            await self._wait_until_ready()
+            log_event(
+                self.logger,
+                logging.INFO,
+                self._get_startup_message(),
+                request_id=request_id,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                **self._get_log_extra(),
+            )
+        except Exception:
+            await self.stop()
+            raise
+
+    async def stop(self) -> None:
+        if not self.server_task:
+            return
+
+        self.server.should_exit = True  # type: ignore[union-attr]
+        try:
+            await asyncio.wait_for(self.server_task, timeout=5)
+        except asyncio.TimeoutError:
+            self.server_task.cancel()
+            await asyncio.gather(self.server_task, return_exceptions=True)
+        finally:
+            self.server_task = None
+            self.server = None
+
+    async def _wait_until_ready(self, timeout_seconds: float = 30, interval_seconds: float = 0.2) -> None:
+        deadline = time.monotonic() + timeout_seconds
+        health_url = self._get_health_url()
+        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
+            while time.monotonic() < deadline:
+                if self.server_task and self.server_task.done():
+                    error = self.server_task.exception()
+                    if error:
+                        raise RuntimeError(f"{self._get_startup_error_prefix()}启动失败: {error}") from error
+                    raise RuntimeError(f"{self._get_startup_error_prefix()}意外退出")
+                try:
+                    response = await client.get(health_url)
+                    if response.status_code == 200:
+                        return
+                except httpx.HTTPError:
+                    pass
+                await asyncio.sleep(interval_seconds)
+        raise TimeoutError(f"等待 {self._get_startup_error_prefix()}就绪超时: {health_url}")
+
+
+class EmbeddedYoloApiRunner(EmbeddedApiRunner):
     """Runner for embedded YOLO API server."""
 
-    def __init__(self, logger: logging.Logger) -> None:
-        self.logger = logger
-        self.settings = load_local_yolo_settings()
-        self.detect_url, self.health_url = build_local_yolo_urls(
-            self.settings.host,
-            self.settings.port,
-        )
-        self.server: uvicorn.Server | None = None
-        self.server_task: asyncio.Task[None] | None = None
+    def _load_settings(self) -> Any:
+        return load_local_yolo_settings()
 
-    async def start(self) -> None:
-        started = time.perf_counter()
-        request_id = generate_request_id()
-        app = create_local_yolo_app(settings=self.settings, logger=self.logger)
-        config = uvicorn.Config(
-            app=app,
-            host=self.settings.host,
-            port=self.settings.port,
-            log_level="info",
-            access_log=False,
-        )
-        server = uvicorn.Server(config)
-        server.install_signal_handlers = lambda: None
-        self.server = server
-        self.server_task = asyncio.create_task(server.serve())
+    def _create_app(self) -> FastAPI:
+        return create_local_yolo_app(settings=self.settings, logger=self.logger)
 
-        try:
-            await self._wait_until_ready()
-            log_event(
-                self.logger,
-                logging.INFO,
-                "内嵌 YOLO API 已启动",
-                request_id=request_id,
-                duration_ms=(time.perf_counter() - started) * 1000,
-                detect_url=self.detect_url,
-                health_url=self.health_url,
-            )
-        except Exception:
-            await self.stop()
-            raise
+    def _get_health_url(self) -> str:
+        _, health_url = build_local_yolo_urls(self.settings.host, self.settings.port)
+        return health_url
 
-    async def stop(self) -> None:
-        if not self.server_task:
-            return
+    def _get_startup_message(self) -> str:
+        return "内嵌 YOLO API 已启动"
 
-        self.server.should_exit = True  # type: ignore[union-attr]
-        try:
-            await asyncio.wait_for(self.server_task, timeout=5)
-        except asyncio.TimeoutError:
-            self.server_task.cancel()
-            await asyncio.gather(self.server_task, return_exceptions=True)
-        finally:
-            self.server_task = None
-            self.server = None
+    def _get_startup_error_prefix(self) -> str:
+        return "内嵌 YOLO API"
 
-    async def _wait_until_ready(self, timeout_seconds: float = 30, interval_seconds: float = 0.2) -> None:
-        deadline = time.monotonic() + timeout_seconds
-        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
-            while time.monotonic() < deadline:
-                if self.server_task and self.server_task.done():
-                    error = self.server_task.exception()
-                    if error:
-                        raise RuntimeError(f"内嵌 YOLO API 启动失败: {error}") from error
-                    raise RuntimeError("内嵌 YOLO API 意外退出")
-                try:
-                    response = await client.get(self.health_url)
-                    if response.status_code == 200:
-                        return
-                except httpx.HTTPError:
-                    pass
-                await asyncio.sleep(interval_seconds)
-        raise TimeoutError(f"等待 YOLO API 就绪超时: {self.health_url}")
+    def _get_log_extra(self) -> dict[str, Any]:
+        detect_url, health_url = build_local_yolo_urls(self.settings.host, self.settings.port)
+        return {"detect_url": detect_url, "health_url": health_url}
+
+    @property
+    def detect_url(self) -> str:
+        """Return the detect API URL."""
+        detect_url, _ = build_local_yolo_urls(self.settings.host, self.settings.port)
+        return detect_url
+
+    @property
+    def health_url(self) -> str:
+        """Return the health check URL."""
+        _, health_url = build_local_yolo_urls(self.settings.host, self.settings.port)
+        return health_url
 
 
-class EmbeddedDroneApiRunner:
+class EmbeddedDroneApiRunner(EmbeddedApiRunner):
     """Runner for embedded virtual drone API server."""
 
-    def __init__(self, logger: logging.Logger) -> None:
-        self.logger = logger
-        self.settings = load_virtual_drone_settings()
+    def _load_settings(self) -> Any:
+        return load_virtual_drone_settings()
+
+    def _create_app(self) -> FastAPI:
+        return create_virtual_drone_app(settings=self.settings, logger=self.logger)
+
+    def _get_health_url(self) -> str:
         access_host = resolve_loopback_host(self.settings.host)
-        self.api_url = f"http://{access_host}:{self.settings.port}/missions"
-        self.health_url = f"http://{access_host}:{self.settings.port}/health"
-        self.server: uvicorn.Server | None = None
-        self.server_task: asyncio.Task[None] | None = None
+        return f"http://{access_host}:{self.settings.port}/health"
 
-    async def start(self) -> None:
-        started = time.perf_counter()
-        request_id = generate_request_id()
-        app = create_virtual_drone_app(settings=self.settings, logger=self.logger)
-        config = uvicorn.Config(
-            app=app,
-            host=self.settings.host,
-            port=self.settings.port,
-            log_level="info",
-            access_log=False,
-        )
-        server = uvicorn.Server(config)
-        server.install_signal_handlers = lambda: None
-        self.server = server
-        self.server_task = asyncio.create_task(server.serve())
+    def _get_startup_message(self) -> str:
+        return "内嵌虚拟无人机 API 已启动"
 
-        try:
-            await self._wait_until_ready()
-            log_event(
-                self.logger,
-                logging.INFO,
-                "内嵌虚拟无人机 API 已启动",
-                request_id=request_id,
-                duration_ms=(time.perf_counter() - started) * 1000,
-                api_url=self.api_url,
-                health_url=self.health_url,
-            )
-        except Exception:
-            await self.stop()
-            raise
+    def _get_startup_error_prefix(self) -> str:
+        return "内嵌虚拟无人机 API"
 
-    async def stop(self) -> None:
-        if not self.server_task:
-            return
+    def _get_log_extra(self) -> dict[str, Any]:
+        access_host = resolve_loopback_host(self.settings.host)
+        api_url = f"http://{access_host}:{self.settings.port}/missions"
+        health_url = f"http://{access_host}:{self.settings.port}/health"
+        return {"api_url": api_url, "health_url": health_url}
 
-        self.server.should_exit = True  # type: ignore[union-attr]
-        try:
-            await asyncio.wait_for(self.server_task, timeout=5)
-        except asyncio.TimeoutError:
-            self.server_task.cancel()
-            await asyncio.gather(self.server_task, return_exceptions=True)
-        finally:
-            self.server_task = None
-            self.server = None
+    @property
+    def api_url(self) -> str:
+        """Return the drone API URL."""
+        access_host = resolve_loopback_host(self.settings.host)
+        return f"http://{access_host}:{self.settings.port}/missions"
 
-    async def _wait_until_ready(self, timeout_seconds: float = 30, interval_seconds: float = 0.2) -> None:
-        deadline = time.monotonic() + timeout_seconds
-        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
-            while time.monotonic() < deadline:
-                if self.server_task and self.server_task.done():
-                    error = self.server_task.exception()
-                    if error:
-                        raise RuntimeError(f"内嵌虚拟无人机 API 启动失败: {error}") from error
-                    raise RuntimeError("内嵌虚拟无人机 API 意外退出")
-                try:
-                    response = await client.get(self.health_url)
-                    if response.status_code == 200:
-                        return
-                except httpx.HTTPError:
-                    pass
-                await asyncio.sleep(interval_seconds)
-        raise TimeoutError(f"等待虚拟无人机 API 就绪超时: {self.health_url}")
+    @property
+    def health_url(self) -> str:
+        """Return the health check URL."""
+        access_host = resolve_loopback_host(self.settings.host)
+        return f"http://{access_host}:{self.settings.port}/health"
 
 
 # ============================================================================
@@ -337,20 +307,22 @@ class EmbeddedDroneApiRunner:
 class MuyeApplication:
     """Main application class for the Muye agricultural pest control system."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: MuyeConfig | None = None) -> None:
         ensure_runtime_dirs()
         load_environment()
         self.logger = build_logger("muye")
         self.drone_config = load_json(CONFIG_DIR / "drone_config.json")
+        self.config = config or MuyeConfig.from_env(drone_config=self.drone_config)
         self._apply_runtime_drone_overrides()
         self.yolo_config = load_yaml(CONFIG_DIR / "yolo_config.yaml")
         self.event_bus = FileEventBus()
-        self.client_ip = os.getenv(
-            "SERVICE_CLIENT_IP",
-            self.drone_config.get("network", {}).get("client_ip", "127.0.0.1"),
+        self.client_ip = self.config.client_ip
+        self.sqlite_store = SqliteStore(self.config.sqlite_path, logger=self.logger)
+        self.field_resolver = FieldContextResolver(
+            sqlite_store=self.sqlite_store,
+            drone_config=self.drone_config,
+            logger=self.logger,
         )
-        sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-        self.sqlite_store = SqliteStore(sqlite_path, logger=self.logger)
         self.rag_embeddings: QwenEmbeddings | None = None
         self.rag_vector_store: VectorStoreManager | None = None
         self.rag_retriever: DecisionRAGRetriever | None = None
@@ -359,39 +331,28 @@ class MuyeApplication:
         self.pending_images: set[str] = set()
         self.worker_tasks: list[asyncio.Task[None]] = []
 
-        self.yolo_api_url = os.getenv("YOLO_API_URL", "http://127.0.0.1:8010/detect")
+        self.yolo_api_url = self.config.yolo_api_url
         self.image_processor = ImageProcessor(
-            api_url=self.yolo_api_url,
-            api_key=os.getenv("YOLO_API_KEY", ""),
-            confidence_threshold=float(
-                os.getenv(
-                    "YOLO_CONFIDENCE_THRESHOLD",
-                    self.yolo_config.get("confidence_threshold", 0.25),
-                )
-            ),
+            api_url=self.config.yolo_api_url,
+            api_key=self.config.yolo_api_key,
+            confidence_threshold=self.config.yolo_confidence_threshold,
             timeout_seconds=float(self.yolo_config.get("timeout_seconds", 20)),
             batch_size=int(self.yolo_config.get("batch_size", 4)),
             headers=self.yolo_config.get("request_headers", {}),
             logger=self.logger,
         )
         self.weather_client = WeatherClient(
-            geo_api_url=os.getenv(
-                "QWEATHER_GEO_URL",
-                "https://geoapi.qweather.com/v2/city/lookup",
-            ),
-            weather_api_url=os.getenv(
-                "QWEATHER_WEATHER_URL",
-                "https://devapi.qweather.com/v7/weather/now",
-            ),
-            api_key=os.getenv("QWEATHER_API_KEY", ""),
-            use_mock=os.getenv("QWEATHER_USE_MOCK", "false").lower() in {"1", "true", "yes", "on"},
+            geo_api_url=self.config.qweather_geo_url,
+            weather_api_url=self.config.qweather_weather_url,
+            api_key=self.config.qweather_api_key,
+            use_mock=self.config.qweather_use_mock,
             mock_weather={
-                "temperature": os.getenv("QWEATHER_MOCK_TEMPERATURE", "26"),
-                "humidity": os.getenv("QWEATHER_MOCK_HUMIDITY", "58"),
-                "summary": os.getenv("QWEATHER_MOCK_SUMMARY", "多云"),
-                "wind_direction": os.getenv("QWEATHER_MOCK_WIND_DIRECTION", "东南风"),
-                "wind_scale_text": os.getenv("QWEATHER_MOCK_WIND_SCALE", "2"),
-                "wind_speed": os.getenv("QWEATHER_MOCK_WIND_SPEED", "3.3"),
+                "temperature": self.config.qweather_mock_temperature,
+                "humidity": self.config.qweather_mock_humidity,
+                "summary": self.config.qweather_mock_summary,
+                "wind_direction": self.config.qweather_mock_wind_direction,
+                "wind_scale_text": self.config.qweather_mock_wind_scale,
+                "wind_speed": self.config.qweather_mock_wind_speed,
             },
             timeout_seconds=float(
                 self.drone_config.get("execution", {}).get("request_timeout_seconds", 15)
@@ -399,15 +360,15 @@ class MuyeApplication:
             logger=self.logger,
         )
         decision_context_provider = None
-        if os.getenv("MUYE_ENABLE_SQLITE_DECISION_CONTEXT", "false").lower() in {"1", "true", "yes", "on"}:
+        if self.config.enable_sqlite_decision_context:
             decision_context_provider = SqliteDecisionContextProvider(self.sqlite_store)
         self.rag_retriever = self._initialize_rag()
         self.decision_engine = DecisionEngine(
-            api_url=os.getenv("QWEN_API_URL", ""),
-            api_key=os.getenv("QWEN_API_KEY", ""),
-            model=os.getenv("QWEN_MODEL", "qwen-max"),
+            api_url=self.config.qwen_api_url,
+            api_key=self.config.qwen_api_key,
+            model=self.config.qwen_model,
             weather_client=self.weather_client,
-            use_mock=os.getenv("QWEN_USE_MOCK", "false").lower() in {"1", "true", "yes", "on"},
+            use_mock=self.config.qwen_use_mock,
             timeout_seconds=30,
             logger=self.logger,
             event_bus=self.event_bus,
@@ -416,8 +377,8 @@ class MuyeApplication:
         )
         self.drone_controller = DroneController(
             drone_config=self.drone_config,
-            api_url=os.getenv("DRONE_API_URL", ""),
-            api_key=os.getenv("DRONE_API_KEY", ""),
+            api_url=self.config.drone_api_url,
+            api_key=self.config.drone_api_key,
             timeout_seconds=float(
                 self.drone_config.get("execution", {}).get("request_timeout_seconds", 15)
             ),
@@ -433,20 +394,17 @@ class MuyeApplication:
         )
 
     def _initialize_rag(self) -> DecisionRAGRetriever | None:
-        if not parse_env_bool(os.getenv("RAG_ENABLED"), True):
+        if not self.config.rag_enabled:
             self.logger.info("RAG 初始化已禁用: RAG_ENABLED=false")
             return None
 
         try:
             self.rag_embeddings = QwenEmbeddings(
-                api_url=os.getenv(
-                    "QWEN_EMBEDDING_API_URL",
-                    "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                ),
-                api_key=os.getenv("QWEN_API_KEY"),
-                model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v3"),
-                dimensions=int(os.getenv("QWEN_EMBEDDING_DIMENSIONS", "1024")),
-                timeout=float(os.getenv("QWEN_EMBEDDING_TIMEOUT_SECONDS", "60")),
+                api_url=self.config.qwen_embedding_api_url,
+                api_key=self.config.qwen_api_key,
+                model=self.config.qwen_embedding_model,
+                dimensions=self.config.qwen_embedding_dimensions,
+                timeout=self.config.qwen_embedding_timeout_seconds,
             )
             self.rag_vector_store = VectorStoreManager(embedding=self.rag_embeddings)
             self._seed_rag_pesticide_knowledge_if_needed(self.rag_vector_store)
@@ -506,44 +464,24 @@ class MuyeApplication:
         execution = self.drone_config.setdefault("execution", {})
         px4_config = self.drone_config.setdefault("px4", {})
 
-        backend = os.getenv("DRONE_BACKEND")
-        if backend:
-            execution["backend"] = backend.strip().lower()
+        if self.config.drone_backend:
+            execution["backend"] = self.config.drone_backend.strip().lower()
 
         if execution.get("backend") == "simulated":
             execution["simulate_only"] = True
         elif execution.get("backend") in {"remote_api", "px4"}:
             execution["simulate_only"] = False
 
-        if os.getenv("PX4_SYSTEM_ADDRESS"):
-            px4_config["system_address"] = os.getenv("PX4_SYSTEM_ADDRESS")
-        if os.getenv("PX4_CONNECT_TIMEOUT_SECONDS"):
-            px4_config["connect_timeout_seconds"] = float(os.getenv("PX4_CONNECT_TIMEOUT_SECONDS", "30"))
-        if os.getenv("PX4_MISSION_TIMEOUT_SECONDS"):
-            px4_config["mission_timeout_seconds"] = float(os.getenv("PX4_MISSION_TIMEOUT_SECONDS", "180"))
-
-        px4_config["auto_arm"] = parse_env_bool(
-            os.getenv("PX4_AUTO_ARM"),
-            bool(px4_config.get("auto_arm", True)),
-        )
-        px4_config["auto_start_mission"] = parse_env_bool(
-            os.getenv("PX4_AUTO_START_MISSION"),
-            bool(px4_config.get("auto_start_mission", True)),
-        )
-        px4_config["return_to_launch_after_mission"] = parse_env_bool(
-            os.getenv("PX4_RETURN_TO_LAUNCH_AFTER_MISSION"),
-            bool(px4_config.get("return_to_launch_after_mission", True)),
-        )
-        px4_config["require_global_position"] = parse_env_bool(
-            os.getenv("PX4_REQUIRE_GLOBAL_POSITION"),
-            bool(px4_config.get("require_global_position", True)),
-        )
-        px4_config["prefer_demo_field"] = parse_env_bool(
-            os.getenv("PX4_USE_SITL_DEMO_FIELD"),
-            bool(px4_config.get("prefer_demo_field", False)),
-        )
-        if os.getenv("PX4_ACCEPTANCE_RADIUS_M"):
-            px4_config["acceptance_radius_m"] = float(os.getenv("PX4_ACCEPTANCE_RADIUS_M", "2.0"))
+        if self.config.px4_system_address:
+            px4_config["system_address"] = self.config.px4_system_address
+        px4_config["connect_timeout_seconds"] = self.config.px4_connect_timeout_seconds
+        px4_config["mission_timeout_seconds"] = self.config.px4_mission_timeout_seconds
+        px4_config["auto_arm"] = self.config.px4_auto_arm
+        px4_config["auto_start_mission"] = self.config.px4_auto_start_mission
+        px4_config["return_to_launch_after_mission"] = self.config.px4_return_to_launch_after_mission
+        px4_config["require_global_position"] = self.config.px4_require_global_position
+        px4_config["prefer_demo_field"] = self.config.px4_prefer_demo_field
+        px4_config["acceptance_radius_m"] = self.config.px4_acceptance_radius_m
 
     def configure_embedded_yolo_api(self, detect_url: str) -> None:
         self.yolo_api_url = detect_url
@@ -619,7 +557,7 @@ class MuyeApplication:
 
         request_id = generate_request_id()
         try:
-            field_context = self._resolve_runtime_field_context()
+            field_context = self.field_resolver.resolve()
         except Exception as exc:
             log_event(
                 self.logger,
@@ -793,7 +731,7 @@ class MuyeApplication:
                 execution_plan=execution_plan,
                 field_context=field_context,
             )
-            spray_record = self._build_spray_record(
+            spray_record = self.drone_controller.build_spray_record(
                 request_id=request_id,
                 field_context=field_context,
                 decision=bundle["decision"],
@@ -863,324 +801,6 @@ class MuyeApplication:
                 worker_id=worker_id,
                 error=str(exc),
             )
-
-    def _resolve_runtime_field_context(self) -> dict[str, Any]:
-        if self._should_use_px4_demo_field():
-            return self._build_px4_demo_field_context()
-
-        configured_field_id = str(self.drone_config.get("field", {}).get("field_id") or "").strip() or None
-        env_field_id = os.getenv("MUYE_ACTIVE_FIELD_ID")
-        preferred_field_id = env_field_id or configured_field_id
-        field_count_row = self.sqlite_store.fetch_one("SELECT COUNT(*) AS total FROM fields")
-        field_count = int(field_count_row["total"]) if field_count_row else 0
-        if preferred_field_id:
-            field_context = self.sqlite_store.fetch_field_context(field_id=preferred_field_id)
-            if field_context:
-                if env_field_id or not self._should_ignore_config_fallback_field(preferred_field_id):
-                    return field_context
-            elif env_field_id or field_count > 0:
-                raise RuntimeError(f"指定地块不存在: {preferred_field_id}")
-        real_field_context = self._resolve_non_fallback_field_context()
-        if real_field_context:
-            return real_field_context
-        field_context = self.sqlite_store.fetch_field_context()
-        if field_context:
-            return field_context
-        return self._build_config_field_context()
-
-    def _should_use_px4_demo_field(self) -> bool:
-        execution = self.drone_config.get("execution", {})
-        px4_config = self.drone_config.get("px4", {})
-        return execution.get("backend") == "px4" and bool(px4_config.get("prefer_demo_field", False))
-
-    def _build_px4_demo_field_context(self) -> dict[str, Any]:
-        px4_config = self.drone_config.get("px4", {})
-        demo_field = px4_config.get("demo_field") or {}
-        location = demo_field.get("location", {})
-        geofence = demo_field.get("geofence", [])
-        if len(geofence) < 3:
-            raise RuntimeError("PX4 SITL 演示地块缺少有效 geofence 配置")
-        field_context = {
-            "field_id": demo_field.get("field_id", "px4-sitl-demo"),
-            "name": demo_field.get("name", "PX4 SITL 演示地块"),
-            "weather_location": demo_field.get("weather_location") or location.get("city") or "Zurich",
-            "area_mu": demo_field.get("area_mu", 1.0),
-            "soil_type": demo_field.get("soil_type", "demo"),
-            "geofence": geofence,
-            "explicit_route": demo_field.get("explicit_route"),
-            "presentation_profile": demo_field.get("presentation_profile"),
-            "location": {
-                "province": location.get("province"),
-                "city": location.get("city"),
-                "county": location.get("county"),
-                "latitude": location.get("latitude"),
-                "longitude": location.get("longitude"),
-            },
-            "crop_cycle": demo_field.get("crop_cycle"),
-        }
-        self._seed_field_context(
-            field_context,
-            source="px4_sitl_demo",
-            notes="Auto-seeded from config/drone_config.json PX4 SITL demo field.",
-        )
-        return field_context
-
-    def _build_config_field_context(self) -> dict[str, Any]:
-        field = self.drone_config.get("field", {})
-        location = field.get("location", {})
-        field_context = {
-            "field_id": field.get("field_id"),
-            "name": field.get("name", "默认示范田"),
-            "weather_location": field.get("weather_location") or location.get("city"),
-            "area_mu": field.get("area_mu"),
-            "soil_type": field.get("soil_type"),
-            "geofence": field.get("geofence", []),
-            "location": {
-                "province": location.get("province"),
-                "city": location.get("city"),
-                "county": location.get("county"),
-                "latitude": location.get("latitude"),
-                "longitude": location.get("longitude"),
-            },
-            "crop_cycle": None,
-        }
-        self._seed_field_context(
-            field_context,
-            source="drone_config_fallback",
-            notes="Auto-seeded from config/drone_config.json fallback context.",
-            skip_if_any_field_exists=True,
-        )
-        return field_context
-
-    def _seed_field_context(
-        self,
-        field_context: dict[str, Any],
-        *,
-        source: str,
-        notes: str,
-        skip_if_any_field_exists: bool = False,
-    ) -> None:
-        field_id = str(field_context.get("field_id") or "").strip()
-        if not field_id:
-            return
-        location = field_context.get("location", {})
-        existing_field = self.sqlite_store.fetch_one(
-            """
-            SELECT field_id
-            FROM fields
-            WHERE field_id = ?
-            """,
-            (field_id,),
-        )
-        if existing_field is not None:
-            return
-        if skip_if_any_field_exists:
-            field_count_row = self.sqlite_store.fetch_one("SELECT COUNT(*) AS total FROM fields")
-            field_count = int(field_count_row["total"]) if field_count_row else 0
-            if field_count > 0:
-                return
-        try:
-            self.sqlite_store.upsert_field(
-                {
-                    "field_id": field_id,
-                    "field_code": field_id.upper(),
-                    "field_name": field_context.get("name") or field_id,
-                    "province": location.get("province"),
-                    "city": location.get("city"),
-                    "county": location.get("county"),
-                    "latitude": location.get("latitude"),
-                    "longitude": location.get("longitude"),
-                    "area_mu": field_context.get("area_mu"),
-                    "geofence": field_context.get("geofence"),
-                    "soil_type": field_context.get("soil_type"),
-                    "source": source,
-                    "notes": notes,
-                }
-            )
-        except Exception as exc:
-            log_event(
-                self.logger,
-                logging.WARNING,
-                "配置地块回写 SQLite 失败",
-                client_ip=self.client_ip,
-                sqlite_path=str(self.sqlite_store.db_path),
-                field_id=field_id,
-                error=str(exc),
-            )
-
-    def _build_spray_record(
-        self,
-        *,
-        request_id: str,
-        field_context: dict[str, Any],
-        decision: dict[str, Any],
-        weather: dict[str, Any],
-        execution_plan: dict[str, Any],
-        mission_result: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        field_id = str(field_context.get("field_id") or "").strip()
-        if not field_id:
-            return None
-
-        medication = decision.get("用药") or {}
-        crop_cycle = field_context.get("crop_cycle") or {}
-        crop_cycle_id = crop_cycle.get("id")
-        pesticide_name = str(medication.get("农药名称") or "").strip()
-        pesticide_row = None
-        if pesticide_name:
-            pesticide_row = self.sqlite_store.fetch_one(
-                """
-                SELECT pesticide_id
-                FROM pesticide_catalog
-                WHERE product_name = ?
-                ORDER BY pesticide_id ASC
-                LIMIT 1
-                """,
-                (pesticide_name,),
-            )
-
-        total_dosage = self._parse_total_dosage_liters(medication.get("总量"))
-        spray_area_mu = self._extract_numeric_value(field_context.get("area_mu"))
-        dosage_per_mu = None
-        if total_dosage is not None and spray_area_mu and spray_area_mu > 0:
-            dosage_per_mu = round(total_dosage / spray_area_mu, 4)
-
-        notes_parts = []
-        if pesticide_name:
-            notes_parts.append(f"农药名称={pesticide_name}")
-        if medication.get("浓度"):
-            notes_parts.append(f"浓度={medication['浓度']}")
-        if medication.get("安全提示"):
-            notes_parts.append(
-                "安全提示=" + "；".join(str(item) for item in medication.get("安全提示", []))
-            )
-        if decision.get("农事建议"):
-            notes_parts.append(
-                "农事建议=" + "；".join(str(item) for item in decision.get("农事建议", []))
-            )
-
-        return {
-            "request_id": request_id,
-            "field_id": field_id,
-            "crop_cycle_id": crop_cycle_id,
-            "drone_task_id": mission_result.get("task_id") or mission_result.get("mission_id"),
-            "pesticide_id": pesticide_row["pesticide_id"] if pesticide_row else None,
-            "spray_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "spray_area_mu": spray_area_mu,
-            "dosage_per_mu": dosage_per_mu,
-            "total_dosage": total_dosage,
-            "dilution_ratio": medication.get("配比"),
-            "spray_rate_lpm": execution_plan.get("喷洒速率"),
-            "flight_height_m": execution_plan.get("高度"),
-            "flight_speed_mps": execution_plan.get("速度"),
-            "weather_snapshot": weather,
-            "result_status": self._normalize_spray_result_status(mission_result),
-            "source": "main_pipeline",
-            "notes": " | ".join(notes_parts) if notes_parts else None,
-        }
-
-    def _should_ignore_config_fallback_field(self, field_id: str) -> bool:
-        row = self.sqlite_store.fetch_one(
-            """
-            SELECT source
-            FROM fields
-            WHERE field_id = ?
-            """,
-            (field_id,),
-        )
-        if row is None or row.get("source") != "drone_config_fallback":
-            return False
-        non_fallback_row = self.sqlite_store.fetch_one(
-            """
-            SELECT COUNT(*) AS total
-            FROM fields
-            WHERE source IS NULL OR source != 'drone_config_fallback'
-            """
-        )
-        non_fallback_count = int(non_fallback_row["total"]) if non_fallback_row else 0
-        return non_fallback_count > 0
-
-    def _resolve_non_fallback_field_context(self) -> dict[str, Any] | None:
-        non_fallback_row = self.sqlite_store.fetch_one(
-            """
-            SELECT COUNT(*) AS total
-            FROM fields
-            WHERE source IS NULL OR source != 'drone_config_fallback'
-            """
-        )
-        non_fallback_count = int(non_fallback_row["total"]) if non_fallback_row else 0
-        if non_fallback_count == 0:
-            return None
-        if non_fallback_count > 1:
-            raise RuntimeError("检测到多个地块，请显式设置 MUYE_ACTIVE_FIELD_ID")
-        selected = self.sqlite_store.fetch_one(
-            """
-            SELECT field_id
-            FROM fields
-            WHERE source IS NULL OR source != 'drone_config_fallback'
-            ORDER BY city ASC, field_name ASC
-            LIMIT 1
-            """
-        )
-        if selected is None:
-            return None
-        return self.sqlite_store.fetch_field_context(field_id=str(selected["field_id"]))
-
-    def _normalize_spray_result_status(self, mission_result: dict[str, Any]) -> str:
-        status = str(
-            mission_result.get("final_status")
-            or mission_result.get("last_known_status")
-            or mission_result.get("status")
-            or "planned"
-        ).strip().lower()
-        if status in {"completed", "simulated"}:
-            return "completed"
-        if status in {"failed", "error"}:
-            return "failed"
-        if status in {"cancelled", "canceled"}:
-            return "cancelled"
-        if status in {
-            "takeoff",
-            "enroute",
-            "spraying",
-            "returning",
-            "running",
-            "in_progress",
-            "processing",
-        }:
-            return "in_progress"
-        return "planned"
-
-    def _extract_numeric_value(self, value: Any) -> float | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        match = re.search(r"-?\d+(?:\.\d+)?", str(value))
-        if not match:
-            return None
-        return float(match.group(0))
-
-    def _parse_total_dosage_liters(self, value: Any) -> float | None:
-        if value in (None, ""):
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-
-        text = str(value).strip()
-        if not text:
-            return None
-
-        normalized = text.replace(" ", "")
-        unit_match = re.search(r"(-?\d+(?:\.\d+)?)(mL|ml|ML|毫升|L|l|升)", normalized)
-        if unit_match:
-            amount = float(unit_match.group(1))
-            unit = unit_match.group(2).lower()
-            if unit in {"ml", "毫升"}:
-                return round(amount / 1000, 6)
-            return amount
-
-        return self._extract_numeric_value(text)
 
     def _sqlite_write(
         self,

@@ -14,153 +14,23 @@ import FieldMap from '../components/map/FieldMap'
 import WorkflowPanel from '../components/workflow/WorkflowPanel'
 import type {
   DashboardContextResponse,
-  DashboardTaskEntry,
-  WorkflowDetectionEntry,
   WorkflowHistoryResponse,
   WorkflowStateResponse,
 } from '../types/workflow'
+import {
+  asRecord,
+  formatDateTime,
+  formatNow,
+  mapTaskEntry,
+  modeColor,
+  safeMetric,
+  statusColor,
+  summarizePests,
+} from '../utils/dashboardUtils'
 import '../styles/dashboard.css'
 
 const { Header, Content } = Layout
 const { Title, Text } = Typography
-
-type TaskRecord = {
-  id: string
-  droneName: string
-  fieldName: string
-  status: '执行中' | '待起飞' | '返航中'
-  progress: number
-  pesticideName: string
-  sprayAreaText: string
-  updatedAt: string
-  isCurrent: boolean
-}
-
-type PestSummary = {
-  labels: string[]
-  summary: string
-}
-
-function toTaskStatus(status: string): TaskRecord['status'] {
-  if (status === 'spraying' || status === '作业中') {
-    return '执行中'
-  }
-  if (status === 'returning' || status === '返航') {
-    return '返航中'
-  }
-  return '待起飞'
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '--'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-function formatNow(value: Date) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(value)
-}
-
-function mapTaskEntry(item: DashboardTaskEntry): TaskRecord {
-  return {
-    id: item.request_id,
-    droneName: item.drone_label,
-    fieldName: item.field_name,
-    status: toTaskStatus(item.status),
-    progress: Number(item.progress ?? 0),
-    pesticideName: item.pesticide_name ?? '--',
-    sprayAreaText: item.spray_area_mu !== null && item.spray_area_mu !== undefined ? `${item.spray_area_mu} 亩` : '--',
-    updatedAt: formatDateTime(item.updated_at),
-    isCurrent: item.is_current,
-  }
-}
-
-function statusColor(status: TaskRecord['status']) {
-  if (status === '执行中') {
-    return 'green'
-  }
-  if (status === '返航中') {
-    return 'gold'
-  }
-  return 'blue'
-}
-
-function summarizePests(detections: WorkflowDetectionEntry[]): PestSummary {
-  if (detections.length === 0) {
-    return {
-      labels: [],
-      summary: '未识别到害虫目标',
-    }
-  }
-
-  const counts = new Map<string, number>()
-  for (const detection of detections) {
-    const pestType = String(detection.pest_type ?? 'unknown')
-    counts.set(pestType, (counts.get(pestType) ?? 0) + 1)
-  }
-
-  const ordered = [...counts.entries()].sort((left, right) => {
-    if (right[1] !== left[1]) {
-      return right[1] - left[1]
-    }
-    return left[0].localeCompare(right[0], 'zh-CN')
-  })
-
-  const labels = ordered.map(([name, count]) => `${name} × ${count}`)
-  return {
-    labels,
-    summary: labels.join('，'),
-  }
-}
-
-function modeColor(value?: string) {
-  if (value === 'mock') {
-    return 'gold'
-  }
-  if (value === 'px4') {
-    return 'cyan'
-  }
-  if (value === 'virtual_api') {
-    return 'geekblue'
-  }
-  if (value === 'simulated') {
-    return 'purple'
-  }
-  return 'green'
-}
-
-function safeMetric(value: unknown, suffix = '') {
-  if (value === null || value === undefined || value === '') {
-    return '--'
-  }
-  return `${String(value)}${suffix}`
-}
 
 export default function Dashboard() {
   const [messageApi, messageContextHolder] = message.useMessage()
@@ -227,7 +97,7 @@ export default function Dashboard() {
     void loadContext()
     const timer = window.setInterval(() => {
       void loadWorkflow()
-    }, 500)
+    }, 2000)
 
     return () => {
       active = false
@@ -376,7 +246,7 @@ export default function Dashboard() {
             <div className="command-strip-topline">
               <div>
                 <Text className="panel-label">运行模式</Text>
-                <div className="command-strip-title">统一后的 React 指挥台已承接旧版演示功能</div>
+                <div className="command-strip-title">智慧农业喷洒指挥系统</div>
               </div>
               <Space wrap>
                 <Tag color={modeColor(context?.modes.yolo)}>YOLO {context?.modes.yolo ?? '--'}</Tag>

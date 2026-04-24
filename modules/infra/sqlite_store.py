@@ -1745,3 +1745,42 @@ class SqliteStore:
             self._connection.execute("DELETE FROM detections")
             self._connection.execute("DELETE FROM tasks")
             self._connection.commit()
+
+    # ========== 地块/农药查询方法 ==========
+
+    def count_fields(self) -> int:
+        row = self.fetch_one("SELECT COUNT(*) AS total FROM fields")
+        return int(row["total"]) if row else 0
+
+    def field_exists(self, field_id: str) -> bool:
+        row = self.fetch_one("SELECT 1 FROM fields WHERE field_id = ?", (field_id,))
+        return row is not None
+
+    def get_field_source(self, field_id: str) -> str | None:
+        row = self.fetch_one("SELECT source FROM fields WHERE field_id = ?", (field_id,))
+        return row["source"] if row else None
+
+    def count_non_fallback_fields(self) -> int:
+        row = self.fetch_one(
+            "SELECT COUNT(*) AS total FROM fields WHERE source IS NULL OR source != 'drone_config_fallback'"
+        )
+        return int(row["total"]) if row else 0
+
+    def get_first_non_fallback_field_id(self) -> str | None:
+        row = self.fetch_one(
+            "SELECT field_id FROM fields WHERE source IS NULL OR source != 'drone_config_fallback' ORDER BY city ASC, field_name ASC LIMIT 1"
+        )
+        return row["field_id"] if row else None
+
+    def field_has_non_fallback_source(self) -> bool:
+        row = self.fetch_one(
+            "SELECT 1 FROM fields WHERE source IS NULL OR source != 'drone_config_fallback' LIMIT 1"
+        )
+        return row is not None
+
+    def resolve_pesticide_id_by_name(self, product_name: str) -> str | None:
+        row = self.fetch_one(
+            "SELECT pesticide_id FROM pesticide_catalog WHERE product_name = ? ORDER BY pesticide_id ASC LIMIT 1",
+            (product_name,),
+        )
+        return row["pesticide_id"] if row else None

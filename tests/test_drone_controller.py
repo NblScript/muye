@@ -347,3 +347,194 @@ def test_px4_simulator_builds_in_place_turn_pivot_items() -> None:
     assert items[2].loiter_time_s == 0.8
     assert items[1].is_fly_through is False
     assert items[2].is_fly_through is False
+
+
+def test_build_spray_record_returns_none_when_field_id_missing(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    record = controller.build_spray_record(
+        request_id="test-req-1",
+        field_context={"field_id": None, "area_mu": 10.0},
+        decision={"用药": {"农药名称": "吡虫啉"}},
+        weather={"temperature": 26},
+        execution_plan={"喷洒速率": 1.5, "高度": 4.0, "速度": 3.0},
+        mission_result={"task_id": "task-1", "status": "completed"},
+    )
+
+    store.close()
+    assert record is None
+
+
+def test_build_spray_record_builds_valid_record(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    record = controller.build_spray_record(
+        request_id="test-req-2",
+        field_context={
+            "field_id": "field-123",
+            "area_mu": 20.0,
+            "crop_cycle": {"id": "cycle-456", "crop_name": "冬小麦"},
+        },
+        decision={
+            "用药": {
+                "农药名称": "吡虫啉",
+                "浓度": "1000倍",
+                "配比": "1:1000",
+                "总量": "2L",
+                "安全提示": ["佩戴防护装备", "避免高温作业"],
+            },
+            "农事建议": ["喷洒后24小时内禁止进入田间"],
+        },
+        weather={"temperature": 26, "humidity": 60, "wind_speed": 2.5},
+        execution_plan={"喷洒速率": 1.5, "高度": 4.0, "速度": 3.0},
+        mission_result={"task_id": "task-2", "status": "completed"},
+    )
+
+    store.close()
+    assert record is not None
+    assert record["request_id"] == "test-req-2"
+    assert record["field_id"] == "field-123"
+    assert record["crop_cycle_id"] == "cycle-456"
+    assert record["drone_task_id"] == "task-2"
+    assert record["spray_area_mu"] == 20.0
+    assert record["total_dosage"] == 2.0
+    assert record["dosage_per_mu"] == 0.1  # 2L / 20mu
+    assert record["dilution_ratio"] == "1:1000"
+    assert record["spray_rate_lpm"] == 1.5
+    assert record["flight_height_m"] == 4.0
+    assert record["flight_speed_mps"] == 3.0
+    assert record["result_status"] == "completed"
+    assert record["source"] == "main_pipeline"
+    assert "农药名称=吡虫啉" in record["notes"]
+    assert "浓度=1000倍" in record["notes"]
+    assert "佩戴防护装备" in record["notes"]
+
+
+def test_build_spray_record_parses_dosage_with_ml_unit(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    record = controller.build_spray_record(
+        request_id="test-req-3",
+        field_context={"field_id": "field-456", "area_mu": 10.0},
+        decision={"用药": {"总量": "500ml"}},
+        weather={},
+        execution_plan={},
+        mission_result={"status": "completed"},
+    )
+
+    store.close()
+    assert record is not None
+    assert record["total_dosage"] == 0.5  # 500ml = 0.5L
+
+
+def test_build_spray_record_normalizes_result_status(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    # Test simulated status maps to completed
+    record = controller.build_spray_record(
+        request_id="test-req-4",
+        field_context={"field_id": "field-789"},
+        decision={},
+        weather={},
+        execution_plan={},
+        mission_result={"status": "simulated"},
+    )
+    store.close()
+    assert record is not None
+    assert record["result_status"] == "completed"
+
+
+def test_normalize_spray_result_status_various_statuses(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    test_cases = [
+        ({"status": "completed"}, "completed"),
+        ({"status": "simulated"}, "completed"),
+        ({"status": "failed"}, "failed"),
+        ({"status": "error"}, "failed"),
+        ({"status": "cancelled"}, "cancelled"),
+        ({"status": "takeoff"}, "in_progress"),
+        ({"status": "spraying"}, "in_progress"),
+        ({"status": "running"}, "in_progress"),
+        ({"status": "unknown_status"}, "planned"),
+        ({"final_status": "completed"}, "completed"),
+        ({"last_known_status": "spraying"}, "in_progress"),
+    ]
+
+    for mission_result, expected in test_cases:
+        result = controller._normalize_spray_result_status(mission_result)
+        assert result == expected, f"Expected {expected} for {mission_result}, got {result}"
+
+    store.close()
+
+
+def test_extract_numeric_value(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    assert controller._extract_numeric_value(None) is None
+    assert controller._extract_numeric_value("") is None
+    assert controller._extract_numeric_value(10) == 10.0
+    assert controller._extract_numeric_value(3.14) == 3.14
+    assert controller._extract_numeric_value("42") == 42.0
+    assert controller._extract_numeric_value("约100亩") == 100.0
+    assert controller._extract_numeric_value("abc") is None
+
+    store.close()
+
+
+def test_parse_total_dosage_liters(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "muye.db")
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+        sqlite_store=store,
+    )
+
+    assert controller._parse_total_dosage_liters(None) is None
+    assert controller._parse_total_dosage_liters("") is None
+    assert controller._parse_total_dosage_liters(5) == 5.0
+    assert controller._parse_total_dosage_liters(2.5) == 2.5
+    assert controller._parse_total_dosage_liters("1L") == 1.0
+    assert controller._parse_total_dosage_liters("500ml") == 0.5
+    assert controller._parse_total_dosage_liters("500毫升") == 0.5
+    assert controller._parse_total_dosage_liters("2 升") == 2.0
+    assert controller._parse_total_dosage_liters("3L ") == 3.0
+
+    store.close()

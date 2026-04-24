@@ -12,35 +12,83 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 import pytest
 
+# Import main module for MuyeApplication and parse_args
 import app.main as main_module
-from app.main import (
-    HistoryTaskEntry,
-    MuyeApplication,
-    WorkflowHistoryResponse,
-    _build_local_yolo_urls,
-    _build_history_response,
-    _collect_health_status,
-    _resolve_loopback_host,
-    api_health,
-    get_dashboard_context,
-    get_sim_map_state,
-    get_task_annotated_image,
-    get_task_original_image,
-    get_workflow_history,
-    reset_demo_events,
-    upload_demo_image,
-    parse_args,
-)
+from app.main import MuyeApplication, parse_args
+
+# Import route handlers
+from app.routes.workflow import get_workflow_history, get_workflow_state
+from app.routes.demo import upload_demo_image, reset_demo_events, MAX_UPLOAD_BYTES
+from app.routes.health import api_health, check_sqlite_health, check_data_dir_health, check_embedded_yolo_health, collect_health_status
+from app.routes.tasks import get_task_annotated_image, get_task_original_image, annotate_image
+from app.routes.sim import get_sim_map_state
+from app.routes.dashboard import get_dashboard_context
+
+# Import services
+import app.services.workflow_service as workflow_service
+import app.routes.health as health_routes
+import app.routes.demo as demo_routes
+import app.routes.tasks as tasks_routes
+import modules.infra.event_bus as event_bus
+from app.config import build_local_yolo_urls, resolve_loopback_host
+from app.config_types import MuyeConfig
+
+# Import models
+from models.schemas import HistoryTaskEntry, WorkflowHistoryResponse
 
 
 def test_resolve_loopback_host() -> None:
-    assert _resolve_loopback_host("0.0.0.0") == "127.0.0.1"
-    assert _resolve_loopback_host("::") == "127.0.0.1"
-    assert _resolve_loopback_host("192.168.1.20") == "192.168.1.20"
+    assert resolve_loopback_host("0.0.0.0") == "127.0.0.1"
+    assert resolve_loopback_host("::") == "127.0.0.1"
+    assert resolve_loopback_host("192.168.1.20") == "192.168.1.20"
+
+
+def test_muye_config_defaults() -> None:
+    """Test that MuyeConfig has sensible defaults."""
+    config = MuyeConfig()
+    assert config.client_ip == "127.0.0.1"
+    assert config.yolo_api_url == "http://127.0.0.1:8010/detect"
+    assert config.qwen_model == "qwen-max"
+    assert config.qwen_use_mock is False
+    assert config.rag_enabled is True
+
+
+def test_muye_config_from_env_reads_environment_variables(monkeypatch, tmp_path) -> None:
+    """Test that MuyeConfig.from_env reads environment variables correctly."""
+    monkeypatch.setenv("QWEN_USE_MOCK", "true")
+    monkeypatch.setenv("QWEN_MODEL", "qwen-plus")
+    monkeypatch.setenv("QWEATHER_USE_MOCK", "true")
+    monkeypatch.setenv("YOLO_API_URL", "http://custom:9000/detect")
+    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "custom.db"))
+
+    config = MuyeConfig.from_env()
+
+    assert config.qwen_use_mock is True
+    assert config.qwen_model == "qwen-plus"
+    assert config.qweather_use_mock is True
+    assert config.yolo_api_url == "http://custom:9000/detect"
+    assert config.sqlite_path == tmp_path / "custom.db"
+
+
+def test_muye_config_can_be_constructed_directly(tmp_path) -> None:
+    """Test that MuyeConfig can be constructed directly for testing."""
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "test.db",
+        qwen_use_mock=True,
+        qwen_api_key="test-key",
+        drone_backend="px4",
+        px4_system_address="udp://0.0.0.0:14540",
+    )
+
+    assert config.sqlite_path == tmp_path / "test.db"
+    assert config.qwen_use_mock is True
+    assert config.qwen_api_key == "test-key"
+    assert config.drone_backend == "px4"
+    assert config.px4_system_address == "udp://0.0.0.0:14540"
 
 
 def test_build_local_yolo_urls() -> None:
-    detect_url, health_url = _build_local_yolo_urls("0.0.0.0", 8010)
+    detect_url, health_url = build_local_yolo_urls("0.0.0.0", 8010)
 
     assert detect_url == "http://127.0.0.1:8010/detect"
     assert health_url == "http://127.0.0.1:8010/health"
@@ -99,7 +147,7 @@ def test_workflow_history_route_uses_query_parameters(monkeypatch) -> None:
             ],
         )
 
-    monkeypatch.setattr(main_module, "_build_history_response", fake_build_history_response)
+    monkeypatch.setattr(workflow_service, "build_history_response", fake_build_history_response)
 
     payload = asyncio.run(
         get_workflow_history(
@@ -142,7 +190,7 @@ def test_upload_demo_image_route_saves_file(monkeypatch, tmp_path) -> None:
         target.write_bytes(content)
         return target
 
-    monkeypatch.setattr(main_module, "_save_uploaded_image", fake_save_uploaded_image)
+    monkeypatch.setattr(demo_routes, "_save_uploaded_image", fake_save_uploaded_image)
 
     upload_file = FakeUploadFile("sample.png", _build_png_bytes())
     payload = asyncio.run(upload_demo_image(upload_file))
@@ -173,7 +221,7 @@ def test_upload_demo_image_route_rejects_large_file() -> None:
         filename = "large.png"
 
         async def read(self) -> bytes:
-            return b"x" * (main_module.MAX_UPLOAD_BYTES + 1)
+            return b"x" * (MAX_UPLOAD_BYTES + 1)
 
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(upload_demo_image(FakeUploadFile()))
@@ -198,10 +246,10 @@ def test_reset_demo_events_route_clears_bus_and_sqlite(monkeypatch) -> None:
         def clear(self) -> None:
             state["cleared"] = True
 
-    monkeypatch.setattr(main_module, "FileEventBus", FakeEventBus)
+    monkeypatch.setattr(event_bus, "FileEventBus", FakeEventBus)
     monkeypatch.setattr(
-        main_module,
-        "_clear_demo_runtime_state",
+        workflow_service,
+        "clear_demo_runtime_state",
         lambda: sqlite_state.__setitem__("cleared", True),
     )
 
@@ -212,11 +260,11 @@ def test_reset_demo_events_route_clears_bus_and_sqlite(monkeypatch) -> None:
 
 
 def test_health_status_collects_check_results(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "_check_sqlite_health", lambda: {"status": "ok"})
-    monkeypatch.setattr(main_module, "_check_data_dir_health", lambda: {"status": "ok"})
-    monkeypatch.setattr(main_module, "_check_embedded_yolo_health", lambda: {"status": "skipped"})
+    monkeypatch.setattr(health_routes, "check_sqlite_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_data_dir_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_embedded_yolo_health", lambda: {"status": "skipped"})
 
-    payload, healthy = _collect_health_status()
+    payload, healthy = collect_health_status()
 
     assert healthy is True
     assert payload["status"] == "ok"
@@ -225,8 +273,8 @@ def test_health_status_collects_check_results(monkeypatch) -> None:
 
 def test_health_route_returns_503_when_dependency_fails(monkeypatch) -> None:
     monkeypatch.setattr(
-        main_module,
-        "_collect_health_status",
+        health_routes,
+        "collect_health_status",
         lambda: (
             {
                 "status": "error",
@@ -249,10 +297,10 @@ def test_health_route_returns_503_when_dependency_fails(monkeypatch) -> None:
 
 
 def test_build_history_response_uses_real_total(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "_count_sqlite_tasks", lambda **kwargs: 2)
+    monkeypatch.setattr(workflow_service, "count_sqlite_tasks", lambda **kwargs: 2)
     monkeypatch.setattr(
-        main_module,
-        "_load_sqlite_task_views",
+        workflow_service,
+        "load_sqlite_task_views",
         lambda **kwargs: [
             {
                 "request_id": "req-1",
@@ -286,10 +334,10 @@ def test_build_history_response_uses_real_total(monkeypatch) -> None:
             },
         ],
     )
-    monkeypatch.setattr(main_module, "load_events", lambda limit=500: [])
-    monkeypatch.setattr(main_module, "build_task_views", lambda events: [])
+    monkeypatch.setattr(event_bus, "load_events", lambda limit=500: [])
+    monkeypatch.setattr(event_bus, "build_task_views", lambda events: [])
 
-    payload = _build_history_response(limit=2, status="completed", search="aphid")
+    payload = workflow_service.build_history_response(limit=2, status="completed", search="aphid")
 
     assert payload.total == 1
     assert len(payload.items) == 1
@@ -297,10 +345,10 @@ def test_build_history_response_uses_real_total(monkeypatch) -> None:
 
 
 def test_build_history_response_applies_limit_after_merge(monkeypatch) -> None:
-    monkeypatch.setattr(main_module, "_count_sqlite_tasks", lambda **kwargs: 1)
+    monkeypatch.setattr(workflow_service, "count_sqlite_tasks", lambda **kwargs: 1)
     monkeypatch.setattr(
-        main_module,
-        "_load_sqlite_task_views",
+        workflow_service,
+        "load_sqlite_task_views",
         lambda **kwargs: [
             {
                 "request_id": "req-sqlite",
@@ -320,7 +368,7 @@ def test_build_history_response_applies_limit_after_merge(monkeypatch) -> None:
         ],
     )
     monkeypatch.setattr(
-        main_module,
+        event_bus,
         "load_events",
         lambda limit=500: [
             {
@@ -336,9 +384,9 @@ def test_build_history_response_applies_limit_after_merge(monkeypatch) -> None:
             }
         ],
     )
-    monkeypatch.setattr(main_module, "build_task_views", main_module.build_task_views)
+    monkeypatch.setattr(event_bus, "build_task_views", event_bus.build_task_views)
 
-    payload = _build_history_response(limit=1, status=None, search=None)
+    payload = workflow_service.build_history_response(limit=1, status=None, search=None)
 
     assert payload.total == 2
     assert len(payload.items) == 1
@@ -350,8 +398,8 @@ def test_task_original_image_route_returns_file(monkeypatch, tmp_path) -> None:
     image_path.write_bytes(b"\xff\xd8\xff\xd9")
 
     monkeypatch.setattr(
-        main_module,
-        "_load_task_by_request_id",
+        workflow_service,
+        "load_task_by_request_id",
         lambda request_id: {
             "request_id": request_id,
             "image_path": str(image_path),
@@ -370,8 +418,8 @@ def test_task_annotated_image_route_returns_png(monkeypatch, tmp_path) -> None:
     image_path.write_bytes(b"\xff\xd8\xff\xd9")
 
     monkeypatch.setattr(
-        main_module,
-        "_load_task_by_request_id",
+        workflow_service,
+        "load_task_by_request_id",
         lambda request_id: {
             "request_id": request_id,
             "image_path": str(image_path),
@@ -379,8 +427,8 @@ def test_task_annotated_image_route_returns_png(monkeypatch, tmp_path) -> None:
         },
     )
     monkeypatch.setattr(
-        main_module,
-        "_annotate_image",
+        tasks_routes,
+        "annotate_image",
         lambda image_path, detections: Image.new("RGB", (4, 4), color="red"),
     )
 
@@ -391,24 +439,30 @@ def test_task_annotated_image_route_returns_png(monkeypatch, tmp_path) -> None:
 
 
 def test_main_reads_qwen_mock_flag(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("QWEN_USE_MOCK", "true")
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-    app = MuyeApplication()
+    """Test that QWEN_USE_MOCK is properly read via MuyeConfig."""
+    from app.config_types import MuyeConfig
+
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        qwen_use_mock=True,
+    )
+    app = MuyeApplication(config=config)
     try:
         assert app.decision_engine.use_mock is True
     finally:
-        import asyncio
-
         asyncio.run(app.shutdown())
-    os.environ.pop("QWEN_USE_MOCK", None)
 
 
 def test_main_reads_px4_backend_override(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("DRONE_BACKEND", "px4")
-    monkeypatch.setenv("PX4_SYSTEM_ADDRESS", "udpin://0.0.0.0:14550")
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
+    """Test that PX4 backend override is properly read via MuyeConfig."""
+    from app.config_types import MuyeConfig
 
-    app = MuyeApplication()
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        drone_backend="px4",
+        px4_system_address="udpin://0.0.0.0:14550",
+    )
+    app = MuyeApplication(config=config)
     try:
         assert app.drone_config["execution"]["backend"] == "px4"
         assert app.drone_config["execution"]["simulate_only"] is False
@@ -418,14 +472,18 @@ def test_main_reads_px4_backend_override(monkeypatch, tmp_path) -> None:
 
 
 def test_main_reads_px4_demo_field_override(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("DRONE_BACKEND", "px4")
-    monkeypatch.setenv("PX4_USE_SITL_DEMO_FIELD", "true")
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
+    """Test that PX4 demo field override is properly read via MuyeConfig."""
+    from app.config_types import MuyeConfig
 
-    app = MuyeApplication()
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        drone_backend="px4",
+        px4_prefer_demo_field=True,
+    )
+    app = MuyeApplication(config=config)
     try:
         assert app.drone_config["px4"]["prefer_demo_field"] is True
-        field_context = app._resolve_runtime_field_context()
+        field_context = app.field_resolver.resolve()
         assert field_context["field_id"] == "px4-sitl-demo"
         assert field_context["location"]["city"] == "Zurich"
         assert field_context["explicit_route"] is not None
@@ -456,9 +514,9 @@ def test_parse_args_supports_no_capture_on_startup(monkeypatch) -> None:
 
 
 def test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-
-    app = MuyeApplication()
+    """Test that pipeline writes to SQLite correctly using MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
+    app = MuyeApplication(config=config)
     image_path = tmp_path / "sample.jpg"
     image_path.write_bytes(b"\xff\xd8\xff\xd9")
 
@@ -595,9 +653,9 @@ def test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path) -> None:
 
 
 def test_main_pipeline_uses_mission_final_status_for_spray_record(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-
-    app = MuyeApplication()
+    """Test that mission final status is used for spray records via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
+    app = MuyeApplication(config=config)
     image_path = tmp_path / "sample.jpg"
     image_path.write_bytes(b"\xff\xd8\xff\xd9")
 
@@ -680,9 +738,9 @@ def test_main_pipeline_uses_mission_final_status_for_spray_record(monkeypatch, t
 
 
 def test_main_pipeline_links_spray_record_to_pesticide_catalog(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-
-    app = MuyeApplication()
+    """Test that spray records are linked to pesticide catalog via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
+    app = MuyeApplication(config=config)
     image_path = tmp_path / "sample.jpg"
     image_path.write_bytes(b"\xff\xd8\xff\xd9")
     app.sqlite_store.upsert_pesticide_catalog_record(
@@ -779,10 +837,9 @@ def test_main_pipeline_links_spray_record_to_pesticide_catalog(monkeypatch, tmp_
 
 
 def test_main_prefers_sqlite_field_context_over_static_config(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-    monkeypatch.setenv("MUYE_ACTIVE_FIELD_ID", "henan-zz-001")
-
-    app = MuyeApplication()
+    """Test that SQLite field context is preferred via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
+    app = MuyeApplication(config=config)
     try:
         app.sqlite_store.upsert_field(
             {
@@ -822,7 +879,7 @@ def test_main_prefers_sqlite_field_context_over_static_config(monkeypatch, tmp_p
             }
         )
 
-        field_context = app._resolve_runtime_field_context()
+        field_context = app.field_resolver.resolve()
     finally:
         asyncio.run(app.shutdown())
 
@@ -832,10 +889,9 @@ def test_main_prefers_sqlite_field_context_over_static_config(monkeypatch, tmp_p
 
 
 def test_main_ignores_seeded_config_field_when_real_fields_exist(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-    monkeypatch.delenv("MUYE_ACTIVE_FIELD_ID", raising=False)
-
-    app = MuyeApplication()
+    """Test that seeded config field is ignored when real fields exist via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
+    app = MuyeApplication(config=config)
     try:
         app.sqlite_store.upsert_field(
             {
@@ -864,7 +920,7 @@ def test_main_ignores_seeded_config_field_when_real_fields_exist(monkeypatch, tm
             }
         )
 
-        field_context = app._resolve_runtime_field_context()
+        field_context = app.field_resolver.resolve()
     finally:
         asyncio.run(app.shutdown())
 
@@ -873,10 +929,9 @@ def test_main_ignores_seeded_config_field_when_real_fields_exist(monkeypatch, tm
 
 
 def test_main_rejects_ambiguous_field_context_without_explicit_selection(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "muye.db"))
-    monkeypatch.delenv("MUYE_ACTIVE_FIELD_ID", raising=False)
-
-    app = MuyeApplication()
+    """Test that ambiguous field context is rejected without explicit selection via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db")
+    app = MuyeApplication(config=config)
     try:
         app.drone_config["field"]["field_id"] = None
         app.sqlite_store.upsert_field(
@@ -905,7 +960,7 @@ def test_main_rejects_ambiguous_field_context_without_explicit_selection(monkeyp
         )
 
         try:
-            app._resolve_runtime_field_context()
+            app.field_resolver.resolve()
             assert False, "expected ambiguous field context to raise"
         except RuntimeError as exc:
             assert "MUYE_ACTIVE_FIELD_ID" in str(exc)

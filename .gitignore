@@ -25,3 +25,6 @@ __pycache__/
 # Streamlit / editor noise
 .streamlit/
 .DS_Store
+.claude/
+.claude-plugin/
+CLAUDE.md

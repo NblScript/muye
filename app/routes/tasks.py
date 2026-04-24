@@ -1,7 +1,6 @@
 """Task endpoints for retrieving task images."""
 
 import io
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -9,15 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from PIL import Image, ImageDraw
 
-from app.services.workflow_service import image_media_type, load_task_by_request_id as _original_load_task
-
-
-def _get_main_module():
-    return (
-        sys.modules.get("app.main")
-        or sys.modules.get("main")
-        or sys.modules.get("__main__")
-    )
+import app.services.workflow_service as workflow_service
 
 
 def annotate_image(image_path: str | Path, detections: list[dict[str, Any]]) -> Image.Image | None:
@@ -56,31 +47,9 @@ def annotate_image(image_path: str | Path, detections: list[dict[str, Any]]) -> 
     return annotated
 
 
-def _get_annotate_fn():
-    """Get the annotate function, checking for monkeypatching."""
-    main_module = _get_main_module()
-    if main_module is not None:
-        patched = getattr(main_module, "_annotate_image", None)
-        if patched is not None:
-            return patched
-    return annotate_image
-
-
-def _get_loader():
-    """Get the task loader function, checking for monkeypatching."""
-    # Check if main module has a monkeypatched version
-    main_module = _get_main_module()
-    if main_module is not None:
-        patched = getattr(main_module, "_load_task_by_request_id", None)
-        if patched is not None and patched is not _original_load_task:
-            return patched
-    return _original_load_task
-
-
 async def get_task_original_image(request_id: str) -> FileResponse:
     """Get original task image endpoint handler."""
-    loader = _get_loader()
-    task = loader(request_id)
+    task = workflow_service.load_task_by_request_id(request_id)
     if task is None or not task.get("image_path"):
         raise HTTPException(status_code=404, detail="task_image_not_found")
 
@@ -88,17 +57,19 @@ async def get_task_original_image(request_id: str) -> FileResponse:
     if not image_path.exists():
         raise HTTPException(status_code=404, detail="image_file_not_found")
 
-    return FileResponse(image_path, media_type=image_media_type(image_path))
+    return FileResponse(image_path, media_type=workflow_service.image_media_type(image_path))
 
 
 async def get_task_annotated_image(request_id: str) -> StreamingResponse:
     """Get annotated task image endpoint handler."""
-    loader = _get_loader()
-    task = loader(request_id)
+    task = workflow_service.load_task_by_request_id(request_id)
     if task is None or not task.get("image_path"):
         raise HTTPException(status_code=404, detail="task_image_not_found")
 
-    annotate_fn = _get_annotate_fn()
+    # Use module-level reference for monkeypatching
+    import app.routes.tasks as tasks_module
+    annotate_fn = tasks_module.annotate_image
+    
     annotated = annotate_fn(str(task["image_path"]), task.get("detections", []) or [])
     if annotated is None:
         raise HTTPException(status_code=404, detail="annotated_image_not_found")

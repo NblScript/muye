@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -25,14 +24,6 @@ from app.deps import iso_utc_offset
 
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-
-
-def _get_main_module():
-    return (
-        sys.modules.get("app.main")
-        or sys.modules.get("main")
-        or sys.modules.get("__main__")
-    )
 
 
 def load_sqlite_task_views(
@@ -475,26 +466,17 @@ def build_history_response(
     search: str | None = None,
 ) -> WorkflowHistoryResponse:
     """Build the workflow history response."""
+    import app.services.workflow_service as _ws
+    import modules.infra.event_bus as _eb
 
     normalized_status = None if status in {None, "", "all"} else status
 
-    # Check for monkeypatched functions in main module
-    main_module = _get_main_module()
-    count_fn = count_sqlite_tasks
-    load_fn = load_sqlite_task_views
-    load_events_fn = load_events
-    build_task_views_fn = build_task_views
-    
-    if main_module is not None:
-        if hasattr(main_module, "_count_sqlite_tasks"):
-            count_fn = main_module._count_sqlite_tasks
-        if hasattr(main_module, "_load_sqlite_task_views"):
-            load_fn = main_module._load_sqlite_task_views
-        if hasattr(main_module, "load_events"):
-            load_events_fn = main_module.load_events
-        if hasattr(main_module, "build_task_views"):
-            build_task_views_fn = main_module.build_task_views
-    
+    # Use module-level attribute references so tests can monkeypatch
+    count_fn = _ws.count_sqlite_tasks
+    load_fn = _ws.load_sqlite_task_views
+    load_events_fn = _eb.load_events
+    build_task_views_fn = _eb.build_task_views
+
     sqlite_total = count_fn(status=normalized_status, search=search)
     sqlite_limit = max(limit, sqlite_total, 1)
     tasks = merge_sqlite_tasks_with_events(

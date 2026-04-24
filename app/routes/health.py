@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -13,14 +12,6 @@ from fastapi.responses import JSONResponse
 
 from modules.infra.common import DATA_DIR, ensure_runtime_dirs
 from modules.infra.sqlite_store import SqliteStore
-
-
-def _get_main_module():
-    return (
-        sys.modules.get("app.main")
-        or sys.modules.get("main")
-        or sys.modules.get("__main__")
-    )
 
 
 def check_sqlite_health() -> dict[str, Any]:
@@ -84,19 +75,13 @@ def collect_health_status(embedded_yolo_runner: Any = None) -> tuple[dict[str, A
         from app.deps import get_embedded_yolo_runner
         embedded_yolo_runner = get_embedded_yolo_runner()
     
-    # Check for monkeypatched check functions in main module
-    main_module = _get_main_module()
-    sqlite_checker = check_sqlite_health
-    data_dir_checker = check_data_dir_health
-    yolo_checker = check_embedded_yolo_health
+    # Use module-level function references for monkeypatching
+    # Tests can patch app.routes.health.check_sqlite_health etc.
+    import app.routes.health as health_module
     
-    if main_module is not None:
-        if hasattr(main_module, "_check_sqlite_health"):
-            sqlite_checker = main_module._check_sqlite_health
-        if hasattr(main_module, "_check_data_dir_health"):
-            data_dir_checker = main_module._check_data_dir_health
-        if hasattr(main_module, "_check_embedded_yolo_health"):
-            yolo_checker = main_module._check_embedded_yolo_health
+    sqlite_checker = health_module.check_sqlite_health
+    data_dir_checker = health_module.check_data_dir_health
+    yolo_checker = health_module.check_embedded_yolo_health
 
     checks: dict[str, dict[str, Any]] = {}
     failures: list[str] = []
@@ -141,13 +126,8 @@ def collect_health_status(embedded_yolo_runner: Any = None) -> tuple[dict[str, A
 
 async def api_health() -> Any:
     """Health check endpoint handler."""
-    # Check for monkeypatched collect_health_status in main module
-    main_module = _get_main_module()
-    collector = collect_health_status
-    if main_module is not None and hasattr(main_module, "_collect_health_status"):
-        collector = main_module._collect_health_status
-    
-    payload, healthy = collector()
+    import app.routes.health as health_module
+    payload, healthy = health_module.collect_health_status()
     if healthy:
         return payload
     return JSONResponse(status_code=503, content=payload)
