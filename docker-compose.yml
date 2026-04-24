@@ -1,0 +1,68 @@
+# Muye Non-PX4 Demo Stack
+# 
+# 一键启动：
+#   docker compose up --build
+#
+# 访问地址：
+#   - Frontend:     http://localhost:8501
+#   - Backend API:  http://localhost:18000
+#   - YOLO API:     http://localhost:8010 (内部)
+#   - Virtual Drone:http://localhost:9010 (内部)
+#
+# 注意：
+#   - 此配置不含 PX4/Gazebo，适用于本地联调和稳定演示
+#   - 如需 PX4 演示，请继续使用 scripts/start_px4_visual_demo.sh
+#
+version: "3.8"
+
+services:
+  # ==================
+  # Backend Service
+  # ==================
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "18000:8000"      # Frontend API
+      - "8010:8010"       # YOLO API (内部，调试用)
+      - "9010:9010"       # Virtual Drone API (内部，调试用)
+    volumes:
+      - ../data:/app/data               # 持久化 SQLite / images / logs
+      - ../config:/app/config:ro        # 只读配置
+    environment:
+      - MUYE_API_PORT=8000
+      - MUYE_SQLITE_PATH=/app/data/muye.db
+      - MUYE_ENABLE_SQLITE_DECISION_CONTEXT=${MUYE_ENABLE_SQLITE_DECISION_CONTEXT:-false}
+      # 天气 / 千问 API Key（走环境变量注入，不写死）
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - QWEATHER_API_KEY=${QWEATHER_API_KEY:-}
+      # YOLO 配置（内嵌模式时无需外部 Key）
+      - YOLO_API_URL=http://127.0.0.1:8010
+      # 虚拟无人机
+      - VIRTUAL_DRONE_API_URL=http://127.0.0.1:9010
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ==================
+  # Frontend Service
+  # ==================
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "8501:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+# 数据持久化（可选：使用 named volume 替代 bind mount）
+# volumes:
+#   muye-data:
