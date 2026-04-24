@@ -101,8 +101,12 @@
   - 旧版 3 个静态演示地块已经从前端源码删除，不再作为 fallback 展示
   - 当前地图会展示当前任务的执行航线、地块面、覆盖区域和无人机点位
   - 航线来源当前优先使用 `latest_task.drone.instruction.飞行路径`，以匹配 PX4 实际执行航线；只有任务指令缺失时才回退 `field.explicit_route`
-  - `app/main.py -> Px4MapStateSimulator` 当前也已改为静态快照，不再让无人机点位和电量随时间自行变化
-  - 这是为了匹配 PX4 SITL / 虚拟农田演示场景，而不是现实经纬度地图
+  - `app/main.py -> Px4MapStateSimulator` 现已改为时间推进动态仿真：
+    - 无人机沿航线移动，speed_units_per_second 控制速度
+    - 电量随时间线性下降，battery_drain_per_second 控制衰减率
+    - phase_offset 控制不同无人机的起始相位偏移
+    - 到达航线终点后循环回到起点
+  - 这是为了在没有 PX4 真实任务时提供动态演示效果
 - 新前端的仿真态势刷新策略已完成重构（2026-04-24）：
   - 后端 WebSocket `/sim/ws/map-state` 现在推送合并状态 `WsCombinedState`（sim_map + workflow_state）
   - 前端 `useWebSocket` hook 已重写，支持：
@@ -112,8 +116,9 @@
   - `Dashboard.tsx` 现在通过 WebSocket 统一接收 `sim_map` 与 `workflow_state`
   - 断连时降级为并行调用 `/sim/map-state` + `/workflow/state` 轮询
   - `FieldMap.tsx` 无人机位置数据源优先级调整为：
-    - 优先使用 `simMapState.drones`（仿真推送）
-    - 回退到 `latest_task.drone.position`（任务驱动）
+    - 当存在 `latestTask` 时，优先使用 `buildTaskDrivenDrones`（PX4 实时位置）
+    - 只有无任务时才使用 `simMapState.drones`（纯仿真演示）
+    - 避免航线来自任务、位置来自仿真导致坐标源混用
   - 前端顶部增加连接状态指示器（"实时" 绿色 / "轮询" 橙色）
 - LLM 与 planner 的职责边界已经收敛：
   - `ai_decision.py` 只输出用药建议与农事建议
