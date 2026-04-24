@@ -1,5 +1,5 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Layout, List, Select, Space, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Empty, Input, List, Select, Space, Tag, Typography, message } from 'antd'
 
 import {
   buildTaskAnnotatedImageUrl,
@@ -10,6 +10,7 @@ import {
   resetDemoEvents,
   uploadDemoImage,
 } from '../api/workflow'
+import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import FieldMap from '../components/map/FieldMap'
 import WorkflowPanel from '../components/workflow/WorkflowPanel'
 import type {
@@ -20,21 +21,15 @@ import type {
 import {
   asRecord,
   formatDateTime,
-  formatNow,
   mapTaskEntry,
   modeColor,
   safeMetric,
-  statusColor,
   summarizePests,
 } from '../utils/dashboardUtils'
 import '../styles/dashboard.css'
 
-const { Header, Content } = Layout
-const { Title, Text } = Typography
-
 export default function Dashboard() {
   const [messageApi, messageContextHolder] = message.useMessage()
-  const [now, setNow] = useState(() => new Date())
   const [workflow, setWorkflow] = useState<WorkflowStateResponse | null>(null)
   const [workflowLoading, setWorkflowLoading] = useState(true)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
@@ -48,14 +43,6 @@ export default function Dashboard() {
   const [uploading, setUploading] = useState(false)
   const [resetting, setResetting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setNow(new Date())
-    }, 1000)
-
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     let active = true
@@ -224,24 +211,12 @@ export default function Dashboard() {
     }
   }
 
-  return (
-    <Layout className="dashboard-shell">
-      {messageContextHolder}
-      <Header className="dashboard-header">
-        <div>
-          <Text className="dashboard-kicker">MUYE SMART AGRI COMMAND</Text>
-          <Title className="dashboard-title" level={1}>
-            牧野智农 · 智慧农业指挥中心
-          </Title>
-        </div>
-        <div className="dashboard-clock">
-          <Text className="clock-label">当前时间</Text>
-          <Text className="clock-value">{formatNow(now)}</Text>
-        </div>
-      </Header>
+  const { Text } = Typography
 
-      <Content className="dashboard-content">
-        <section className="dashboard-command-strip">
+  return (
+    <div className="dashboard-shell">
+      {messageContextHolder}
+      <section className="dashboard-command-strip">
           <Card bordered={false} className="dashboard-card command-card">
             <div className="command-strip-topline">
               <div>
@@ -310,21 +285,19 @@ export default function Dashboard() {
 
         <section className="dashboard-grid">
           <aside className="dashboard-column dashboard-column-left">
-            <Card bordered={false} className="dashboard-card stat-card">
-              <Text className="panel-label">当前作业面积</Text>
-              <div className="stat-value">{currentAreaDisplay}</div>
-              <Text className="stat-unit">亩</Text>
-              <div className="stat-footnote">
-                数据来源：{spraySummary['spray_area_mu'] ? '喷洒记录' : field['area_mu'] ? '地块档案' : '暂无结构化面积'}
-              </div>
-            </Card>
+            <StatCard
+              label="当前作业面积"
+              value={currentAreaDisplay}
+              unit="亩"
+              footnote={`数据来源：${spraySummary['spray_area_mu'] ? '喷洒记录' : field['area_mu'] ? '地块档案' : '暂无结构化面积'}`}
+            />
 
-            <Card bordered={false} className="dashboard-card stat-card">
-              <Text className="panel-label">在线设备数</Text>
-              <div className="stat-value">{onlineDevices}</div>
-              <Text className="stat-unit">台</Text>
-              <div className="stat-footnote">数据来源：当前任务中的 PX4 / 作业无人机</div>
-            </Card>
+            <StatCard
+              label="在线设备数"
+              value={onlineDevices}
+              unit="台"
+              footnote="数据来源：当前任务中的 PX4 / 作业无人机"
+            />
 
             <Card bordered={false} className="dashboard-card suggestion-card">
               <Text className="panel-label">千问建议</Text>
@@ -359,43 +332,7 @@ export default function Dashboard() {
           </main>
 
           <aside className="dashboard-column dashboard-column-right">
-            <Card bordered={false} className="dashboard-card task-card" title="当前任务 / 最近任务">
-              <List
-                itemLayout="vertical"
-                locale={{ emptyText: '当前没有可展示的任务队列' }}
-                dataSource={recentTasks}
-                renderItem={(item) => (
-                  <List.Item className="task-item">
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                      <div className="task-topline">
-                        <Text className="task-id">{item.id}</Text>
-                        <div className="task-tag-group">
-                          {item.isCurrent ? <Tag color="cyan">当前</Tag> : null}
-                          <Tag color={statusColor(item.status)}>{item.status}</Tag>
-                        </div>
-                      </div>
-
-                      <div className="task-name">{item.droneName}</div>
-                      <div className="task-field">{item.fieldName}</div>
-
-                      <div className="task-meta">
-                        <Text className="task-meta-text">农药：{item.pesticideName}</Text>
-                        <Text className="task-meta-text">进度：{item.progress}%</Text>
-                      </div>
-
-                      <div className="task-meta">
-                        <Text className="task-meta-text">面积：{item.sprayAreaText}</Text>
-                        <Text className="task-meta-text">更新：{item.updatedAt}</Text>
-                      </div>
-
-                      <div className="task-progress-track">
-                        <div className="task-progress-bar" style={{ width: `${item.progress}%` }} />
-                      </div>
-                    </Space>
-                  </List.Item>
-                )}
-              />
-            </Card>
+            <TaskList tasks={recentTasks} />
           </aside>
         </section>
 
@@ -445,34 +382,7 @@ export default function Dashboard() {
             </div>
           </Card>
 
-          <Card bordered={false} className="dashboard-card detail-card">
-            <div className="detail-card-header">
-              <Text className="panel-label">天气信息</Text>
-              <Text className="detail-card-meta">{String(weather.summary ?? '等待天气数据')}</Text>
-            </div>
-            <div className="detail-metric-grid">
-              <div className="detail-metric-card">
-                <span>温度</span>
-                <strong>{safeMetric(weather.temperature, ' ℃')}</strong>
-              </div>
-              <div className="detail-metric-card">
-                <span>湿度</span>
-                <strong>{safeMetric(weather.humidity, ' %')}</strong>
-              </div>
-              <div className="detail-metric-card">
-                <span>风向</span>
-                <strong>{safeMetric(weather.wind_direction)}</strong>
-              </div>
-              <div className="detail-metric-card">
-                <span>风力</span>
-                <strong>{safeMetric(weather.wind_scale_text)}</strong>
-              </div>
-              <div className="detail-metric-card">
-                <span>风速</span>
-                <strong>{safeMetric(weather.wind_speed, ' m/s')}</strong>
-              </div>
-            </div>
-          </Card>
+          <WeatherCard weather={weather} />
 
           <Card bordered={false} className="dashboard-card detail-card detail-card-wide">
             <div className="detail-card-header">
@@ -626,7 +536,6 @@ export default function Dashboard() {
             )}
           </Card>
         </section>
-      </Content>
-    </Layout>
+    </div>
   )
 }

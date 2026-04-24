@@ -1,9 +1,11 @@
 .dashboard-shell {
-  min-height: 100vh;
+  min-height: 100%;
   background:
     radial-gradient(circle at top left, rgba(33, 150, 243, 0.18), transparent 22%),
     radial-gradient(circle at 85% 10%, rgba(0, 230, 118, 0.14), transparent 18%),
     linear-gradient(180deg, #06111f 0%, #081a2d 45%, #071321 100%);
+  display: grid;
+  gap: 20px;
 }
 
 .dashboard-header {

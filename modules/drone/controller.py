@@ -594,10 +594,11 @@ class DroneController:
             unit = unit_match.group(2).lower()
             if unit in ("ml", "毫升"):
                 return round(amount / 1000, 6)
+            # 固体农药单位（假设密度为1，按1:1换算）
             if unit in ("g", "克"):
-                return round(amount / 1000, 6)
+                return round(amount / 1000, 6)  # 克 → 升
             if unit in ("kg", "千克"):
-                return amount
+                return amount  # 千克 → 升
             return amount
 
         return self._extract_numeric_value(text)
