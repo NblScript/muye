@@ -10,13 +10,15 @@ import {
   resetDemoEvents,
   uploadDemoImage,
 } from '../api/workflow'
+import { buildSimMapWebSocketUrl, fetchSimMapState } from '../api/simMap'
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import FieldMap from '../components/map/FieldMap'
 import WorkflowPanel from '../components/workflow/WorkflowPanel'
+import { useWebSocket } from '../hooks/useWebSocket'
+import type { WsCombinedState } from '../types/simMap'
 import type {
   DashboardContextResponse,
   WorkflowHistoryResponse,
-  WorkflowStateResponse,
 } from '../types/workflow'
 import {
   asRecord,
@@ -30,7 +32,6 @@ import '../styles/dashboard.css'
 
 export default function Dashboard() {
   const [messageApi, messageContextHolder] = message.useMessage()
-  const [workflow, setWorkflow] = useState<WorkflowStateResponse | null>(null)
   const [workflowLoading, setWorkflowLoading] = useState(true)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [context, setContext] = useState<DashboardContextResponse | null>(null)
@@ -44,28 +45,44 @@ export default function Dashboard() {
   const [resetting, setResetting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
+  // WebSocket hook for real-time workflow state
+  const {
+    data: wsData,
+    connected,
+    error: wsError,
+    reconnectCount,
+    refresh: refreshCombinedState,
+  } = useWebSocket<WsCombinedState>(
+    buildSimMapWebSocketUrl(),
+    async () => {
+      const [workflowResult, simMapResult] = await Promise.allSettled([
+        fetchWorkflowState(),
+        fetchSimMapState(),
+      ])
+
+      if (workflowResult.status === 'rejected' && simMapResult.status === 'rejected') {
+        throw workflowResult.reason instanceof Error
+          ? workflowResult.reason
+          : simMapResult.reason instanceof Error
+            ? simMapResult.reason
+            : new Error('实时数据加载失败')
+      }
+
+      return {
+        timestamp: Date.now() / 1000,
+        sim_map: simMapResult.status === 'fulfilled' ? simMapResult.value : null,
+        workflow_state: workflowResult.status === 'fulfilled' ? workflowResult.value : null,
+      }
+    },
+    2000
+  )
+
+  const workflow = wsData?.workflow_state ?? null
+  const simMap = wsData?.sim_map ?? null
+
+  // Load context once on mount
   useEffect(() => {
     let active = true
-
-    const loadWorkflow = async () => {
-      try {
-        const next = await fetchWorkflowState()
-        if (!active) {
-          return
-        }
-        setWorkflow(next)
-        setWorkflowError(null)
-      } catch (error) {
-        if (!active) {
-          return
-        }
-        setWorkflowError(error instanceof Error ? error.message : '加载工作流失败')
-      } finally {
-        if (active) {
-          setWorkflowLoading(false)
-        }
-      }
-    }
 
     const loadContext = async () => {
       try {
@@ -80,17 +97,37 @@ export default function Dashboard() {
       }
     }
 
-    void loadWorkflow()
     void loadContext()
-    const timer = window.setInterval(() => {
-      void loadWorkflow()
-    }, 2000)
 
     return () => {
       active = false
-      window.clearInterval(timer)
     }
   }, [])
+
+  // Set workflow loading state based on combined data availability
+  useEffect(() => {
+    if (!wsData && !wsError) {
+      return
+    }
+
+    setWorkflowLoading(false)
+    if (wsData?.workflow_state) {
+      setWorkflowError(null)
+    }
+  }, [wsData, wsError])
+
+  useEffect(() => {
+    if (reconnectCount < 1) {
+      return
+    }
+
+    void messageApi.open({
+      type: 'success',
+      content: '实时连接已恢复',
+      duration: 2,
+      key: 'dashboard-ws-reconnected',
+    })
+  }, [messageApi, reconnectCount])
 
   useEffect(() => {
     let active = true
@@ -141,7 +178,7 @@ export default function Dashboard() {
   const recentTasks = (workflow?.recent_tasks ?? []).map(mapTaskEntry)
   const originalImageUrl = latestTask ? `${buildTaskOriginalImageUrl(latestTask.request_id)}?t=${encodeURIComponent(latestTask.updated_at ?? '')}` : null
   const annotatedImageUrl = latestTask ? `${buildTaskAnnotatedImageUrl(latestTask.request_id)}?t=${encodeURIComponent(latestTask.updated_at ?? '')}` : null
-  const combinedStatusError = workflowError ?? historyError
+  const combinedStatusError = workflowError ?? wsError ?? historyError
 
   const refreshHistory = async () => {
     setHistoryLoading(true)
@@ -163,8 +200,7 @@ export default function Dashboard() {
   const refreshWorkflow = async () => {
     setWorkflowLoading(true)
     try {
-      const next = await fetchWorkflowState()
-      setWorkflow(next)
+      await refreshCombinedState()
       setWorkflowError(null)
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : '刷新工作流失败')
@@ -228,6 +264,9 @@ export default function Dashboard() {
                 <Tag color={modeColor(context?.modes.weather)}>天气 {context?.modes.weather ?? '--'}</Tag>
                 <Tag color={modeColor(context?.modes.qwen)}>千问 {context?.modes.qwen ?? '--'}</Tag>
                 <Tag color={modeColor(context?.modes.drone)}>无人机 {context?.modes.drone ?? '--'}</Tag>
+                <Tag color={connected ? 'green' : 'orange'} style={{ marginLeft: 8 }}>
+                  {connected ? '实时' : '轮询'}
+                </Tag>
               </Space>
             </div>
 
@@ -326,7 +365,11 @@ export default function Dashboard() {
                   <Text className="panel-label">作业地图总览</Text>
                   <Text className="map-header-note">PX4 SITL / Virtual Field / React Leaflet</Text>
                 </div>
-                <FieldMap latestTask={latestTask} />
+                <FieldMap
+                  latestTask={latestTask}
+                  simMapState={simMap}
+                  transport={connected ? 'websocket' : 'polling'}
+                />
               </div>
             </Card>
           </main>

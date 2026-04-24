@@ -126,3 +126,11 @@ class WorkflowHistoryResponse(BaseModel):
 
     total: int
     items: list[HistoryTaskEntry]
+
+
+class WsCombinedState(BaseModel):
+    """Combined state for WebSocket push."""
+
+    timestamp: float
+    sim_map: SimMapStateResponse | None = None
+    workflow_state: WorkflowStateResponse | None = None

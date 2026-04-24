@@ -1,3 +1,5 @@
+import type { WorkflowStateResponse } from './workflow'
+
 export interface SimPoint {
   x: number
   y: number
@@ -17,4 +19,10 @@ export interface SimDroneState {
 export interface SimMapStateResponse {
   timestamp: number
   drones: SimDroneState[]
+}
+
+export interface WsCombinedState {
+  timestamp: number
+  sim_map: SimMapStateResponse | null
+  workflow_state: WorkflowStateResponse | null
 }

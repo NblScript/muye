@@ -1,15 +1,19 @@
 """Simulation map state endpoints."""
 
 import asyncio
+import logging
+import time
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from models.schemas import SimMapStateResponse
+from models.schemas import SimMapStateResponse, WsCombinedState
+from app.services import workflow_service
 from app.services.map_simulator import Px4MapStateSimulator
 
 # Global simulator instance, set during app initialization
 _simulator: Optional[Px4MapStateSimulator] = None
+logger = logging.getLogger(__name__)
 
 
 def set_simulator(simulator: Px4MapStateSimulator) -> None:
@@ -31,11 +35,22 @@ async def get_sim_map_state() -> SimMapStateResponse:
 
 
 async def sim_map_state_ws(websocket: WebSocket) -> None:
-    """Simulation map state websocket handler."""
+    """Simulation map state websocket handler with combined state."""
     await websocket.accept()
     try:
         while True:
-            await websocket.send_json(get_simulator().snapshot().model_dump())
+            sim_map = get_simulator().snapshot()
+            try:
+                workflow = workflow_service.build_workflow_state_response()
+            except Exception:
+                logger.exception("Failed to build workflow state for websocket push")
+                workflow = None
+            combined = WsCombinedState(
+                timestamp=time.time(),
+                sim_map=sim_map,
+                workflow_state=workflow,
+            )
+            await websocket.send_json(combined.model_dump())
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         return

@@ -28,13 +28,15 @@ from app.routes.dashboard import get_dashboard_context
 import app.services.workflow_service as workflow_service
 import app.routes.health as health_routes
 import app.routes.demo as demo_routes
+import app.routes.sim as sim_routes
 import app.routes.tasks as tasks_routes
 import modules.infra.event_bus as event_bus
 from app.config import build_local_yolo_urls, resolve_loopback_host
 from app.config_types import MuyeConfig
 
 # Import models
-from models.schemas import HistoryTaskEntry, WorkflowHistoryResponse
+from fastapi import WebSocketDisconnect
+from models.schemas import HistoryTaskEntry, SimMapStateResponse, WorkflowHistoryResponse
 
 
 def test_resolve_loopback_host() -> None:
@@ -102,6 +104,38 @@ def test_sim_map_state_route_returns_expected_shape() -> None:
     assert payload["drones"][0]["status"] in {"作业中", "返航"}
     assert {"x", "y"} <= set(payload["drones"][0]["position"].keys())
     assert len(payload["drones"][0]["route"]) >= 2
+
+
+def test_sim_map_state_ws_keeps_stream_alive_when_workflow_state_build_fails(monkeypatch) -> None:
+    class FakeSimulator:
+        def snapshot(self) -> SimMapStateResponse:
+            return SimMapStateResponse(timestamp=123.0, drones=[])
+
+    class FakeWebSocket:
+        def __init__(self) -> None:
+            self.accepted = False
+            self.payloads: list[dict[str, object]] = []
+
+        async def accept(self) -> None:
+            self.accepted = True
+
+        async def send_json(self, payload: dict[str, object]) -> None:
+            self.payloads.append(payload)
+            raise WebSocketDisconnect()
+
+    def raise_workflow_error() -> None:
+        raise RuntimeError("workflow exploded")
+
+    websocket = FakeWebSocket()
+    monkeypatch.setattr(sim_routes, "_simulator", FakeSimulator())
+    monkeypatch.setattr(sim_routes.workflow_service, "build_workflow_state_response", raise_workflow_error)
+
+    asyncio.run(sim_routes.sim_map_state_ws(websocket))
+
+    assert websocket.accepted is True
+    assert len(websocket.payloads) == 1
+    assert websocket.payloads[0]["sim_map"] == {"timestamp": 123.0, "drones": []}
+    assert websocket.payloads[0]["workflow_state"] is None
 
 
 def test_dashboard_context_route_returns_current_modes(monkeypatch) -> None:

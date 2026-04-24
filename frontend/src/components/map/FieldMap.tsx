@@ -1,11 +1,12 @@
 import type { LatLngTuple } from 'leaflet'
-import type { SimDroneState } from '../../types/simMap'
+import type { SimDroneState, SimMapStateResponse } from '../../types/simMap'
 import type { WorkflowTaskState } from '../../types/workflow'
 import { mapCenter, type FieldPlot, type FieldStatus } from './mapData'
 
 type FieldMapProps = {
   transport?: 'websocket' | 'polling'
   latestTask?: WorkflowTaskState | null
+  simMapState?: SimMapStateResponse | null
 }
 
 type PointPair = [number, number]
@@ -292,6 +293,15 @@ function buildTaskDrivenDrones(
   ]
 }
 
+function toLatLngPoint(x: number, y: number): LatLngTuple {
+  return [y, x]
+}
+
+function buildSimRoutePoints(simMapState: SimMapStateResponse | null | undefined): LatLngTuple[] {
+  const route = simMapState?.drones.find((item) => item.route.length >= 2)?.route ?? []
+  return route.map((point) => toLatLngPoint(point.x, point.y))
+}
+
 function toSvgPoint([lat, lng]: LatLngTuple) {
   return `${lng},${lat}`
 }
@@ -323,7 +333,7 @@ function computeViewBox(pointGroups: LatLngTuple[][], fallbackCenter: LatLngTupl
   return `${minX} ${minY} ${width} ${height}`
 }
 
-export default function FieldMap({ transport = 'polling', latestTask }: FieldMapProps) {
+export default function FieldMap({ transport = 'polling', latestTask, simMapState }: FieldMapProps) {
   const instruction = asRecord(latestTask?.drone?.instruction)
   const medication = asRecord(asRecord(latestTask?.decision)['用药'])
   const field = asRecord(latestTask?.field)
@@ -344,19 +354,32 @@ export default function FieldMap({ transport = 'polling', latestTask }: FieldMap
   ])
 
   const projectedGeofence = projectPairs(rawFieldGeofence, 3)
-  const routePoints = projectPairs(rawRoutePoints, 1)
+  const taskRoutePoints = projectPairs(rawRoutePoints, 1)
   const coveragePoints = projectPairs(rawCoveragePoints, 3)
   const projectedDronePosition = rawDronePoint ? projectPairs([rawDronePoint], 1)[0] : null
   const primaryFieldPlot = buildPrimaryFieldPlot(field, latestTask, projectedGeofence, coveragePoints)
   const displayFieldPlots = primaryFieldPlot ? [primaryFieldPlot] : []
-  const activeDrones = buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition)
+  const simRoutePoints = buildSimRoutePoints(simMapState)
+  const routePoints = taskRoutePoints.length >= 2 ? taskRoutePoints : simRoutePoints
+  const activeDrones = simMapState?.drones.length
+    ? simMapState.drones
+    : buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition)
   const activeDroneCount = activeDrones.filter((item) => item.status === '作业中').length
   const totalAreaMu = displayFieldPlots.reduce((sum, item) => sum + item.areaMu, 0)
+  const activeDronePointGroups = activeDrones.map((item) => [toLatLngPoint(item.position.x, item.position.y)])
+  const routeSource = rawInstructionRoutePoints.length >= 2
+    ? 'PX4 执行'
+    : taskRoutePoints.length >= 2
+      ? '后端预设'
+      : simRoutePoints.length >= 2
+        ? '仿真推送'
+        : '暂无'
   const viewBox = computeViewBox(
     [
       ...displayFieldPlots.map((item) => item.boundary),
       coveragePoints,
       routePoints,
+      ...activeDronePointGroups,
       ...(projectedDronePosition ? [[projectedDronePosition]] : []),
     ],
     primaryFieldPlot?.center ?? mapCenter,
@@ -551,7 +574,7 @@ export default function FieldMap({ transport = 'polling', latestTask }: FieldMap
           </div>
           <div className="map-mission-item">
             <span>航线源</span>
-            <strong>{rawInstructionRoutePoints.length >= 2 ? 'PX4 执行' : '后端预设'}</strong>
+            <strong>{routeSource}</strong>
           </div>
           <div className="map-mission-item">
             <span>覆盖顶点</span>
