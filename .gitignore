@@ -18,6 +18,7 @@ __pycache__/
 !/data/images/.gitkeep
 /data/logs/*
 !/data/logs/.gitkeep
+/data/*.db
 /data/*.db-wal
 /data/*.db-shm
 /data/chroma_db/
