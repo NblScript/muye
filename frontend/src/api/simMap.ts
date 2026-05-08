@@ -10,3 +10,8 @@ export function buildSimMapWebSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/api/sim/ws/map-state`
 }
+
+export function buildEnhancedMapWebSocketUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/api/ws/enhanced-state`
+}

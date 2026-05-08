@@ -4,31 +4,44 @@ import { Alert, Button, Card, Empty, Input, List, Select, Space, Tag, Typography
 import {
   buildTaskAnnotatedImageUrl,
   buildTaskOriginalImageUrl,
+  confirmDroneTakeoff,
   fetchDashboardContext,
   fetchWorkflowHistory,
-  fetchWorkflowState,
+  getPx4Status,
   resetDemoEvents,
+  stopPx4Demo,
   uploadDemoImage,
 } from '../api/workflow'
-import { buildSimMapWebSocketUrl, fetchSimMapState } from '../api/simMap'
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
+import DecisionFlow from '../components/dashboard/DecisionFlow'
+import PipelineStepper from '../components/dashboard/PipelineStepper'
 import FieldMap from '../components/map/FieldMap'
 import WorkflowPanel from '../components/workflow/WorkflowPanel'
-import { useWebSocket } from '../hooks/useWebSocket'
-import type { WsCombinedState } from '../types/simMap'
+import { useEnhancedMapState, type EnhancedMapState } from '../hooks/useEnhancedMapState'
 import type {
   DashboardContextResponse,
   WorkflowHistoryResponse,
+  WorkflowStateResponse,
 } from '../types/workflow'
 import {
   asRecord,
   formatDateTime,
+  formatNow,
   mapTaskEntry,
   modeColor,
   safeMetric,
   summarizePests,
 } from '../utils/dashboardUtils'
 import '../styles/dashboard.css'
+
+function isWorkflowStateResponse(value: unknown): value is WorkflowStateResponse {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && 'latest_task' in value
+    && 'recent_tasks' in value
+  )
+}
 
 export default function Dashboard() {
   const [messageApi, messageContextHolder] = message.useMessage()
@@ -43,6 +56,9 @@ export default function Dashboard() {
   const [historyLimit, setHistoryLimit] = useState(12)
   const [uploading, setUploading] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [confirmingTakeoff, setConfirmingTakeoff] = useState(false)
+  const [px4Running, setPx4Running] = useState(false)
+  const [clock, setClock] = useState(() => formatNow(new Date()))
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   // WebSocket hook for real-time workflow state
@@ -52,33 +68,16 @@ export default function Dashboard() {
     error: wsError,
     reconnectCount,
     refresh: refreshCombinedState,
-  } = useWebSocket<WsCombinedState>(
-    buildSimMapWebSocketUrl(),
-    async () => {
-      const [workflowResult, simMapResult] = await Promise.allSettled([
-        fetchWorkflowState(),
-        fetchSimMapState(),
-      ])
+  } = useEnhancedMapState()
 
-      if (workflowResult.status === 'rejected' && simMapResult.status === 'rejected') {
-        throw workflowResult.reason instanceof Error
-          ? workflowResult.reason
-          : simMapResult.reason instanceof Error
-            ? simMapResult.reason
-            : new Error('实时数据加载失败')
-      }
+  const workflow = isWorkflowStateResponse(wsData?.workflow_state) ? wsData.workflow_state : null
+  const simMap = (wsData as EnhancedMapState | null)?.legacy_sim_map ?? null
 
-      return {
-        timestamp: Date.now() / 1000,
-        sim_map: simMapResult.status === 'fulfilled' ? simMapResult.value : null,
-        workflow_state: workflowResult.status === 'fulfilled' ? workflowResult.value : null,
-      }
-    },
-    2000
-  )
-
-  const workflow = wsData?.workflow_state ?? null
-  const simMap = wsData?.sim_map ?? null
+  // Clock timer
+  useEffect(() => {
+    const timer = setInterval(() => setClock(formatNow(new Date())), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   // Load context once on mount
   useEffect(() => {
@@ -175,7 +174,24 @@ export default function Dashboard() {
   const currentArea = spraySummary['spray_area_mu'] ?? field['area_mu'] ?? '--'
   const currentAreaDisplay = typeof currentArea === 'number' || typeof currentArea === 'string' ? String(currentArea) : '--'
   const onlineDevices = latestTask?.drone?.task_id ? 1 : 0
-  const recentTasks = (workflow?.recent_tasks ?? []).map(mapTaskEntry)
+  const rawRecentTasks = workflow?.recent_tasks ?? []
+  const recentTasks = rawRecentTasks.map(mapTaskEntry)
+  const currentDetectionCount = detections.length
+  const todayTaskCount = rawRecentTasks.filter((t) => {
+    if (!t.updated_at) return false
+    const d = new Date(t.updated_at)
+    if (Number.isNaN(d.getTime())) return false
+    const today = new Date()
+    return d.toDateString() === today.toDateString()
+  }).length
+  const detectionSparkline = rawRecentTasks.slice(0, 8).reverse().map((t) => {
+    // Use progress as a proxy for task activity level
+    return t.progress ?? 0
+  })
+  const areaSparkline = rawRecentTasks.slice(0, 8).reverse().map((t) => {
+    const num = t.spray_area_mu
+    return typeof num === 'number' ? num : 0
+  })
   const originalImageUrl = latestTask ? `${buildTaskOriginalImageUrl(latestTask.request_id)}?t=${encodeURIComponent(latestTask.updated_at ?? '')}` : null
   const annotatedImageUrl = latestTask ? `${buildTaskAnnotatedImageUrl(latestTask.request_id)}?t=${encodeURIComponent(latestTask.updated_at ?? '')}` : null
   const combinedStatusError = workflowError ?? wsError ?? historyError
@@ -247,7 +263,50 @@ export default function Dashboard() {
     }
   }
 
+  const handleConfirmTakeoff = async () => {
+    setConfirmingTakeoff(true)
+    try {
+      await confirmDroneTakeoff()
+      messageApi.success('已确认起飞')
+      void refreshWorkflow()
+      void refreshHistory()
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : '确认起飞失败')
+    } finally {
+      setConfirmingTakeoff(false)
+    }
+  }
+
+  // Poll PX4 status
+  useEffect(() => {
+    let active = true
+    const check = async () => {
+      try {
+        const status = await getPx4Status()
+        if (active) {
+          setPx4Running(status.running)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void check()
+    const timer = window.setInterval(() => void check(), 3000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [])
+
+  const handlePx4Stop = async () => {
+    try {
+      await stopPx4Demo()
+      messageApi.success('PX4 SITL 已停止')
+      setPx4Running(false)
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : 'PX4 停止失败')
+    }
+  }
+
   const { Text } = Typography
+  const showTakeoffBanner = String(latestTask?.drone?.status ?? '').toLowerCase() === 'pending_confirmation'
 
   return (
     <div className="dashboard-shell">
@@ -259,15 +318,18 @@ export default function Dashboard() {
                 <Text className="panel-label">运行模式</Text>
                 <div className="command-strip-title">智慧农业喷洒指挥系统</div>
               </div>
-              <Space wrap>
-                <Tag color={modeColor(context?.modes.yolo)}>YOLO {context?.modes.yolo ?? '--'}</Tag>
-                <Tag color={modeColor(context?.modes.weather)}>天气 {context?.modes.weather ?? '--'}</Tag>
-                <Tag color={modeColor(context?.modes.qwen)}>千问 {context?.modes.qwen ?? '--'}</Tag>
-                <Tag color={modeColor(context?.modes.drone)}>无人机 {context?.modes.drone ?? '--'}</Tag>
-                <Tag color={connected ? 'green' : 'orange'} style={{ marginLeft: 8 }}>
-                  {connected ? '实时' : '轮询'}
-                </Tag>
-              </Space>
+              <div className="command-strip-right">
+                <Space wrap>
+                  <Tag color={modeColor(context?.modes.yolo)}>YOLO {context?.modes.yolo ?? '--'}</Tag>
+                  <Tag color={modeColor(context?.modes.weather)}>天气 {context?.modes.weather ?? '--'}</Tag>
+                  <Tag color={modeColor(context?.modes.qwen)}>千问 {context?.modes.qwen ?? '--'}</Tag>
+                  <Tag color={modeColor(context?.modes.drone)}>无人机 {context?.modes.drone ?? '--'}</Tag>
+                  <Tag color={connected ? 'green' : 'orange'} style={{ marginLeft: 8 }}>
+                    {connected ? '实时' : '轮询'}
+                  </Tag>
+                </Space>
+                <div className="command-clock">{clock}</div>
+              </div>
             </div>
 
             <div className="command-strip-actions">
@@ -288,6 +350,11 @@ export default function Dashboard() {
                 <Button danger onClick={handleResetEvents} loading={resetting}>
                   清空演示事件
                 </Button>
+                {px4Running && (
+                  <Button danger onClick={() => void handlePx4Stop()}>
+                    停止 PX4
+                  </Button>
+                )}
               </div>
 
               <div className="command-strip-meta">
@@ -312,6 +379,29 @@ export default function Dashboard() {
           </Card>
         </section>
 
+        <section className="dashboard-pipeline-strip">
+          <Card bordered={false} className="dashboard-card">
+            <PipelineStepper task={latestTask} />
+          </Card>
+        </section>
+
+        {showTakeoffBanner ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="无人机等待人工确认起飞"
+            description={
+              <Space wrap>
+                <span>当前任务已完成 AI 决策，点击按钮后继续执行无人机作业。</span>
+                <Button type="primary" size="large" loading={confirmingTakeoff} onClick={handleConfirmTakeoff}>
+                  确认起飞
+                </Button>
+              </Space>
+            }
+            className="dashboard-alert"
+          />
+        ) : null}
+
         {combinedStatusError ? (
           <Alert
             type="warning"
@@ -329,6 +419,8 @@ export default function Dashboard() {
               value={currentAreaDisplay}
               unit="亩"
               footnote={`数据来源：${spraySummary['spray_area_mu'] ? '喷洒记录' : field['area_mu'] ? '地块档案' : '暂无结构化面积'}`}
+              sparklineData={areaSparkline}
+              sparklineColor="#3ae374"
             />
 
             <StatCard
@@ -338,24 +430,23 @@ export default function Dashboard() {
               footnote="数据来源：当前任务中的 PX4 / 作业无人机"
             />
 
-            <Card bordered={false} className="dashboard-card suggestion-card">
-              <Text className="panel-label">千问建议</Text>
-              <div className="suggestion-main">{String(medication['农药名称'] ?? '暂无建议')}</div>
-              <div className="suggestion-meta">
-                配比：{String(medication['配比'] ?? '--')} / 总量：{String(medication['总量'] ?? '--')}
-              </div>
-              <div className="suggestion-list">
-                {agronomyTips.length > 0 ? (
-                  agronomyTips.slice(0, 3).map((tip, index) => (
-                    <div key={`${tip}-${index}`} className="suggestion-item">
-                      {tip}
-                    </div>
-                  ))
-                ) : (
-                  <div className="suggestion-empty">当前任务暂无千问农事建议</div>
-                )}
-              </div>
-            </Card>
+            <StatCard
+              label="检测目标数"
+              value={currentDetectionCount}
+              unit="个"
+              footnote={`数据来源：当前任务 YOLO 识别（${pestSummary.labels.length} 种害虫）`}
+              sparklineData={detectionSparkline}
+              sparklineColor="#22d3ee"
+            />
+
+            <StatCard
+              label="今日任务数"
+              value={todayTaskCount}
+              unit="条"
+              footnote="数据来源：当日已完成/运行中的任务"
+            />
+
+            <DecisionFlow task={latestTask} />
           </aside>
 
           <main className="dashboard-column dashboard-column-center">
@@ -368,6 +459,7 @@ export default function Dashboard() {
                 <FieldMap
                   latestTask={latestTask}
                   simMapState={simMap}
+                  enhancedState={wsData}
                   transport={connected ? 'websocket' : 'polling'}
                 />
               </div>

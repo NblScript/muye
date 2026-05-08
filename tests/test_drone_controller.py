@@ -4,6 +4,8 @@ import asyncio
 
 import pytest
 
+import app.services.telemetry_service as telemetry_module
+from app.services.telemetry_service import TelemetryService
 from modules.drone.controller import DroneController
 from modules.drone.px4_simulator import PX4Simulator
 from modules.infra.sqlite_store import SqliteStore
@@ -39,6 +41,57 @@ def build_drone_config() -> dict:
             "prefer_demo_field": False,
         },
     }
+
+
+def test_publish_drone_update_adds_px4_position_to_telemetry_service(monkeypatch) -> None:
+    service = TelemetryService()
+    reset_calls = 0
+
+    def fake_get_telemetry_service() -> TelemetryService:
+        return service
+
+    def fake_reset_trajectory() -> None:
+        nonlocal reset_calls
+        reset_calls += 1
+        TelemetryService.reset_trajectory(service)
+
+    monkeypatch.setattr(telemetry_module, "get_telemetry_service", fake_get_telemetry_service)
+    monkeypatch.setattr(service, "reset_trajectory", fake_reset_trajectory)
+
+    controller = DroneController(
+        drone_config=build_drone_config(),
+        api_url="",
+        api_key="",
+    )
+
+    try:
+        controller._publish_drone_update(
+            request_id="req-telemetry-1",
+            task_id="task-telemetry-1",
+            status="takeoff",
+            message="PX4 起飞",
+            progress=0,
+            instruction={},
+            medication={},
+            current_waypoint_index=0,
+            position={
+                "latitude": 34.7469,
+                "longitude": 113.6243,
+                "relative_altitude_m": 5.5,
+                "heading": 45,
+                "speed": 3.2,
+                "battery_remaining": 91,
+            },
+        )
+    finally:
+        asyncio.run(controller.close())
+
+    assert reset_calls == 1
+    assert service.current_state is not None
+    assert service.current_state.position is not None
+    assert service.current_state.position.latitude == 34.7469
+    assert service.current_state.telemetry.speed == 3.2
+    assert len(service.get_trajectory_state().recent_points) == 1
 
 
 @pytest.mark.asyncio

@@ -307,6 +307,15 @@ class DroneController:
         current_waypoint_index: int,
         position: dict[str, float] | None,
     ) -> None:
+        self._sync_telemetry_update(
+            request_id=request_id,
+            task_id=task_id,
+            status=status,
+            message=message,
+            progress=progress,
+            current_waypoint_index=current_waypoint_index,
+            position=position,
+        )
         payload = {
             "task_id": task_id,
             "progress": progress,
@@ -334,6 +343,32 @@ class DroneController:
                 instruction=instruction,
                 medication=medication,
             )
+
+    def _sync_telemetry_update(
+        self,
+        *,
+        request_id: str,
+        task_id: str | None,
+        status: str,
+        message: str,
+        progress: int,
+        current_waypoint_index: int,
+        position: dict[str, float] | None,
+    ) -> None:
+        from app.services.telemetry_service import get_telemetry_service
+
+        telemetry_service = get_telemetry_service()
+        if int(progress) <= 0 or str(status).strip().lower() in {"queued", "submitted", "ready"}:
+            telemetry_service.reset_trajectory()
+        telemetry_service.update_from_drone_status(
+            request_id=request_id,
+            task_id=task_id,
+            status=status,
+            message=message,
+            progress=progress,
+            current_waypoint_index=current_waypoint_index,
+            position=position,
+        )
 
     def _map_drone_status_to_spray_result(self, status: str) -> str:
         normalized = status.strip().lower()

@@ -1,12 +1,16 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LatLngTuple } from 'leaflet'
-import type { SimDroneState, SimMapStateResponse } from '../../types/simMap'
-import type { WorkflowTaskState } from '../../types/workflow'
+import type { GPSPosition, SimDroneState, SimMapStateResponse, WsEnhancedState } from '../../types/simMap'
+import type { WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
 import { mapCenter, type FieldPlot, type FieldStatus } from './mapData'
+import { computeCommandPoint } from './commandPoint'
+import StatusPanel from './StatusPanel'
 
 type FieldMapProps = {
   transport?: 'websocket' | 'polling'
   latestTask?: WorkflowTaskState | null
   simMapState?: SimMapStateResponse | null
+  enhancedState?: WsEnhancedState | null
 }
 
 type PointPair = [number, number]
@@ -85,14 +89,28 @@ function toPointPairs(value: unknown): PointPair[] {
     .filter((item): item is PointPair => item !== null)
 }
 
-function toDronePointPair(value: unknown): PointPair | null {
-  const position = asRecord(value)
-  const longitude = toNumber(position.longitude ?? position.longitude_deg ?? position.lng)
-  const latitude = toNumber(position.latitude ?? position.latitude_deg ?? position.lat)
-  if (longitude === null || latitude === null) {
-    return null
+function gpsPositionsToPointPairs(points: GPSPosition[] | null | undefined): PointPair[] {
+  if (!Array.isArray(points)) {
+    return []
   }
-  return [longitude, latitude]
+
+  return points
+    .map((point) => {
+      const latitude = toNumber(point.latitude)
+      const longitude = toNumber(point.longitude)
+      if (latitude === null || longitude === null) {
+        return null
+      }
+      return [longitude, latitude] as PointPair
+    })
+    .filter((item): item is PointPair => item !== null)
+}
+
+function gpsPositionToPointPair(point: GPSPosition | null | undefined): PointPair[] {
+  if (!point) {
+    return []
+  }
+  return gpsPositionsToPointPairs([point])
 }
 
 function getFieldName(field: Record<string, unknown>) {
@@ -259,14 +277,15 @@ function buildTaskDrivenDrones(
   latestTask: WorkflowTaskState | null | undefined,
   projectedRoute: LatLngTuple[],
   projectedPosition: LatLngTuple | null,
+  enhancedState: WsEnhancedState | null | undefined,
 ): SimDroneState[] {
-  if (!latestTask) {
+  if (!latestTask && !enhancedState) {
     return []
   }
 
-  const drone = asRecord(latestTask.drone)
+  const drone = asRecord(latestTask?.drone)
   const waypointIndexValue = Number(drone.current_waypoint_index)
-  const progressValue = Number(drone.progress)
+  const progressValue = Number(enhancedState?.mission.progress ?? drone.progress)
   const progressPercent = Number.isFinite(progressValue)
     ? Math.max(0, Math.min(100, progressValue))
     : 0
@@ -279,14 +298,14 @@ function buildTaskDrivenDrones(
       : interpolateRoutePosition(projectedRoute, progressPercent))
     : mapCenter
   const [lat, lng] = projectedPosition ?? fallbackPosition
-  const taskId = String(drone.task_id ?? latestTask.request_id ?? 'px4-primary')
+  const taskId = String(enhancedState?.drone.id ?? drone.task_id ?? latestTask?.request_id ?? 'px4-primary')
 
   return [
     {
       id: taskId,
-      name: String(drone.task_id ?? 'PX4 SITL 飞行器'),
-      status: mapDroneStatus(String(drone.status ?? latestTask.status ?? '作业中')),
-      battery: 100,
+      name: String(enhancedState?.drone.name ?? drone.task_id ?? 'PX4 SITL 飞行器'),
+      status: mapDroneStatus(String(enhancedState?.drone.status ?? drone.status ?? latestTask?.status ?? '作业中')),
+      battery: Math.round(enhancedState?.drone.battery.remaining ?? 100),
       position: { x: lng, y: lat },
       route: projectedRoute.map(([routeLat, routeLng]) => ({ x: routeLng, y: routeLat })),
     },
@@ -310,80 +329,208 @@ function toSvgPoints(points: LatLngTuple[]) {
   return points.map(toSvgPoint).join(' ')
 }
 
-function computeViewBox(pointGroups: LatLngTuple[][], fallbackCenter: LatLngTuple): string {
-  const points = pointGroups.flat()
-  if (points.length < 2) {
-    return '0 0 160 100'
-  }
-
-  const xs = points.map(([, lng]) => lng)
-  const ys = points.map(([lat]) => lat)
-  const minX = Math.max(0, Math.min(...xs) - 8)
-  const maxX = Math.min(160, Math.max(...xs) + 8)
-  const minY = Math.max(0, Math.min(...ys) - 8)
-  const maxY = Math.min(100, Math.max(...ys) + 8)
-  const width = Math.max(24, maxX - minX)
-  const height = Math.max(18, maxY - minY)
-
-  if (!Number.isFinite(width) || !Number.isFinite(height)) {
-    const [lat, lng] = fallbackCenter
-    return `${Math.max(0, lng - 24)} ${Math.max(0, lat - 16)} 48 32`
-  }
-
-  return `${minX} ${minY} ${width} ${height}`
+function toPathD(points: LatLngTuple[]) {
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point[1]} ${point[0]}`)
+    .join(' ')
 }
 
-export default function FieldMap({ transport = 'polling', latestTask, simMapState }: FieldMapProps) {
-  const instruction = asRecord(latestTask?.drone?.instruction)
-  const medication = asRecord(asRecord(latestTask?.decision)['用药'])
-  const field = asRecord(latestTask?.field)
+const DRONE_SPEED = 0.012
 
-  const rawFieldGeofence = toPointPairs(field.geofence)
+function useAnimatedDrones(
+  baseDrones: SimDroneState[],
+  route: LatLngTuple[],
+  taskStatus: string,
+  skipAnimation: boolean,
+): SimDroneState[] {
+  const [animated, setAnimated] = useState(baseDrones)
+  const progressRef = useRef(0)
+  const rafRef = useRef<number | null>(null)
+  const baseDronesRef = useRef(baseDrones)
+  const routeRef = useRef(route)
+  const taskStatusRef = useRef(taskStatus)
+
+  useEffect(() => {
+    baseDronesRef.current = baseDrones
+    routeRef.current = route
+    taskStatusRef.current = taskStatus
+  }, [baseDrones, route, taskStatus])
+
+  useEffect(() => {
+    if (skipAnimation) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+      setAnimated(baseDrones)
+      return
+    }
+
+    if (route.length < 2 || baseDrones.length === 0) {
+      setAnimated(baseDrones)
+      return
+    }
+
+    const basePos = baseDrones[0].position
+    let closest = 0
+    let minDist = Infinity
+    for (let i = 0; i < route.length; i++) {
+      const dy = route[i][0] - basePos.y
+      const dx = route[i][1] - basePos.x
+      const d = dx * dx + dy * dy
+      if (d < minDist) {
+        minDist = d
+        closest = i
+      }
+    }
+    progressRef.current = closest / Math.max(1, route.length - 1)
+
+    let lastTime = performance.now()
+
+    const tick = (now: number) => {
+      const dt = Math.min((now - lastTime) / 1000, 0.1)
+      lastTime = now
+
+      progressRef.current += DRONE_SPEED * dt
+      if (progressRef.current > 1) {
+        progressRef.current -= 1
+      }
+
+      const p = progressRef.current
+      const scaled = p * (routeRef.current.length - 1)
+      const lo = Math.floor(scaled)
+      const hi = Math.min(routeRef.current.length - 1, lo + 1)
+      const t = scaled - lo
+      const [lat0, lng0] = routeRef.current[lo]
+      const [lat1, lng1] = routeRef.current[hi]
+      const lat = lat0 + (lat1 - lat0) * t
+      const lng = lng0 + (lng1 - lng0) * t
+
+      const drones = baseDronesRef.current
+      setAnimated(
+        drones.map((d) => ({
+          ...d,
+          position: { x: lng, y: lat },
+          status: taskStatusRef.current === 'completed' ? '作业中' : d.status,
+        })),
+      )
+
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.length, baseDrones.length, taskStatus, skipAnimation])
+
+  return animated
+}
+
+function buildDetectionMarkerData(
+  detections: WorkflowDetectionEntry[],
+  center: LatLngTuple,
+): { point: LatLngTuple; pest: string; confidence: number }[] {
+  if (detections.length === 0) return []
+
+  const [centerLat, centerLng] = center
+  const count = Math.min(detections.length, 12)
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5)) // ~137.5°, spreads points evenly
+  const baseRadius = 8
+
+  return detections.slice(0, count).map((det, i) => {
+    const angle = goldenAngle * i
+    const r = baseRadius * Math.sqrt((i + 0.5) / count) // spiral distribution
+    const jitterLat = Math.cos(angle) * r
+    const jitterLng = Math.sin(angle) * r
+    return {
+      point: [centerLat + jitterLat, centerLng + jitterLng] as LatLngTuple,
+      pest: String(det.pest_type ?? '未知'),
+      confidence: det.confidence ?? 0,
+    }
+  })
+}
+
+export default function FieldMap({ transport: _transport, latestTask, simMapState, enhancedState }: FieldMapProps) {
+  const instruction = asRecord(latestTask?.drone?.instruction)
+  const taskField = asRecord(latestTask?.field)
+  const field = enhancedState?.field
+    ? {
+      ...taskField,
+      field_id: enhancedState.field.id,
+      field_name: enhancedState.field.name,
+    }
+    : taskField
+
+  const enhancedFieldBoundary = gpsPositionsToPointPairs(enhancedState?.field?.boundary)
+  const rawFieldGeofence = enhancedFieldBoundary.length >= 3 ? enhancedFieldBoundary : toPointPairs(field.geofence)
   const rawPresetRoutePoints = toPointPairs(field.explicit_route)
   const rawInstructionRoutePoints = toPointPairs(instruction['飞行路径'])
-  const rawRoutePoints = rawInstructionRoutePoints.length >= 2 ? rawInstructionRoutePoints : rawPresetRoutePoints
+  const enhancedRoutePoints = gpsPositionsToPointPairs(enhancedState?.mission.planned_route)
+  const rawRoutePoints = enhancedRoutePoints.length >= 2
+    ? enhancedRoutePoints
+    : rawInstructionRoutePoints.length >= 2
+      ? rawInstructionRoutePoints
+      : rawPresetRoutePoints
   const rawCoveragePoints = toPointPairs(asRecord(instruction['覆盖区域']).coordinates)
-  const rawDronePoint = toDronePointPair(asRecord(latestTask?.drone).position)
+  const rawTrajectoryPoints = gpsPositionsToPointPairs(enhancedState?.trajectory.recent_points)
+  const rawDronePosition = gpsPositionToPointPair(enhancedState?.drone.position)
   const projectPairs = buildCoordinateProjector([
     rawFieldGeofence,
     rawPresetRoutePoints,
     rawInstructionRoutePoints,
     rawRoutePoints,
     rawCoveragePoints,
-    rawDronePoint ? [rawDronePoint] : [],
+    rawTrajectoryPoints,
+    rawDronePosition,
   ])
 
   const projectedGeofence = projectPairs(rawFieldGeofence, 3)
   const taskRoutePoints = projectPairs(rawRoutePoints, 1)
   const coveragePoints = projectPairs(rawCoveragePoints, 3)
-  const projectedDronePosition = rawDronePoint ? projectPairs([rawDronePoint], 1)[0] : null
+  const projectedTrajectoryPoints = projectPairs(rawTrajectoryPoints, 2)
+  const projectedDronePosition = projectPairs(rawDronePosition, 1)[0] ?? null
   const primaryFieldPlot = buildPrimaryFieldPlot(field, latestTask, projectedGeofence, coveragePoints)
   const displayFieldPlots = primaryFieldPlot ? [primaryFieldPlot] : []
+  const commandPoint = computeCommandPoint(primaryFieldPlot?.boundary ?? [], mapCenter)
   const simRoutePoints = buildSimRoutePoints(simMapState)
   const routePoints = taskRoutePoints.length >= 2 ? taskRoutePoints : simRoutePoints
-  const activeDrones = latestTask
-    ? buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition)
+
+  // Detect PX4 real position from telemetry
+  const droneData = asRecord(latestTask?.drone)
+  const px4PositionRaw = asRecord(droneData.position)
+  const hasPx4Lat = toNumber(px4PositionRaw.latitude) !== null
+  const hasPx4Lng = toNumber(px4PositionRaw.longitude) !== null
+  const px4Status = String(droneData.status ?? '').toLowerCase()
+  const isPx4Flying = hasPx4Lat && hasPx4Lng
+    && ['takeoff', 'spraying', 'enroute', 'returning'].includes(px4Status)
+
+  // Build drones: use task-driven (PX4) when available, simMap as fallback when no task
+  const baseDrones = latestTask
+    ? buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition, enhancedState)
+    : enhancedState
+      ? buildTaskDrivenDrones(null, routePoints, projectedDronePosition, enhancedState)
     : (simMapState?.drones.length ? simMapState.drones : [])
-  const activeDroneCount = activeDrones.filter((item) => item.status === '作业中').length
-  const totalAreaMu = displayFieldPlots.reduce((sum, item) => sum + item.areaMu, 0)
-  const activeDronePointGroups = activeDrones.map((item) => [toLatLngPoint(item.position.x, item.position.y)])
-  const routeSource = rawInstructionRoutePoints.length >= 2
-    ? 'PX4 执行'
-    : taskRoutePoints.length >= 2
-      ? '后端预设'
-      : simRoutePoints.length >= 2
-        ? '仿真推送'
-        : '暂无'
-  const viewBox = computeViewBox(
-    [
-      ...displayFieldPlots.map((item) => item.boundary),
-      coveragePoints,
-      routePoints,
-      ...activeDronePointGroups,
-      ...(projectedDronePosition ? [[projectedDronePosition]] : []),
-    ],
-    primaryFieldPlot?.center ?? mapCenter,
+
+  const taskStatus = String(latestTask?.status ?? '')
+  // PX4 flying → use real position directly, skip animation
+  // No PX4 → animate along route for demo effect
+  const activeDrones = useAnimatedDrones(baseDrones, routePoints, taskStatus, isPx4Flying)
+  const detections = latestTask?.detections ?? []
+  const detectionMarkers = useMemo(
+    () => buildDetectionMarkerData(detections, primaryFieldPlot?.center ?? mapCenter),
+    [detections, primaryFieldPlot?.center],
   )
+  const droneInstruction = asRecord(latestTask?.drone?.instruction)
+  const telemetry = {
+    altitude: toNumber(droneInstruction['高度']),
+    speed: toNumber(droneInstruction['速度']),
+    battery: simMapState?.drones[0]?.battery ?? null,
+  }
+  const viewBox = '0 0 160 100'
 
   return (
     <div className="field-map-shell">
@@ -405,6 +552,11 @@ export default function FieldMap({ transport = 'polling', latestTask, simMapStat
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <linearGradient id="trajectory-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#818cf8" />
+            <stop offset="50%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#3b82f6" />
+          </linearGradient>
         </defs>
 
         <rect x="0" y="0" width="160" height="100" fill="#07192b" />
@@ -497,6 +649,17 @@ export default function FieldMap({ transport = 'polling', latestTask, simMapStat
           </>
         ) : null}
 
+        {projectedTrajectoryPoints.length >= 2 ? (
+          <path
+            d={toPathD(projectedTrajectoryPoints)}
+            fill="none"
+            stroke="url(#trajectory-gradient)"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : null}
+
         {activeDrones.map((drone) => {
           const style = droneStatusStyle(drone.status)
           const markerKey = `${drone.id}-${drone.position.x.toFixed(4)}-${drone.position.y.toFixed(4)}`
@@ -536,12 +699,32 @@ export default function FieldMap({ transport = 'polling', latestTask, simMapStat
           )
         })}
 
+        {detectionMarkers.map((marker, index) => (
+          <g key={`det-${index}-${marker.pest}`}>
+            <circle
+              cx={marker.point[1]}
+              cy={marker.point[0]}
+              r="1.8"
+              fill="#ef4444"
+              fillOpacity="0.2"
+              stroke="#ef4444"
+              strokeWidth="0.5"
+            />
+            <circle
+              cx={marker.point[1]}
+              cy={marker.point[0]}
+              r="0.8"
+              fill="#f87171"
+            />
+          </g>
+        ))}
+
         <g>
-          <circle cx={mapCenter[1]} cy={mapCenter[0]} r="1.4" fill="#22d3ee" stroke="#eff9ff" strokeWidth="0.4" />
-          <circle cx={mapCenter[1]} cy={mapCenter[0]} r="2.8" fill="none" stroke="rgba(34, 211, 238, 0.34)" strokeWidth="0.7" />
+          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="1.4" fill="#22d3ee" stroke="#eff9ff" strokeWidth="0.4" />
+          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="2.8" fill="none" stroke="rgba(34, 211, 238, 0.34)" strokeWidth="0.7" />
           <text
-            x={mapCenter[1] + 2.2}
-            y={mapCenter[0] - 1.6}
+            x={commandPoint[1] + 2.2}
+            y={commandPoint[0] - 1.6}
             fontSize="3"
             fill="#dff6ff"
             stroke="rgba(5, 18, 31, 0.84)"
@@ -553,84 +736,53 @@ export default function FieldMap({ transport = 'polling', latestTask, simMapStat
         </g>
       </svg>
 
-      <div className="map-overlay map-mission">
-        <div className="map-overlay-title">当前任务指令</div>
-        <div className="map-mission-grid">
-          <div className="map-mission-item">
-            <span>地块</span>
-            <strong>{getFieldName(field)}</strong>
-          </div>
-          <div className="map-mission-item">
-            <span>农药</span>
-            <strong>{String(medication['农药名称'] ?? '暂无')}</strong>
-          </div>
-          <div className="map-mission-item">
-            <span>作物</span>
-            <strong>{getFieldCrop(field)}</strong>
-          </div>
-          <div className="map-mission-item">
-            <span>航点</span>
-            <strong>{routePoints.length}</strong>
-          </div>
-          <div className="map-mission-item">
-            <span>航线源</span>
-            <strong>{routeSource}</strong>
-          </div>
-          <div className="map-mission-item">
-            <span>覆盖顶点</span>
-            <strong>{coveragePoints.length}</strong>
-          </div>
-        </div>
-      </div>
-
       <div className="map-overlay map-legend">
-        <div className="map-overlay-title">图例</div>
         <div className="map-legend-list">
           <div className="map-legend-item">
             <span className="map-legend-swatch is-working" />
-            <span>作业中地块</span>
-          </div>
-          <div className="map-legend-item">
-            <span className="map-legend-swatch is-waiting" />
-            <span>待作业地块</span>
-          </div>
-          <div className="map-legend-item">
-            <span className="map-legend-swatch is-finished" />
-            <span>已完成地块</span>
+            <span>作业中</span>
           </div>
           <div className="map-legend-item">
             <span className="map-legend-dot is-drone-active" />
-            <span>执行中无人机</span>
+            <span>无人机</span>
           </div>
           <div className="map-legend-item">
             <span className="map-legend-line is-drone-planned" />
-            <span>预设航线</span>
+            <span>航线</span>
           </div>
-          <div className="map-legend-item">
-            <span className="map-legend-dot is-drone-returning" />
-            <span>返航中无人机</span>
-          </div>
+          {detectionMarkers.length > 0 && (
+            <div className="map-legend-item">
+              <span className="map-legend-dot" style={{ background: '#f87171' }} />
+              <span>检测点 ({detectionMarkers.length})</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="map-overlay map-summary">
-        <div className="map-summary-metric">
-          <span className="map-summary-label">展示地块</span>
-          <strong>{displayFieldPlots.length}</strong>
+      {(telemetry.altitude !== null || telemetry.speed !== null || telemetry.battery !== null) && (
+        <div className="map-overlay map-telemetry">
+          {telemetry.altitude !== null && (
+            <div className="map-telemetry-item">
+              <span>高度</span>
+              <strong>{telemetry.altitude} m</strong>
+            </div>
+          )}
+          {telemetry.speed !== null && (
+            <div className="map-telemetry-item">
+              <span>速度</span>
+              <strong>{telemetry.speed} m/s</strong>
+            </div>
+          )}
+          {telemetry.battery !== null && (
+            <div className="map-telemetry-item">
+              <span>电量</span>
+              <strong>{telemetry.battery}%</strong>
+            </div>
+          )}
         </div>
-        <div className="map-summary-metric">
-          <span className="map-summary-label">仿真面积</span>
-          <strong>{totalAreaMu} 亩</strong>
-        </div>
-        <div className="map-summary-metric">
-          <span className="map-summary-label">活跃无人机</span>
-          <strong>{activeDroneCount} 架</strong>
-        </div>
-        <div className="map-summary-metric">
-          <span className="map-summary-label">数据链路</span>
-          <strong>{transport === 'websocket' ? 'WebSocket' : 'Polling'}</strong>
-        </div>
-      </div>
+      )}
+
+      {enhancedState ? <StatusPanel state={enhancedState} /> : null}
     </div>
   )
 }

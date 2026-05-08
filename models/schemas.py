@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -126,6 +127,98 @@ class WorkflowHistoryResponse(BaseModel):
 
     total: int
     items: list[HistoryTaskEntry]
+
+
+class DroneStatusEnum(str, Enum):
+    """Normalized drone status values for enhanced websocket state."""
+
+    CONNECTING = "connecting"
+    READY = "ready"
+    TAKEOFF = "takeoff"
+    SPRAYING = "spraying"
+    RETURNING = "returning"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
+class GPSPosition(BaseModel):
+    """Real GPS position from PX4 telemetry."""
+
+    latitude: float
+    longitude: float
+    altitude: float
+    absolute_altitude: float | None = None
+    heading: float | None = None
+    speed: float | None = None
+    timestamp: float
+
+
+class TelemetryData(BaseModel):
+    """Drone telemetry data."""
+
+    speed: float = 0.0
+    ground_speed: float | None = None
+    air_speed: float | None = None
+    heading: float | None = None
+    climb_rate: float | None = None
+
+
+class BatteryState(BaseModel):
+    """Drone battery state."""
+
+    voltage: float | None = None
+    current: float | None = None
+    remaining: float
+    temperature: float | None = None
+
+
+class DroneState(BaseModel):
+    """Enhanced drone state for websocket push."""
+
+    id: str
+    name: str
+    status: DroneStatusEnum
+    message: str = ""
+    position: GPSPosition | None = None
+    battery: BatteryState
+    telemetry: TelemetryData
+
+
+class MissionState(BaseModel):
+    """Current mission state for websocket push."""
+
+    task_id: str | None = None
+    status: str
+    progress: float = 0.0
+    current_waypoint: int = 0
+    total_waypoints: int = 0
+    planned_route: list[GPSPosition] = Field(default_factory=list)
+
+
+class TrajectoryState(BaseModel):
+    """Recent trajectory and accumulated distance."""
+
+    recent_points: list[GPSPosition] = Field(default_factory=list)
+    total_distance: float = 0.0
+
+
+class FieldState(BaseModel):
+    """Field boundary state for websocket push."""
+
+    id: str
+    name: str
+    boundary: list[GPSPosition] = Field(default_factory=list)
+
+
+class WsEnhancedState(BaseModel):
+    """Enhanced state for WebSocket push."""
+
+    timestamp: float
+    drone: DroneState
+    mission: MissionState
+    trajectory: TrajectoryState
+    field: FieldState | None = None
+    workflow_state: dict[str, Any] | None = None
 
 
 class WsCombinedState(BaseModel):
