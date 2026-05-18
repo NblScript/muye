@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.documents import Document
 
 from modules.decision.rag.retriever import DecisionRAGRetriever, RetrievedContext
-from modules.decision.rag.vectorstore import COLLECTION_DECISIONS, COLLECTION_PESTICIDES
+from modules.decision.rag.vectorstore import COLLECTION_DECISIONS, COLLECTION_KNOWLEDGE, COLLECTION_PESTICIDES
 
 
 def test_retrieved_context_to_prompt_text_formats_sections() -> None:
@@ -20,8 +20,15 @@ def test_retrieved_context_to_prompt_text_formats_sections() -> None:
                 metadata={"request_id": "req-1"},
             )
         ],
+        knowledge_chunks=[
+            Document(
+                page_content="蚜虫高发时需注意风速与漂移风险。",
+                metadata={"file": "guide.md"},
+            )
+        ],
         pesticide_scores=[0.12],
         decision_scores=[0.34],
+        knowledge_scores=[0.56],
     )
 
     text = context.to_prompt_text()
@@ -29,9 +36,11 @@ def test_retrieved_context_to_prompt_text_formats_sections() -> None:
     assert "=== RAG 检索增强上下文 ===" in text
     assert "【相关农药推荐】" in text
     assert "【历史相似案例】" in text
+    assert "【农业知识参考】" in text
     assert "1. 农药名称：吡虫啉" in text
-    assert "相关度：0.12" in text
-    assert "相似度：0.34" in text
+    assert "参考值：0.12" in text
+    assert "参考值：0.34" in text
+    assert "参考值：0.56" in text
 
 
 class FakeVectorStore:
@@ -40,6 +49,7 @@ class FakeVectorStore:
         self.responses: dict[str, list[tuple[Document, float]]] = {
             COLLECTION_PESTICIDES: [],
             COLLECTION_DECISIONS: [],
+            COLLECTION_KNOWLEDGE: [],
         }
 
     def similarity_search_with_score(
@@ -72,14 +82,25 @@ def test_decision_rag_retriever_calls_vector_store_similarity_search_with_score(
             0.22,
         )
     ]
+    vector_store.responses[COLLECTION_KNOWLEDGE] = [
+        (
+            Document(
+                page_content="防治蚜虫时优先检查风速与作物叶面湿度。",
+                metadata={"file": "guide.md"},
+            ),
+            0.33,
+        )
+    ]
     retriever = DecisionRAGRetriever(vector_store=vector_store, pesticide_k=1, decision_k=1)
 
     result = retriever.retrieve(pest_types=["aphid"], crop_name="小麦")
 
     assert len(result.pesticides) == 1
     assert len(result.historical_cases) == 1
+    assert len(result.knowledge_chunks) == 1
     assert vector_store.calls == [
-        (COLLECTION_PESTICIDES, "小麦 aphid 防治农药", 2),
+        (COLLECTION_PESTICIDES, "小麦 aphid aphids 蚜虫 防治农药", 2),
+        (COLLECTION_KNOWLEDGE, "小麦 aphid aphids 蚜虫 病虫害防治 用药 安全 注意事项", 3),
         (COLLECTION_DECISIONS, "aphid", 1),
     ]
 
@@ -104,6 +125,7 @@ def test_decision_rag_retriever_filters_pesticides_by_pest_type() -> None:
 
     assert result.pesticides == [matching_doc]
     assert result.pesticide_scores == [0.15]
+    assert result.knowledge_chunks == []
 
 
 def test_decision_rag_retriever_uses_crop_name_from_field_context_when_missing_argument() -> None:
@@ -120,16 +142,21 @@ def test_decision_rag_retriever_uses_crop_name_from_field_context_when_missing_a
     retriever = DecisionRAGRetriever(vector_store=vector_store, pesticide_k=1, decision_k=0)
 
     retriever.retrieve(
-        pest_types=["aphid", "armyworm"],
+        pest_types=["蚜虫", "armyworm"],
         field_context={"crop_cycle": {"crop_name": "玉米"}},
     )
 
     assert vector_store.calls[0] == (
         COLLECTION_PESTICIDES,
-        "玉米 aphid armyworm 防治农药",
+        "玉米 aphid aphids 蚜虫 armyworm army worm 粘虫 防治农药",
         2,
     )
     assert vector_store.calls[1] == (
+        COLLECTION_KNOWLEDGE,
+        "玉米 aphid aphids 蚜虫 armyworm army worm 粘虫 病虫害防治 用药 安全 注意事项",
+        3,
+    )
+    assert vector_store.calls[2] == (
         COLLECTION_DECISIONS,
         "aphid、armyworm",
         0,

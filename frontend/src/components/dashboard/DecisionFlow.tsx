@@ -1,7 +1,6 @@
-import { Card, Typography } from 'antd'
-import type { WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
-
-const { Text } = Typography
+import { useState } from 'react'
+import { Card, Drawer } from '../ui'
+import type { RagContext, RagDocument, WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
 
 interface StepData {
   key: string
@@ -29,8 +28,8 @@ function buildSteps(task: WorkflowTaskState | null): StepData[] {
   const hasDetections = detections.length > 0
   const hasDecision = Object.keys(decision).length > 0
   const hasMedication = Object.keys(medication).length > 0
+  const hasRag = hasRagContext(task.rag_context)
 
-  // Count pest types
   const pestCounts = new Map<string, number>()
   for (const d of detections) {
     const type = String(d.pest_type ?? 'unknown')
@@ -48,7 +47,18 @@ function buildSteps(task: WorkflowTaskState | null): StepData[] {
 
   const ragFields: { label: string; value: string }[] = []
   if (hasDecision) {
-    ragFields.push({ label: '知识来源', value: 'RAG + 千问大模型' })
+    const ragSource = hasRag ? 'RAG 知识检索 + 千问大模型' : '千问大模型'
+    ragFields.push({ label: '知识来源', value: ragSource })
+  }
+  if (hasRag) {
+    const ctx = task.rag_context!
+    const parts: string[] = []
+    if (ctx.pesticides?.length) parts.push(`${ctx.pesticides.length} 条农药`)
+    if (ctx.historical_cases?.length) parts.push(`${ctx.historical_cases.length} 条案例`)
+    if (ctx.knowledge?.length) parts.push(`${ctx.knowledge.length} 条知识`)
+    if (parts.length > 0) {
+      ragFields.push({ label: '检索结果', value: parts.join('，') })
+    }
   }
   if (agronomyTips.length > 0) {
     ragFields.push({ label: '农事建议', value: agronomyTips[0] })
@@ -93,45 +103,203 @@ function buildSteps(task: WorkflowTaskState | null): StepData[] {
   ]
 }
 
+function hasRagContext(ctx: RagContext | undefined): boolean {
+  if (!ctx) return false
+  return Boolean(
+    (ctx.pesticides && ctx.pesticides.length > 0) ||
+    (ctx.historical_cases && ctx.historical_cases.length > 0) ||
+    (ctx.knowledge && ctx.knowledge.length > 0)
+  )
+}
+
+function DocList({ title, docs, color }: { title: string; docs: RagDocument[]; color: string }) {
+  if (docs.length === 0) return null
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color, letterSpacing: '0.03em' }}>
+        {title}
+      </h4>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {docs.map((doc, i) => (
+          <div key={i} style={{
+            padding: '10px 12px',
+            background: 'var(--bg-surface)',
+            borderRadius: 'var(--radius-sm)',
+            borderLeft: `3px solid ${color}`,
+            fontSize: 12,
+            lineHeight: 1.6,
+          }}>
+            <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{doc.content}</div>
+            <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 11 }}>
+              相似度: {(doc.score * 100).toFixed(1)}%
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 interface DecisionFlowProps {
   task: WorkflowTaskState | null
 }
 
 export default function DecisionFlow({ task }: DecisionFlowProps) {
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const steps = buildSteps(task)
+  const rag = task?.rag_context
+  const decision = (task?.decision ?? {}) as Record<string, unknown>
+  const medication = (decision['用药'] ?? {}) as Record<string, unknown>
+  const agronomyTips = Array.isArray(decision['农事建议']) ? (decision['农事建议'] as string[]) : []
+  const canExpand = hasRagContext(rag) || Object.keys(decision).length > 0
 
   return (
-    <Card bordered={false} className="dashboard-card decision-flow-card">
-      <Text className="panel-label">AI 决策过程</Text>
-      <div className="decision-flow-steps">
-        {steps.map((step, index) => (
-          <div key={step.key} className="decision-flow-step-group">
-            <div className={`decision-flow-step is-${step.done ? 'done' : step.active ? 'active' : 'pending'}`}>
-              <div className="decision-flow-step-icon">{step.icon}</div>
-              <div className="decision-flow-step-content">
-                <div className="decision-flow-step-label">{step.label}</div>
-                {step.fields.length > 0 ? (
-                  <div className="decision-flow-step-fields">
-                    {step.fields.map((f) => (
-                      <div key={f.label} className="decision-flow-field">
-                        <span>{f.label}</span>
-                        <strong>{f.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="decision-flow-step-empty">等待数据</div>
+    <>
+      <Card
+        className="dashboard-card decision-flow-card"
+        onClick={canExpand ? () => setDrawerOpen(true) : undefined}
+        style={canExpand ? { cursor: 'pointer' } : undefined}
+      >
+        <span className="label-uppercase">AI 决策过程</span>
+        <div className="decision-flow-steps">
+          {steps.map((step, index) => (
+            <div key={step.key} className="decision-flow-step-group">
+              <div className={`decision-flow-step is-${step.done ? 'done' : step.active ? 'active' : 'pending'}`}>
+                <div className="decision-flow-step-icon">{step.icon}</div>
+                <div className="decision-flow-step-content">
+                  <div className="decision-flow-step-label">{step.label}</div>
+                  {step.fields.length > 0 ? (
+                    <div className="decision-flow-step-fields">
+                      {step.fields.map((f) => (
+                        <div key={f.label} className="decision-flow-field">
+                          <span>{f.label}</span>
+                          <strong>{f.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="decision-flow-step-empty">等待数据</div>
+                  )}
+                </div>
+              </div>
+              {index < steps.length - 1 && (
+                <div className={`decision-flow-arrow is-${steps[index + 1].done || steps[index + 1].active ? 'filled' : 'empty'}`}>
+                  →
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        {canExpand && (
+          <div style={{ textAlign: 'right', marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+            点击查看完整决策链路 →
+          </div>
+        )}
+      </Card>
+
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="AI 决策链路详情" width={460}>
+        {/* 害虫检测 */}
+        <section style={{ marginBottom: 24 }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-red)', letterSpacing: '0.03em' }}>
+            🔍 害虫检测
+          </h4>
+          {task?.detections && task.detections.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {task.detections.map((d, i) => (
+                <div key={i} style={{
+                  padding: '8px 12px',
+                  background: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 12,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                }}>
+                  <span style={{ fontWeight: 600 }}>{d.pest_type ?? '未知'}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    置信度 {d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '-'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>暂无检测数据</div>
+          )}
+        </section>
+
+        {/* RAG 知识检索 */}
+        {rag && hasRagContext(rag) && (
+          <section style={{ marginBottom: 24 }}>
+            <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-purple)', letterSpacing: '0.03em' }}>
+              📚 RAG 知识检索
+            </h4>
+            {rag.crop_name && (
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                作物: {rag.crop_name}
+                {rag.pest_types && rag.pest_types.length > 0 && (
+                  <> · 害虫: {rag.pest_types.join('、')}</>
                 )}
               </div>
-            </div>
-            {index < steps.length - 1 && (
-              <div className={`decision-flow-arrow is-${steps[index + 1].done || steps[index + 1].active ? 'filled' : 'empty'}`}>
-                →
+            )}
+            <DocList title="农药推荐" docs={rag.pesticides ?? []} color="var(--accent-green)" />
+            <DocList title="历史案例" docs={rag.historical_cases ?? []} color="var(--accent-amber)" />
+            <DocList title="农业知识" docs={rag.knowledge ?? []} color="var(--accent-cyan)" />
+          </section>
+        )}
+
+        {/* 决策结果 */}
+        {Object.keys(decision).length > 0 && (
+          <section style={{ marginBottom: 24 }}>
+            <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-green)', letterSpacing: '0.03em' }}>
+              💊 用药方案
+            </h4>
+            {Boolean(medication['农药名称']) && (
+              <div style={{ padding: '10px 12px', background: 'var(--accent-green-dim)', borderRadius: 'var(--radius-sm)', marginBottom: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent-green)' }}>
+                  {String(medication['农药名称'])}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  {Boolean(medication['配比']) && <>配比: {String(medication['配比'])} </>}
+                  {Boolean(medication['总量']) && <>· 总量: {String(medication['总量'])}</>}
+                  {Boolean(medication['浓度']) && <> · 浓度: {String(medication['浓度'])}</>}
+                </div>
               </div>
             )}
-          </div>
-        ))}
-      </div>
-    </Card>
+            {Array.isArray(medication['安全提示']) && (medication['安全提示'] as string[]).length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>安全提示</div>
+                {(medication['安全提示'] as string[]).map((tip, i) => (
+                  <div key={i} style={{ fontSize: 12, color: 'var(--text-primary)', paddingLeft: 10, borderLeft: '2px solid var(--accent-red)', marginBottom: 4 }}>
+                    {tip}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 农事建议 */}
+        {agronomyTips.length > 0 && (
+          <section>
+            <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-amber)', letterSpacing: '0.03em' }}>
+              🌾 农事建议
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {agronomyTips.map((tip, i) => (
+                <div key={i} style={{
+                  padding: '8px 12px',
+                  background: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 12,
+                  color: 'var(--text-primary)',
+                  borderLeft: '3px solid var(--accent-amber)',
+                }}>
+                  {tip}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </Drawer>
+    </>
   )
 }

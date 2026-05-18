@@ -102,10 +102,8 @@ def test_publish_drone_update_adds_px4_position_to_telemetry_service(monkeypatch
         drone_config={
             "network": {"ip_whitelist": []},
             "flight_constraints": {},
-            "execution": {"backend": "simulated", "simulate_only": True},
+            "execution": {"backend": "px4", "simulate_only": False},
         },
-        api_url="",
-        api_key="",
     )
 
     try:

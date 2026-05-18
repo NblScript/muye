@@ -3,6 +3,7 @@ export interface WorkflowEventEntry {
   stage: string
   status: string
   message: string
+  payload?: Record<string, unknown>
 }
 
 export interface WorkflowTimelineEntry {
@@ -56,6 +57,20 @@ export interface WorkflowDroneState {
   position?: WorkflowDronePosition
 }
 
+export interface RagDocument {
+  content: string
+  score: number
+  metadata?: Record<string, unknown>
+}
+
+export interface RagContext {
+  pesticides?: RagDocument[]
+  historical_cases?: RagDocument[]
+  knowledge?: RagDocument[]
+  pest_types?: string[]
+  crop_name?: string | null
+}
+
 export interface WorkflowTaskState {
   request_id: string
   current_stage: string
@@ -68,6 +83,7 @@ export interface WorkflowTaskState {
   weather: Record<string, unknown>
   spray_summary: Record<string, unknown>
   decision: Record<string, unknown>
+  rag_context?: RagContext
   drone: WorkflowDroneState
   drone_timeline: WorkflowTimelineEntry[]
   recent_events: WorkflowEventEntry[]

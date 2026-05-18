@@ -1,18 +1,8 @@
-import {
-  BulbOutlined,
-  CheckCircleFilled,
-  CloudOutlined,
-  LoadingOutlined,
-  RocketOutlined,
-  ScanOutlined,
-  UploadOutlined,
-} from '@ant-design/icons'
-
 import type { WorkflowEventEntry, WorkflowTaskState } from '../../types/workflow'
 
 export type StageStatus = 'done' | 'active' | 'pending'
 
-interface PipelineStage {
+export interface PipelineStage {
   key: string
   label: string
   icon: React.ReactNode
@@ -20,15 +10,55 @@ interface PipelineStage {
   message?: string
 }
 
+const UploadIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+)
+
+const ScanIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M2 7V2h5M17 2h5v5M22 17v5h-5M7 22H2v-5" />
+  </svg>
+)
+
+const CloudIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z" />
+  </svg>
+)
+
+const BulbIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 18h6M10 22h4M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 01-1 1h-6a1 1 0 01-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z" />
+  </svg>
+)
+
+const RocketIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z" />
+    <path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z" />
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+  </svg>
+)
+
+const CheckCircleIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+  </svg>
+)
+
 const STAGE_DEFS: { key: string; label: string; icon: React.ReactNode }[] = [
-  { key: 'upload', label: '图片上传', icon: <UploadOutlined /> },
-  { key: 'detection', label: 'YOLO 检测', icon: <ScanOutlined /> },
-  { key: 'weather', label: '气象采集', icon: <CloudOutlined /> },
-  { key: 'decision', label: 'AI 决策', icon: <BulbOutlined /> },
-  { key: 'drone', label: '无人机执行', icon: <RocketOutlined /> },
+  { key: 'upload', label: '图片上传', icon: <UploadIcon /> },
+  { key: 'detection', label: 'YOLO 检测', icon: <ScanIcon /> },
+  { key: 'weather', label: '气象采集', icon: <CloudIcon /> },
+  { key: 'decision', label: 'AI 决策', icon: <BulbIcon /> },
+  { key: 'drone', label: '无人机执行', icon: <RocketIcon /> },
 ]
 
-function deriveStages(task: WorkflowTaskState | null): PipelineStage[] {
+export function deriveStages(task: WorkflowTaskState | null): PipelineStage[] {
   if (!task) {
     return STAGE_DEFS.map((def) => ({ ...def, status: 'pending' as StageStatus }))
   }
@@ -131,7 +161,7 @@ export default function PipelineStepper({ task }: PipelineStepperProps) {
         <div key={stage.key} className="pipeline-step-group">
           <div className={`pipeline-step is-${stage.status}`}>
             <div className="pipeline-step-icon">
-              {stage.status === 'done' ? <CheckCircleFilled /> : stage.status === 'active' ? <LoadingOutlined /> : stage.icon}
+              {stage.status === 'done' ? <CheckCircleIcon /> : stage.status === 'active' ? <span className="spinner" /> : stage.icon}
             </div>
             <div className="pipeline-step-label">{stage.label}</div>
             {stage.message && <div className="pipeline-step-message">{stage.message}</div>}

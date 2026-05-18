@@ -46,20 +46,22 @@ from modules.detection.image_processor import ImageProcessor
 from modules.detection.local_yolo_api import create_app as create_local_yolo_app
 from modules.detection.local_yolo_api import load_local_yolo_settings
 from modules.decision.rag import (
+    COLLECTION_DECISIONS,
     COLLECTION_PESTICIDES,
     DecisionRAGRetriever,
     QwenEmbeddings,
     VectorStoreManager,
+    build_historical_decision_document,
     load_pesticide_from_json,
     load_pesticide_from_sqlite,
 )
 from modules.infra.sqlite_store import SqliteStore
-from modules.drone.virtual_api import create_virtual_drone_app, load_virtual_drone_settings
 from modules.infra.weather import WeatherClient
 
 # Import route registration functions
 from app.routes.dashboard import register_dashboard_routes
 from app.routes.demo import register_demo_routes
+from app.routes.drone import ensure_px4_ready, register_drone_routes
 from app.routes.health import register_health_routes
 from app.routes.sim import register_sim_routes
 from app.routes.tasks import register_tasks_routes
@@ -94,8 +96,9 @@ from app.services.workflow_service import (
 )
 
 # Import core configuration
-from app.config import build_local_yolo_urls, parse_env_bool, resolve_loopback_host
+from app.config import build_local_yolo_urls
 from app.config_types import MuyeConfig
+import app.deps as deps
 from app.deps import embedded_yolo_runner_for_health
 
 
@@ -114,6 +117,7 @@ register_health_routes(api_app)
 register_workflow_routes(api_app)
 register_dashboard_routes(api_app)
 register_demo_routes(api_app)
+register_drone_routes(api_app)
 register_tasks_routes(api_app)
 register_sim_routes(api_app, simulator)
 
@@ -262,44 +266,6 @@ class EmbeddedYoloApiRunner(EmbeddedApiRunner):
         return health_url
 
 
-class EmbeddedDroneApiRunner(EmbeddedApiRunner):
-    """Runner for embedded virtual drone API server."""
-
-    def _load_settings(self) -> Any:
-        return load_virtual_drone_settings()
-
-    def _create_app(self) -> FastAPI:
-        return create_virtual_drone_app(settings=self.settings, logger=self.logger)
-
-    def _get_health_url(self) -> str:
-        access_host = resolve_loopback_host(self.settings.host)
-        return f"http://{access_host}:{self.settings.port}/health"
-
-    def _get_startup_message(self) -> str:
-        return "内嵌虚拟无人机 API 已启动"
-
-    def _get_startup_error_prefix(self) -> str:
-        return "内嵌虚拟无人机 API"
-
-    def _get_log_extra(self) -> dict[str, Any]:
-        access_host = resolve_loopback_host(self.settings.host)
-        api_url = f"http://{access_host}:{self.settings.port}/missions"
-        health_url = f"http://{access_host}:{self.settings.port}/health"
-        return {"api_url": api_url, "health_url": health_url}
-
-    @property
-    def api_url(self) -> str:
-        """Return the drone API URL."""
-        access_host = resolve_loopback_host(self.settings.host)
-        return f"http://{access_host}:{self.settings.port}/missions"
-
-    @property
-    def health_url(self) -> str:
-        """Return the health check URL."""
-        access_host = resolve_loopback_host(self.settings.host)
-        return f"http://{access_host}:{self.settings.port}/health"
-
-
 # ============================================================================
 # Main Application Class
 # ============================================================================
@@ -326,10 +292,17 @@ class MuyeApplication:
         self.rag_embeddings: QwenEmbeddings | None = None
         self.rag_vector_store: VectorStoreManager | None = None
         self.rag_retriever: DecisionRAGRetriever | None = None
+        self._background_tasks: set[asyncio.Task[None]] = set()
 
         self.queue: asyncio.Queue[tuple[str, Path, dict[str, Any]]] = asyncio.Queue()
         self.pending_images: set[str] = set()
         self.worker_tasks: list[asyncio.Task[None]] = []
+
+        # 手动起飞确认机制
+        self._takeoff_confirmed = asyncio.Event()
+        self._takeoff_request_id: str | None = None
+        deps.takeoff_confirmation_event = self._takeoff_confirmed
+        deps.clear_takeoff_confirmation_state()
 
         self.yolo_api_url = self.config.yolo_api_url
         self.image_processor = ImageProcessor(
@@ -377,11 +350,6 @@ class MuyeApplication:
         )
         self.drone_controller = DroneController(
             drone_config=self.drone_config,
-            api_url=self.config.drone_api_url,
-            api_key=self.config.drone_api_key,
-            timeout_seconds=float(
-                self.drone_config.get("execution", {}).get("request_timeout_seconds", 15)
-            ),
             logger=self.logger,
             event_bus=self.event_bus,
             sqlite_store=self.sqlite_store,
@@ -467,10 +435,8 @@ class MuyeApplication:
         if self.config.drone_backend:
             execution["backend"] = self.config.drone_backend.strip().lower()
 
-        if execution.get("backend") == "simulated":
-            execution["simulate_only"] = True
-        elif execution.get("backend") in {"remote_api", "px4"}:
-            execution["simulate_only"] = False
+        execution["backend"] = "px4"
+        execution["simulate_only"] = False
 
         if self.config.px4_system_address:
             px4_config["system_address"] = self.config.px4_system_address
@@ -478,10 +444,16 @@ class MuyeApplication:
         px4_config["mission_timeout_seconds"] = self.config.px4_mission_timeout_seconds
         px4_config["auto_arm"] = self.config.px4_auto_arm
         px4_config["auto_start_mission"] = self.config.px4_auto_start_mission
+        px4_config["auto_start_on_spray"] = self.config.px4_auto_start_on_spray
         px4_config["return_to_launch_after_mission"] = self.config.px4_return_to_launch_after_mission
         px4_config["require_global_position"] = self.config.px4_require_global_position
-        px4_config["prefer_demo_field"] = self.config.px4_prefer_demo_field
+        px4_config["arm_timeout_seconds"] = self.config.px4_arm_timeout_seconds
+        px4_config["arm_retries"] = self.config.px4_arm_retries
+        px4_config["arm_retry_delay_seconds"] = self.config.px4_arm_retry_delay_seconds
+        px4_config["allow_force_arm"] = self.config.px4_allow_force_arm
+        px4_config["prefer_demo_field"] = True
         px4_config["acceptance_radius_m"] = self.config.px4_acceptance_radius_m
+        px4_config["execution_mode"] = "native_mission"
 
     def configure_embedded_yolo_api(self, detect_url: str) -> None:
         self.yolo_api_url = detect_url
@@ -489,12 +461,10 @@ class MuyeApplication:
 
     def configure_drone_backend(self, backend: str) -> None:
         normalized = backend.strip().lower()
+        if normalized != "px4":
+            raise ValueError("无人机执行后端已固定为 px4")
         self.drone_config.setdefault("execution", {})["backend"] = normalized
-        self.drone_config["execution"]["simulate_only"] = normalized == "simulated"
-
-    def configure_embedded_drone_api(self, api_url: str) -> None:
-        self.configure_drone_backend("remote_api")
-        self.drone_controller.api_url = api_url
+        self.drone_config["execution"]["simulate_only"] = False
 
     async def start(
         self,
@@ -530,8 +500,12 @@ class MuyeApplication:
         await self.data_collector.shutdown()
         for task in self.worker_tasks:
             task.cancel()
+        for task in list(self._background_tasks):
+            task.cancel()
         if self.worker_tasks:
             await asyncio.gather(*self.worker_tasks, return_exceptions=True)
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
         await self.image_processor.close()
         await self.decision_engine.close()
         await self.weather_client.close()
@@ -723,6 +697,45 @@ class MuyeApplication:
                 "add_decision",
                 lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
             )
+            self._schedule_incremental_rag_index(
+                request_id=request_id,
+                decision=bundle["decision"],
+                pest_detections=detections,
+                field_context=field_context,
+            )
+
+            # 手动模式：决策完成后暂停，等待人工确认起飞
+            takeoff_mode = str(
+                self.drone_config.get("execution", {}).get("takeoff_mode", "auto")
+            ).strip().lower()
+            if takeoff_mode == "manual":
+                self._takeoff_request_id = request_id
+                self._takeoff_confirmed.clear()
+                deps.set_pending_takeoff_request(request_id)
+                self.event_bus.publish(
+                    request_id=request_id,
+                    stage="drone",
+                    status="pending_confirmation",
+                    message="决策完成，等待确认起飞",
+                    payload={
+                        "task_id": f"manual-{request_id[:8]}",
+                        "progress": 30,
+                        "instruction": execution_plan,
+                        "medication": bundle["decision"].get("施药方案", {}),
+                        "current_waypoint_index": 0,
+                        "position": None,
+                    },
+                )
+                self.logger.info(
+                    "手动模式：等待起飞确认 request_id=%s", request_id
+                )
+                await deps.wait_for_takeoff_confirmation()
+                deps.clear_takeoff_confirmation_state()
+                self.logger.info(
+                    "手动模式：已确认起飞 request_id=%s", request_id
+                )
+
+            await self._ensure_px4_ready_for_spray(request_id)
             result = await self.drone_controller.execute_spray_mission(
                 decision=bundle["decision"],
                 current_weather=bundle["weather"],
@@ -822,6 +835,130 @@ class MuyeApplication:
                 error=str(exc),
             )
 
+    def _schedule_incremental_rag_index(
+        self,
+        *,
+        request_id: str,
+        decision: dict[str, Any],
+        pest_detections: list[dict[str, Any]],
+        field_context: dict[str, Any],
+    ) -> None:
+        if self.rag_vector_store is None:
+            return
+
+        task = asyncio.create_task(
+            self._index_decision_into_rag(
+                request_id=request_id,
+                decision=decision,
+                pest_detections=pest_detections,
+                field_context=field_context,
+            )
+        )
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _ensure_px4_ready_for_spray(self, request_id: str) -> None:
+        execution = self.drone_config.get("execution", {})
+        px4_config = self.drone_config.get("px4", {})
+        if str(execution.get("backend", "")).strip().lower() != "px4":
+            return
+        if not bool(px4_config.get("auto_start_on_spray", True)):
+            return
+
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="drone",
+            status="running",
+            message="正在启动 PX4 飞行仿真",
+            payload={"progress": 35},
+        )
+        try:
+            px4_info = await ensure_px4_ready()
+        except Exception as exc:
+            log_event(
+                self.logger,
+                logging.ERROR,
+                "PX4 自动启动失败",
+                request_id=request_id,
+                client_ip=self.client_ip,
+                error=str(exc),
+            )
+            raise
+
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="drone",
+            status="running",
+            message="PX4 已就绪，准备执行喷洒航线",
+            payload={"progress": 40, "px4": px4_info},
+        )
+        log_event(
+            self.logger,
+            logging.INFO,
+            "PX4 已关联启动",
+            request_id=request_id,
+            client_ip=self.client_ip,
+            px4=px4_info,
+        )
+
+    async def _index_decision_into_rag(
+        self,
+        *,
+        request_id: str,
+        decision: dict[str, Any],
+        pest_detections: list[dict[str, Any]],
+        field_context: dict[str, Any],
+    ) -> None:
+        if self.rag_vector_store is None:
+            return
+
+        pest_types = [
+            str(item.get("pest_type", "")).strip()
+            for item in pest_detections
+            if str(item.get("pest_type", "")).strip()
+        ]
+        crop_cycle = field_context.get("crop_cycle")
+        crop_name = None
+        if isinstance(crop_cycle, dict):
+            candidate = crop_cycle.get("crop_name")
+            if isinstance(candidate, str) and candidate.strip():
+                crop_name = candidate.strip()
+
+        document = build_historical_decision_document(
+            request_id=request_id,
+            decision=decision,
+            pest_types=pest_types,
+            field_id=str(field_context.get("field_id") or ""),
+            crop_name=crop_name,
+        )
+        if document is None:
+            return
+
+        try:
+            await asyncio.to_thread(
+                self.rag_vector_store.add_documents,
+                COLLECTION_DECISIONS,
+                [document],
+            )
+            log_event(
+                self.logger,
+                logging.INFO,
+                "RAG 历史决策增量索引完成",
+                request_id=request_id,
+                client_ip=self.client_ip,
+                pest_types=pest_types,
+                crop_name=crop_name or "",
+            )
+        except Exception as exc:
+            log_event(
+                self.logger,
+                logging.WARNING,
+                "RAG 历史决策增量索引失败",
+                request_id=request_id,
+                client_ip=self.client_ip,
+                error=str(exc),
+            )
+
     async def _wait_until_ready(
         self,
         image_path: Path,
@@ -844,16 +981,12 @@ class MuyeApplication:
 # ============================================================================
 
 async def _async_main(args: argparse.Namespace) -> None:
-    import app.deps as deps
-    
     app = MuyeApplication()
     embedded_yolo_runner: EmbeddedYoloApiRunner | None = None
-    embedded_drone_runner: EmbeddedDroneApiRunner | None = None
     try:
-        if args.drone_backend:
-            app.configure_drone_backend(args.drone_backend)
+        app.configure_drone_backend(args.drone_backend)
 
-        if args.with_yolo_api or args.with_demo_stack:
+        if args.with_yolo_api:
             embedded_yolo_runner = EmbeddedYoloApiRunner(logger=app.logger)
             deps.embedded_yolo_runner_for_health = embedded_yolo_runner
             app.configure_embedded_yolo_api(embedded_yolo_runner.detect_url)
@@ -868,15 +1001,6 @@ async def _async_main(args: argparse.Namespace) -> None:
                 app.yolo_api_url,
             )
 
-        if args.with_virtual_drone_api or args.with_demo_stack:
-            embedded_drone_runner = EmbeddedDroneApiRunner(logger=app.logger)
-            app.configure_embedded_drone_api(embedded_drone_runner.api_url)
-            await embedded_drone_runner.start()
-            app.logger.info(
-                "演示模式已接管虚拟无人机 API 地址: %s",
-                embedded_drone_runner.api_url,
-            )
-
         if args.once:
             await app.run_once(workers=args.workers, timeout_seconds=args.timeout)
         else:
@@ -889,8 +1013,6 @@ async def _async_main(args: argparse.Namespace) -> None:
         if embedded_yolo_runner:
             await embedded_yolo_runner.stop()
         deps.embedded_yolo_runner_for_health = None
-        if embedded_drone_runner:
-            await embedded_drone_runner.stop()
 
 
 def parse_args() -> argparse.Namespace:
@@ -902,24 +1024,15 @@ def parse_args() -> argparse.Namespace:
         help="在主进程内一并启动本地 YOLO API，再启动农业防治主系统",
     )
     parser.add_argument(
-        "--with-virtual-drone-api",
-        action="store_true",
-        help="在主进程内一并启动虚拟无人机 API，并接管无人机任务执行",
-    )
-    parser.add_argument(
-        "--with-demo-stack",
-        action="store_true",
-        help="一键启动本地 YOLO API、虚拟无人机 API 和农业防治主系统",
-    )
-    parser.add_argument(
         "--drone-backend",
-        choices=["simulated", "remote_api", "px4"],
-        help="覆盖无人机执行后端，可选 simulated、remote_api、px4",
+        choices=["px4"],
+        default="px4",
+        help="无人机执行后端固定为 px4",
     )
     parser.add_argument(
         "--no-capture-on-startup",
         action="store_true",
-        help="启动后不立即自动采图，适合由外部脚本投喂指定演示图片",
+        help="启动后不立即自动采图，适合由外部脚本投喂指定巡检图片",
     )
     parser.add_argument("--workers", type=int, default=1, help="图片处理并发 worker 数量")
     parser.add_argument("--timeout", type=int, default=60, help="--once 模式的等待超时时间")

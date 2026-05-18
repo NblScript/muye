@@ -17,7 +17,7 @@ from models.schemas import (
     WorkflowTaskState,
     WorkflowTimelineEntry,
 )
-from modules.infra.common import DATA_DIR
+from modules.infra.common import CONFIG_DIR, DATA_DIR, load_json
 from modules.infra.event_bus import build_task_views, load_events
 from modules.infra.sqlite_store import SqliteStore
 
@@ -30,13 +30,24 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 @lru_cache(maxsize=1)
 def _get_sqlite_path() -> Path:
     """Get the SQLite path (cached)."""
-    return Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    return Path(os.getenv("MUYE_SQLITE_PATH", str(Path.home() / ".muye" / "data" / "muye.db")))
 
 
 @lru_cache(maxsize=1)
 def get_sqlite_store() -> SqliteStore:
     """Get the shared SqliteStore instance (singleton)."""
     return SqliteStore(_get_sqlite_path())
+
+
+@lru_cache(maxsize=1)
+def load_drone_config() -> dict[str, Any]:
+    """Load the shared drone configuration."""
+    return load_json(CONFIG_DIR / "drone_config.json")
+
+
+def get_px4_demo_field() -> dict[str, Any]:
+    """Return PX4 demo field data from the shared drone config."""
+    return load_drone_config().get("px4", {}).get("demo_field", {})
 
 
 def load_sqlite_task_views(
@@ -156,6 +167,7 @@ def merge_sqlite_tasks_with_events(
             merged_task["detections"] = sqlite_task.get("detections") or event_task.get("detections", [])
             merged_task["weather"] = sqlite_task.get("weather") or event_task.get("weather", {})
             merged_task["decision"] = sqlite_task.get("decision") or event_task.get("decision", {})
+            merged_task["rag_context"] = event_task.get("rag_context") or sqlite_task.get("rag_context") or {}
             merged_task["drone"] = {
                 **(sqlite_task.get("drone") or {}),
                 **(event_task.get("drone") or {}),
@@ -189,12 +201,17 @@ def merge_sqlite_tasks_with_events(
 
 def build_fallback_workflow_state() -> WorkflowStateResponse:
     """Build a fallback workflow state for demo purposes."""
+    demo_field = get_px4_demo_field()
+    geofence = demo_field.get("geofence", [])
+    explicit_route = demo_field.get("explicit_route", [])
+    crop_cycle = demo_field.get("crop_cycle") or {"crop_name": "小麦"}
+
     demo_instruction = {
-        "飞行路径": [[24, 29], [34, 31], [48, 34], [54, 40], [42, 36]],
+        "飞行路径": explicit_route,
         "覆盖区域": {
-            "coordinates": [[20, 26], [22, 40], [48, 42], [46, 24]],
+            "coordinates": geofence,
         },
-        "高度": 12,
+        "高度": 5,
         "速度": 4.5,
         "喷洒速率": "1.8 L/min",
     }
@@ -254,24 +271,28 @@ def build_fallback_workflow_state() -> WorkflowStateResponse:
             stage="drone",
             status="connecting",
             message="PX4 遥测链路接通",
+            payload={},
         ),
         WorkflowEventEntry(
             timestamp=iso_utc_offset(32),
             stage="drone",
             status="connected",
             message="飞控握手完成",
+            payload={},
         ),
         WorkflowEventEntry(
             timestamp=iso_utc_offset(18),
             stage="drone",
             status="uploaded",
             message="覆盖式喷洒航线上传成功",
+            payload={},
         ),
         WorkflowEventEntry(
             timestamp=iso_utc_offset(5),
             stage="drone",
             status="spraying",
             message="PX4 仿真任务正在执行喷洒路径",
+            payload={},
         ),
     ]
     latest_task = WorkflowTaskState(
@@ -281,7 +302,13 @@ def build_fallback_workflow_state() -> WorkflowStateResponse:
         message="当前暂无事件总线任务，展示 PX4 仿真流程示例",
         updated_at=iso_utc_offset(3),
         image_path=None,
-        field={},
+        field={
+            "field_id": demo_field.get("field_id", "px4-sitl-demo"),
+            "field_name": demo_field.get("name", "PX4 SITL 小麦作业田"),
+            "area_mu": demo_field.get("area_mu", 10.0),
+            "geofence": geofence,
+            "crop_cycle": crop_cycle,
+        },
         detections=[],
         weather={},
         spray_summary={},
@@ -429,6 +456,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
             stage=str(item.get("stage") or ""),
             status=str(item.get("status") or ""),
             message=str(item.get("message") or ""),
+            payload=item.get("payload", {}) or {},
         )
         for item in latest.get("events", [])[-24:]
     ]
@@ -444,6 +472,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
         weather=latest.get("weather", {}) or {},
         spray_summary=latest.get("spray_summary", {}) or {},
         decision=latest.get("decision", {}) or {},
+        rag_context=latest.get("rag_context", {}) or {},
         drone=latest.get("drone", {}) or {},
         drone_timeline=timeline,
         recent_events=recent_events,

@@ -403,13 +403,15 @@ class AgriDataMixin:
             filters: list[str] = []
             params: list[Any] = []
             if crop_name:
-                filters.append("LOWER(COALESCE(target_crops, '')) LIKE ?")
-                params.append(f"%{crop_name.lower()}%")
+                escaped_crop = crop_name.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                filters.append("LOWER(COALESCE(target_crops, '')) LIKE ? ESCAPE '\\'")
+                params.append(f"%{escaped_crop}%")
             if normalized_pest_types:
                 pest_filters = []
                 for pest_type in normalized_pest_types:
-                    pest_filters.append("LOWER(COALESCE(target_pests, '')) LIKE ?")
-                    params.append(f"%{pest_type.lower()}%")
+                    escaped_pest = pest_type.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    pest_filters.append("LOWER(COALESCE(target_pests, '')) LIKE ? ESCAPE '\\'")
+                    params.append(f"%{escaped_pest}%")
                 filters.append(f"({' OR '.join(pest_filters)})")
             pesticide_rows = self.fetch_all(
                 f"""

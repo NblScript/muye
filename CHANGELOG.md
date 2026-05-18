@@ -1,5 +1,113 @@
 # Changelog
 
+## Unreleased
+
+- 演示天气固定：
+  - `scripts/demo.sh` 启动时强制使用本地天气数据，并将演示湿度固定为 `70%`
+  - 避免真实和风天气接口返回值波动影响前端大屏和 AI 决策链展示
+
+- PX4 Mission 航线执行修正：
+  - `PX4Simulator` 会确保本地航线第一个 setpoint 就是当前起飞点，避免飞机起飞后先斜飞到远处矩形角点
+  - `scripts/demo.sh` 每次启动都会写入显式 `local_route.points`，PX4 演示固定按 `12m x 8m` 本地米制矩形扫线飞行
+  - `config/drone_config.json` 默认 PX4 本地航线同步改为显式固定航点，最后一个航点回到当前起飞点附近，便于 SITL 中稳定观察
+  - PX4 执行链路从 Offboard setpoint 切换为 MAVSDK Mission 插件，默认 `execution_mode=native_mission`
+  - 默认启用 `px4.use_existing_mission=true`，只启动 QGroundControl/PX4 已规划并上传的 Mission，牧野不上传航点、不接管起飞高度
+  - 启动前会读取 PX4 中已有 Mission；没有航点时直接提示先在 QGroundControl 中规划并 Upload 航线
+  - 前端地图大屏继续只做动画展示，PX4 中的真实 SITL 飞机按 QGC/PX4 Mission 飞行
+  - 演示模式关闭 `return_to_launch_after_mission`，避免固定 Mission 结束后额外 RTL 造成观感上偏离路线
+  - 验证：`.venv/bin/python -m pytest tests/test_px4_simulator.py -q`
+
+- 前端地图大屏布局调整：
+  - `FieldMap` 将地图图例、飞行参数和无人机实时状态从 SVG 画布绝对叠层中移出，改为独立信息栏展示
+  - 大屏下地图主画布保留地块、航线、无人机、检测点和指挥点，减少信息遮挡
+  - 平板和手机断点改为信息栏下排/单列布局，避免状态卡片压在地图上
+  - 地图大屏不再接入 PX4 实时遥测、PX4 字段边界、PX4 计划航线或后端 sim map；前端只基于任务规划航线/默认航线做循环动画展示
+  - 当前任务缺少规划航线时，地图会根据地块边界自动生成覆盖式往返航线，并加粗航线描边，保证大屏始终可见
+  - 验证：`cd frontend && npm run build`
+
+- 无人机运行链路收敛为单一 PX4 工作流程：
+  - `scripts/demo.sh` 现在固定为单轮现场流程：一键启动前后端和 YOLO，只投喂一张巡检图片，前端人工确认起飞后自动启动 PX4 SITL
+  - `scripts/demo.sh` 删除原无人机模式切换参数和虚拟模式分支，固定以 `--with-yolo-api --drone-backend px4` 启动主流程
+  - `config/drone_config.json` 默认改为 `execution.backend=px4`、`simulate_only=false`
+  - PX4 执行链路固定使用 `native_mission + use_existing_mission`，只启动 PX4/QGC 已上传 Mission，不再使用河南/业务地块经纬度作为飞控航点
+  - `config/drone_config.json` 新增 `px4.local_route`，用本地米制宽高和扫线数量定义 PX4 实际飞行图形
+  - PX4 实际飞行不再使用业务 planner 的经纬度航线缩放形状；即使配置里误开 `use_planner_shape`，后端也会回退到本地米制扫线
+  - PX4 本地航线现在按连接时读取到的当前全局位置锚定，避免把业务航线或错误地块经纬度当成实际起点
+  - `app/main.py` 运行时强制 `px4.execution_mode=native_mission`，避免环境变量或配置切回旧 Offboard 控制路径
+  - `PX4Simulator` 默认执行分支改为只启动 QGC/PX4 已规划 Mission；保留上传固定 Mission 的代码路径但 demo 默认不使用
+  - `PX4Simulator` 状态 payload 回到 PX4 Mission 位置回传，前端遥测层仅用于展示，不参与 PX4 控制
+  - `app/main.py` 删除原多模式无人机栈入口，`--drone-backend` 固定为 `px4`
+  - 删除原独立无人机 API 服务和对应测试
+  - `modules/drone/controller.py` 删除远程 API / 本地模拟执行分支，直接执行 PX4 SITL
+  - 前端工作流文案和无人机链路展示收敛为 PX4 SITL
+  - README、ARCHITECTURE、PROJECT_MEMORY、项目说明同步更新为单一 PX4 运行口径
+
+- 前端首页已按比赛演示场景重构为“答辩导向”视图：
+  - [`frontend/src/pages/Dashboard.tsx`](/home/qingking/muye/frontend/src/pages/Dashboard.tsx) 新增演示抬头、答辩讲解重点、本轮演示状态和作品亮点区块
+  - 首页信息组织从“工程控制台”改为“项目价值 → 闭环流程 → 实时态势 → 当前成果”
+  - 保留原有上传、刷新、清空事件、PX4 停止和人工确认起飞入口，避免影响现场操作
+- 视觉主题已调成更适合大屏投放与答辩展示的方向：
+  - [`frontend/src/index.css`](/home/qingking/muye/frontend/src/index.css) 更新全局配色、背景和字体令牌
+  - [`frontend/src/styles/dashboard.css`](/home/qingking/muye/frontend/src/styles/dashboard.css) 增加演示英雄区、亮点卡片和更清晰的卡片层次
+- 评委可读性优化：
+  - [`frontend/src/utils/dashboardUtils.ts`](/home/qingking/muye/frontend/src/utils/dashboardUtils.ts) 新增害虫标签中文映射，避免首页直接展示 `aphid` 这类英文 slug
+- 验证：
+  - `cd frontend && npm run build`
+  - 构建通过
+
+- RAG 检索链继续收敛到更接近真实 demo 的状态：
+  - `modules/decision/rag/retriever.py` 已从只查 `pesticides` 与 `decisions` 扩展为同时查询 `agri_knowledge`
+  - 新增 demo 级害虫同义词归一化，缓解 `aphid/蚜虫`、`rice-planthopper/稻飞虱` 这类中英标签混用
+  - `RetrievedContext` 中的分数展示统一改为“参考值”，避免把 Chroma 返回值误读为严格相似度
+- 主流程现在会在 AI 决策完成并写入 SQLite 后，异步把新决策增量写入 `COLLECTION_DECISIONS`：
+  - 新增 `build_historical_decision_document()`
+  - `app/main.py` 新增后台增量索引任务调度与容错日志
+  - 不阻塞图片处理主链路，索引失败只记 warning
+- 新增测试覆盖：
+  - `tests/test_rag_retriever.py`
+  - `tests/test_knowledge_loader.py`
+  - `tests/test_main.py::test_main_incrementally_indexes_decision_into_rag`
+  - 定向回归：20 passed in 1.02s
+- 本轮验证：
+  - `.venv/bin/python -m pytest tests/test_drone_controller.py tests/test_field_context_resolver.py tests/test_main.py::test_main_reads_px4_backend_override tests/test_main.py::test_main_reads_px4_demo_field_override tests/test_main.py::test_main_forces_px4_demo_field tests/test_main.py::test_default_field_matches_px4_demo_field -q`
+  - `.venv/bin/python -m pytest tests/test_px4_simulator.py tests/test_drone_controller.py tests/test_field_context_resolver.py tests/test_main.py::test_main_reads_px4_backend_override tests/test_main.py::test_main_reads_px4_demo_field_override tests/test_main.py::test_main_forces_px4_demo_field tests/test_main.py::test_default_field_matches_px4_demo_field -q`
+  - `cd frontend && npm run build`
+
+## v1.6 (2026-04-29)
+
+- 演示脚本精简：
+  - 将 10 个冗余脚本合并为 `scripts/prepare.sh` + `scripts/demo.sh` + `scripts/precheck.sh`
+  - 已删除：start_demo.sh、run_px4_demo.sh、start_px4_visual_demo.sh、start_competition_mode.sh、start_all_in_one.sh、start_showtime.sh、precheck_demo.sh、prepare_demo_images.sh、start_demo_with_all_images.sh
+  - `demo.sh` 当时支持无人机模式切换、`--takeoff manual|auto`、`--api-port`、`--frontend-port`
+  - `prepare.sh` 支持 `--images-only`、`--check-only`、`--rag`，从 IP102 数据集复制真实害虫图片
+- 无人机手动/自动起飞模式：
+  - `config/drone_config.json` 新增 `execution.takeoff_mode`：`manual`（默认）/ `auto`
+  - manual 模式：AI 决策后暂停，前端显示"确认起飞"按钮，评审可查看决策结果
+  - 新增 `POST /drone/confirm-takeoff` 端点
+  - 新增 `app/routes/drone.py`
+  - 前端 `WorkflowPanel.tsx` 在 `pending_confirmation` 状态显示确认按钮
+  - `app/deps.py` 新增全局 `takeoff_confirmation_event: asyncio.Event`
+- 新增测试：
+  - `test_confirm_drone_takeoff_returns_503_when_not_initialized`
+  - `test_confirm_drone_takeoff_sets_event`
+  - `test_confirm_drone_takeoff_returns_already_confirmed`
+- 文档更新：
+  - README.md 更新为新脚本入口
+  - ARCHITECTURE.md 更新端口和数据流
+
+## v1.5.1 (2026-04-29)
+
+- 修复三个关键 Bug：
+  - **重置事件链路失败**：前端 `resetDemoEvents()` 现正确传入 `confirm=true` 参数
+  - **启动采图重复入队竞态**：删除 `capture_image()` 中的主动回调，完全依赖 watchdog 监听
+  - **上传文件名不唯一**：使用 UUID 确保文件名唯一，避免同一秒上传覆盖
+- 修改文件：
+  - `frontend/src/api/workflow.ts`
+  - `modules/detection/data_collector.py`
+  - `app/routes/demo.py`
+  - `tests/test_data_collector.py`
+- 全量回归：150 passed in 6.68s
+
 ## v1.5
 
 - RAG 决策增强链路已落地：
@@ -375,12 +483,12 @@
   - YOLO 识别
   - 天气获取
   - 千问决策
-  - 虚拟无人机状态推进
+  - PX4 状态推进
   - pipeline completed
 
 ## v0.2-initial
 
-- 支持真实 YOLO、真实和风天气、真实千问增强链路、虚拟无人机和可视化指挥中心前端。
+- 支持真实 YOLO、真实和风天气、真实千问增强链路、PX4 SITL 和可视化指挥中心前端。
 
 ## v0.1-initial
 

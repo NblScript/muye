@@ -101,7 +101,11 @@ class FieldContextResolver:
     def _should_use_px4_demo_field(self) -> bool:
         execution = self.drone_config.get("execution", {})
         px4_config = self.drone_config.get("px4", {})
-        return execution.get("backend") == "px4" and bool(px4_config.get("prefer_demo_field", False))
+        return (
+            execution.get("backend") == "px4"
+            and bool(px4_config.get("demo_field"))
+            and bool(px4_config.get("prefer_demo_field", True))
+        )
 
     def _build_px4_demo_field_context(self) -> dict[str, Any]:
         px4_config = self.drone_config.get("px4", {})

@@ -1,4 +1,4 @@
-import { Card, Typography } from 'antd'
+import { Card } from '../ui'
 import { safeMetric } from '../../utils/dashboardUtils'
 
 type RecordType = Record<string, unknown>
@@ -11,10 +11,10 @@ export default function WeatherCard({ weather }: WeatherCardProps) {
   const summary = String(weather.summary ?? '等待天气数据')
 
   return (
-    <Card bordered={false} className="dashboard-card detail-card">
+    <Card className="dashboard-card detail-card">
       <div className="detail-card-header">
-        <Typography.Text className="panel-label">天气信息</Typography.Text>
-        <Typography.Text className="detail-card-meta">{summary}</Typography.Text>
+        <span className="label-uppercase">天气信息</span>
+        <span className="detail-card-meta">{summary}</span>
       </div>
       <div className="detail-metric-grid">
         <div className="detail-metric-card">

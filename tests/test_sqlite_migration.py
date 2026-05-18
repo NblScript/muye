@@ -166,9 +166,9 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
         )
         store.add_drone_mission_update(
             "req-a",
-            task_id="vd-req-a",
+            task_id="px4-req-a",
             status="completed",
-            message="虚拟无人机任务完成",
+            message="PX4 喷洒任务完成",
             progress=100,
             current_waypoint_index=1,
             instruction={"飞行路径": [[113.6241, 34.7467], [113.6257, 34.7479]]},
@@ -178,7 +178,7 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
             {
                 "request_id": "req-a",
                 "field_id": "henan-zz-001",
-                "drone_task_id": "vd-req-a",
+                "drone_task_id": "px4-req-a",
                 "spray_date": "2026-04-16T01:00:00Z",
                 "spray_area_mu": 66,
                 "dosage_per_mu": 0.5,
@@ -220,8 +220,8 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
     assert completed_tasks[0]["decision"]["用药"]["农药名称"] == "吡虫啉"
     assert completed_tasks[0]["detections"][0]["pest_type"] == "aphid"
     assert completed_tasks[0]["drone"]["status"] == "completed"
-    assert completed_tasks[0]["drone"]["task_id"] == "vd-req-a"
-    assert completed_tasks[0]["drone"]["message"] == "虚拟无人机任务完成"
+    assert completed_tasks[0]["drone"]["task_id"] == "px4-req-a"
+    assert completed_tasks[0]["drone"]["message"] == "PX4 喷洒任务完成"
     assert completed_tasks[0]["field"]["field_name"] == "郑州示范田1号"
     assert completed_tasks[0]["field"]["area_mu"] == 66
     assert len(completed_tasks[0]["field"]["geofence"]) == 4
@@ -393,7 +393,7 @@ def test_sqlite_store_upsert_spray_record_updates_existing_row_by_request_id(tmp
                 "request_id": "req-spray-1",
                 "field_id": "henan-zz-001",
                 "crop_cycle_id": cycle_row["id"],
-                "drone_task_id": "sim-req-spray-1",
+                "drone_task_id": "px4-req-spray-1",
                 "spray_date": "2026-04-16T00:00:00Z",
                 "spray_area_mu": 66,
                 "dosage_per_mu": 0.02,
@@ -413,7 +413,7 @@ def test_sqlite_store_upsert_spray_record_updates_existing_row_by_request_id(tmp
                 "request_id": "req-spray-1",
                 "field_id": "henan-zz-001",
                 "crop_cycle_id": cycle_row["id"],
-                "drone_task_id": "sim-req-spray-1-updated",
+                "drone_task_id": "px4-req-spray-1-updated",
                 "spray_date": "2026-04-16T00:00:00Z",
                 "spray_area_mu": 68,
                 "dosage_per_mu": 0.03,
@@ -441,7 +441,7 @@ def test_sqlite_store_upsert_spray_record_updates_existing_row_by_request_id(tmp
         store.close()
 
     assert len(spray_rows) == 1
-    assert spray_rows[0]["drone_task_id"] == "sim-req-spray-1-updated"
+    assert spray_rows[0]["drone_task_id"] == "px4-req-spray-1-updated"
     assert spray_rows[0]["spray_area_mu"] == 68
     assert spray_rows[0]["total_dosage"] == 2.04
     assert spray_rows[0]["dilution_ratio"] == "1:800"

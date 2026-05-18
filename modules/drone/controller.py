@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import ipaddress
 import logging
 import re
 import time
 from typing import Any
-
-import httpx
 
 from modules.infra.common import log_event, point_in_polygon
 from modules.infra.event_bus import FileEventBus
@@ -24,17 +21,11 @@ class DroneController:
     def __init__(
         self,
         drone_config: dict[str, Any],
-        api_url: str,
-        api_key: str,
-        timeout_seconds: float = 15,
         logger: logging.Logger | None = None,
         event_bus: FileEventBus | None = None,
         sqlite_store: SqliteStore | None = None,
-        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.drone_config = drone_config
-        self.api_url = api_url
-        self.api_key = api_key
         self.logger = logger or logging.getLogger("muye.drone")
         self.event_bus = event_bus
         self.sqlite_store = sqlite_store
@@ -43,10 +34,9 @@ class DroneController:
             logger=self.logger,
         )
         self.px4_backend = PX4Simulator(self.drone_config, logger=self.logger)
-        self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
-        await self._client.aclose()
+        return None
 
     async def execute_spray_mission(
         self,
@@ -69,92 +59,16 @@ class DroneController:
                 client_ip=client_ip,
                 geofence=(field_context or {}).get("geofence"),
             )
-            execution = self.drone_config.get("execution", {})
-            payload = {
-                "request_id": request_id,
-                "medication": decision["用药"],
-                "instruction": plan,
-                "weather": current_weather,
-            }
-            backend = self._resolve_backend()
-            if backend == "simulated":
-                result = {
-                    "status": "simulated",
-                    "task_id": f"sim-{request_id[:8]}",
-                    "accepted": True,
-                    "final_status": "completed",
-                    "last_known_status": "completed",
-                }
-                await self._simulate_mission_progress(request_id, result["task_id"], payload)
-                log_event(
-                    self.logger,
-                    logging.INFO,
-                    "无人机喷洒任务已模拟执行",
-                    request_id=request_id,
-                    client_ip=client_ip,
-                    duration_ms=(time.perf_counter() - started) * 1000,
-                    result=result,
-                )
-                return result
-
-            if backend == "px4":
-                result = await self._execute_px4_mission(
-                    request_id=request_id,
-                    plan=plan,
-                    medication=decision["用药"],
-                    current_weather=current_weather,
-                )
-                log_event(
-                    self.logger,
-                    logging.INFO,
-                    "PX4 喷洒任务已提交",
-                    request_id=request_id,
-                    client_ip=client_ip,
-                    duration_ms=(time.perf_counter() - started) * 1000,
-                    result=result,
-                )
-                return result
-
-            response = await self._client.post(
-                self.api_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "X-Request-ID": request_id,
-                },
-                json=payload,
-            )
-            response.raise_for_status()
-            result = response.json()
-            self._validate_drone_response(result)
-            self._publish_drone_update(
+            result = await self._execute_px4_mission(
                 request_id=request_id,
-                task_id=result.get("task_id") or result.get("mission_id"),
-                status="submitted",
-                message="无人机任务已提交",
-                progress=int(result.get("progress", 5)),
-                instruction=plan,
+                plan=plan,
                 medication=decision["用药"],
-                current_waypoint_index=0,
-                position=None,
+                current_weather=current_weather,
             )
-            final_payload = await self._track_remote_mission(
-                request_id=request_id,
-                task_id=result.get("task_id") or result.get("mission_id"),
-                instruction=plan,
-                medication=decision["用药"],
-            )
-            last_known_status = str(
-                (final_payload or {}).get("status")
-                or result.get("status")
-                or "submitted"
-            )
-            result["last_known_status"] = last_known_status
-            result["final_status"] = self._map_drone_status_to_spray_result(last_known_status)
             log_event(
                 self.logger,
                 logging.INFO,
-                "无人机喷洒任务已提交",
+                "PX4 喷洒任务已提交",
                 request_id=request_id,
                 client_ip=client_ip,
                 duration_ms=(time.perf_counter() - started) * 1000,
@@ -218,81 +132,6 @@ class DroneController:
             field_context=field_context,
             current_weather=current_weather,
         )
-
-    async def _track_remote_mission(
-        self,
-        request_id: str,
-        task_id: str,
-        instruction: dict[str, Any],
-        medication: dict[str, Any],
-    ) -> dict[str, Any] | None:
-        if not task_id or not self.api_url:
-            return None
-
-        status_url = f"{self.api_url.rstrip('/')}/{task_id}"
-        seen_statuses: set[str] = set()
-        deadline = time.monotonic() + 15
-        last_payload: dict[str, Any] | None = None
-
-        while time.monotonic() < deadline:
-            response = await self._client.get(
-                status_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "X-Request-ID": request_id,
-                },
-            )
-            response.raise_for_status()
-            payload = response.json()
-            last_payload = payload
-            status = str(payload.get("status", "unknown"))
-            if status not in seen_statuses:
-                seen_statuses.add(status)
-                self._publish_drone_update(
-                    request_id=request_id,
-                    task_id=task_id,
-                    status=status,
-                    message=str(payload.get("message", "无人机状态更新")),
-                    progress=int(payload.get("progress", 0)),
-                    instruction=instruction,
-                    medication=medication,
-                    current_waypoint_index=int(payload.get("current_waypoint_index", 0)),
-                    position=payload.get("position") if isinstance(payload.get("position"), dict) else None,
-                )
-            if status == "completed":
-                return payload
-            await asyncio.sleep(0.25)
-        return last_payload
-
-    async def _simulate_mission_progress(
-        self,
-        request_id: str,
-        task_id: str,
-        payload: dict[str, Any],
-    ) -> None:
-        if not self.event_bus and not self.sqlite_store:
-            return
-
-        stages = [
-            ("queued", "虚拟无人机已接收任务", 10),
-            ("takeoff", "虚拟无人机起飞中", 35),
-            ("spraying", "虚拟无人机喷洒中", 75),
-            ("completed", "虚拟无人机任务完成", 100),
-        ]
-
-        for status, message, progress in stages:
-            self._publish_drone_update(
-                request_id=request_id,
-                task_id=task_id,
-                status=status,
-                message=message,
-                progress=progress,
-                instruction=payload["instruction"],
-                medication=payload["medication"],
-                current_waypoint_index=0,
-                position=None,
-            )
-            await asyncio.sleep(0.25)
 
     def _publish_drone_update(
         self,
@@ -372,7 +211,7 @@ class DroneController:
 
     def _map_drone_status_to_spray_result(self, status: str) -> str:
         normalized = status.strip().lower()
-        if normalized in {"completed", "simulated", "success"}:
+        if normalized in {"completed", "success"}:
             return "completed"
         if normalized in {"failed", "error"}:
             return "failed"
@@ -396,13 +235,7 @@ class DroneController:
         return "planned"
 
     def _resolve_backend(self) -> str:
-        execution = self.drone_config.get("execution", {})
-        explicit_backend = str(execution.get("backend", "")).strip().lower()
-        if explicit_backend in {"simulated", "remote_api", "px4"}:
-            return explicit_backend
-        if execution.get("simulate_only", True) or not self.api_url:
-            return "simulated"
-        return "remote_api"
+        return "px4"
 
     def validate_execution_plan(
         self,
@@ -499,18 +332,6 @@ class DroneController:
         if not (-180 <= longitude <= 180 and -90 <= latitude <= 90):
             raise DroneExecutionError("坐标超出经纬度有效范围")
 
-    def _validate_drone_response(self, payload: dict[str, Any]) -> None:
-        status = str(payload.get("status", "")).lower()
-        task_id = payload.get("task_id") or payload.get("mission_id")
-        accepted = payload.get("accepted")
-
-        if not task_id:
-            raise DroneExecutionError("无人机接口返回缺少 task_id/mission_id")
-        if accepted is False:
-            raise DroneExecutionError("无人机接口拒绝执行任务")
-        if status and status not in {"accepted", "queued", "running"}:
-            raise DroneExecutionError(f"无人机接口返回异常状态: {status}")
-
     def build_spray_record(
         self,
         *,
@@ -584,7 +405,7 @@ class DroneController:
             or mission_result.get("status")
             or "planned"
         ).strip().lower()
-        if status in {"completed", "simulated"}:
+        if status == "completed":
             return "completed"
         if status in {"failed", "error"}:
             return "failed"

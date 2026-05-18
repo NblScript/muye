@@ -1,4 +1,4 @@
-import { Progress } from 'antd'
+import { Progress } from '../../ui'
 
 import type { BatteryState } from '../../../types/simMap'
 
@@ -28,7 +28,7 @@ export default function BatteryCard({ battery }: BatteryCardProps) {
         percent={remaining}
         size="small"
         showInfo={false}
-        strokeColor={remaining < 25 ? '#ef4444' : '#22d3ee'}
+        strokeColor={remaining < 25 ? 'var(--accent-red)' : 'var(--accent-cyan)'}
       />
       <div className="status-panel-grid status-panel-grid-compact">
         <div>

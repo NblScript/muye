@@ -183,14 +183,19 @@ class LocalYoloApiService:
         return payload
 
     async def _persist_uploads(self, images: list[UploadFile], temp_dir: Path) -> list[Path]:
+        max_file_size = 20 * 1024 * 1024  # 20MB
         saved_paths: list[Path] = []
         for index, upload in enumerate(images, start=1):
             filename = Path(upload.filename or f"image-{index}.jpg").name
             target = temp_dir / filename
-            # 直接读取底层文件对象，避免不同运行环境下 UploadFile.read() 的兼容问题。
             content = upload.file.read()
             if not content:
                 raise HTTPException(status_code=400, detail=f"图片 {filename} 内容为空")
+            if len(content) > max_file_size:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"图片 {filename} 超过 20MB 限制",
+                )
             target.write_bytes(content)
             saved_paths.append(target)
         return saved_paths

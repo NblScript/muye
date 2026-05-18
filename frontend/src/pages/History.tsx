@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Card, Empty, Select, Space, Statistic, Table, Tag, Typography } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
 
 import { fetchWorkflowHistory } from '../api/workflow'
+import { Card, Empty, Select, Tag } from '../components/ui'
 import type { WorkflowHistoryEntry, WorkflowHistoryResponse } from '../types/workflow'
 
-const { Title } = Typography
-
-const statusColorMap: Record<string, string> = {
-  completed: 'success',
-  error: 'error',
-  running: 'processing',
+const statusColorMap: Record<string, 'green' | 'red' | 'amber' | 'default'> = {
+  completed: 'green',
+  error: 'red',
+  running: 'amber',
   pending: 'default',
 }
 
@@ -38,16 +35,12 @@ export default function History() {
           setError(err instanceof Error ? err.message : '加载历史数据失败')
         }
       } finally {
-        if (active) {
-          setLoading(false)
-        }
+        if (active) setLoading(false)
       }
     }
 
     void loadData()
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [statusFilter])
 
   const stats = useMemo(() => {
@@ -63,78 +56,32 @@ export default function History() {
     return { total, totalArea, successRate }
   }, [data])
 
-  const columns: ColumnsType<WorkflowHistoryEntry> = [
-    {
-      title: '请求 ID',
-      dataIndex: 'request_id',
-      key: 'request_id',
-      ellipsis: true,
-      width: 180,
-    },
-    {
-      title: '地块名称',
-      key: 'field_name',
-      render: (_, record) => {
-        const field = record.field as Record<string, unknown>
-        return String(field?.field_name ?? field?.field_id ?? '--')
-      },
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status: string) => (
-        <Tag color={statusColorMap[status] ?? 'default'}>{status}</Tag>
-      ),
-    },
-    {
-      title: '喷洒面积(亩)',
-      key: 'spray_area_mu',
-      width: 130,
-      render: (_, record) => {
-        const area = record.spray_summary?.spray_area_mu
-        return typeof area === 'number' ? area.toFixed(2) : '--'
-      },
-    },
-    {
-      title: '更新时间',
-      dataIndex: 'updated_at',
-      key: 'updated_at',
-      width: 180,
-      render: (val: string | null | undefined) => (val ? new Date(val).toLocaleString('zh-CN') : '--'),
-    },
-  ]
-
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <Title level={4} style={{ marginBottom: 24 }}>
-        喷洒历史报表
-      </Title>
+      <h2 style={{ marginBottom: 24, fontWeight: 600 }}>喷洒历史报表</h2>
 
-      <Space size={24} style={{ marginBottom: 24 }} wrap>
-        <Card>
-          <Statistic title="总任务数" value={stats.total} />
+      <div style={{ display: 'flex', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
+        <Card className="history-stat-card">
+          <div className="history-stat-label">总任务数</div>
+          <div className="history-stat-value">{stats.total}</div>
         </Card>
-        <Card>
-          <Statistic title="总喷洒面积(亩)" value={stats.totalArea} precision={2} />
+        <Card className="history-stat-card">
+          <div className="history-stat-label">总喷洒面积(亩)</div>
+          <div className="history-stat-value">{stats.totalArea.toFixed(2)}</div>
         </Card>
-        <Card>
-          <Statistic
-            title="成功率"
-            value={stats.successRate}
-            suffix="%"
-            valueStyle={{ color: stats.successRate >= 80 ? '#3f8600' : '#cf1322' }}
-          />
+        <Card className="history-stat-card">
+          <div className="history-stat-label">成功率</div>
+          <div className={`history-stat-value ${stats.successRate >= 80 ? 'color-success' : 'color-error'}`}>
+            {stats.successRate}%
+          </div>
         </Card>
-      </Space>
+      </div>
 
       <Card
         title="任务列表"
         extra={
           <Select
             value={statusFilter}
-            style={{ width: 140 }}
             onChange={setStatusFilter}
             options={[
               { label: '全部状态', value: 'all' },
@@ -146,18 +93,40 @@ export default function History() {
         }
       >
         {error ? (
-          <Typography.Text type="danger">{error}</Typography.Text>
+          <div className="color-error">{error}</div>
         ) : !loading && data && data.items.length === 0 ? (
           <Empty description="暂无任务记录" />
         ) : (
-          <Table<WorkflowHistoryEntry>
-            rowKey="request_id"
-            columns={columns}
-            dataSource={data?.items ?? []}
-            loading={loading}
-            pagination={{ pageSize: 10 }}
-            size="middle"
-          />
+          <div className="history-table-wrap">
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>请求 ID</th>
+                  <th>地块名称</th>
+                  <th>状态</th>
+                  <th>喷洒面积(亩)</th>
+                  <th>更新时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.items ?? []).map((item: WorkflowHistoryEntry) => {
+                  const field = item.field as Record<string, unknown>
+                  const area = item.spray_summary?.spray_area_mu
+                  return (
+                    <tr key={item.request_id}>
+                      <td className="history-td-id">{item.request_id}</td>
+                      <td>{String(field?.field_name ?? field?.field_id ?? '--')}</td>
+                      <td>
+                        <Tag color={statusColorMap[item.status] ?? 'default'}>{item.status}</Tag>
+                      </td>
+                      <td className="mono">{typeof area === 'number' ? area.toFixed(2) : '--'}</td>
+                      <td>{item.updated_at ? new Date(item.updated_at).toLocaleString('zh-CN') : '--'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>

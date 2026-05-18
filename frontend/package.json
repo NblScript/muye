@@ -10,11 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.1.1",
-    "antd": "^6.3.5",
     "axios": "^1.15.0",
-    "echarts": "^6.0.0",
-    "echarts-for-react": "^3.0.6",
     "leaflet": "^1.9.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

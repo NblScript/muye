@@ -60,8 +60,6 @@ class MuyeConfig:
     qwen_use_mock: bool = False
 
     # 无人机配置
-    drone_api_url: str = ""
-    drone_api_key: str = ""
     drone_backend: str | None = None
 
     # PX4 配置
@@ -70,9 +68,14 @@ class MuyeConfig:
     px4_mission_timeout_seconds: float = 180.0
     px4_auto_arm: bool = True
     px4_auto_start_mission: bool = True
+    px4_auto_start_on_spray: bool = True
     px4_return_to_launch_after_mission: bool = True
     px4_require_global_position: bool = True
-    px4_prefer_demo_field: bool = False
+    px4_arm_timeout_seconds: float = 30.0
+    px4_arm_retries: int = 3
+    px4_arm_retry_delay_seconds: float = 1.0
+    px4_allow_force_arm: bool = False
+    px4_prefer_demo_field: bool = True
     px4_acceptance_radius_m: float = 2.0
 
     # RAG 配置
@@ -143,9 +146,7 @@ class MuyeConfig:
             qwen_model=os.getenv("QWEN_MODEL", "qwen-max"),
             qwen_use_mock=_parse_env_bool(os.getenv("QWEN_USE_MOCK"), False),
             # 无人机配置
-            drone_api_url=os.getenv("DRONE_API_URL", ""),
-            drone_api_key=os.getenv("DRONE_API_KEY", ""),
-            drone_backend=os.getenv("DRONE_BACKEND"),
+            drone_backend="px4",
             # PX4 配置
             px4_system_address=os.getenv("PX4_SYSTEM_ADDRESS") or px4_config.get("system_address"),
             px4_connect_timeout_seconds=float(
@@ -162,6 +163,10 @@ class MuyeConfig:
                 os.getenv("PX4_AUTO_START_MISSION"),
                 bool(px4_config.get("auto_start_mission", True)),
             ),
+            px4_auto_start_on_spray=_parse_env_bool(
+                os.getenv("PX4_AUTO_START_ON_SPRAY"),
+                bool(px4_config.get("auto_start_on_spray", True)),
+            ),
             px4_return_to_launch_after_mission=_parse_env_bool(
                 os.getenv("PX4_RETURN_TO_LAUNCH_AFTER_MISSION"),
                 bool(px4_config.get("return_to_launch_after_mission", True)),
@@ -170,9 +175,25 @@ class MuyeConfig:
                 os.getenv("PX4_REQUIRE_GLOBAL_POSITION"),
                 bool(px4_config.get("require_global_position", True)),
             ),
+            px4_arm_timeout_seconds=float(
+                os.getenv("PX4_ARM_TIMEOUT_SECONDS", str(px4_config.get("arm_timeout_seconds", 30)))
+            ),
+            px4_arm_retries=int(
+                os.getenv("PX4_ARM_RETRIES", str(px4_config.get("arm_retries", 3)))
+            ),
+            px4_arm_retry_delay_seconds=float(
+                os.getenv(
+                    "PX4_ARM_RETRY_DELAY_SECONDS",
+                    str(px4_config.get("arm_retry_delay_seconds", 1.0)),
+                )
+            ),
+            px4_allow_force_arm=_parse_env_bool(
+                os.getenv("PX4_ALLOW_FORCE_ARM"),
+                bool(px4_config.get("allow_force_arm", False)),
+            ),
             px4_prefer_demo_field=_parse_env_bool(
                 os.getenv("PX4_USE_SITL_DEMO_FIELD"),
-                bool(px4_config.get("prefer_demo_field", False)),
+                bool(px4_config.get("prefer_demo_field", True)),
             ),
             px4_acceptance_radius_m=float(
                 os.getenv("PX4_ACCEPTANCE_RADIUS_M", str(px4_config.get("acceptance_radius_m", 2.0)))

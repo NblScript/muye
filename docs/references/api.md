@@ -1,0 +1,179 @@
+# API 参考
+
+> 牧野系统所有 HTTP API 端点。基础路径：`http://localhost:18000`
+
+## 健康检查
+
+### GET /health
+
+系统健康状态检查。
+
+**响应**：
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-05-18T10:00:00Z"
+}
+```
+
+## 工作流
+
+### GET /workflow/state
+
+获取当前工作流状态。
+
+**响应**：
+```json
+{
+  "current_step": "detection",
+  "steps": [
+    {"name": "upload", "status": "completed"},
+    {"name": "detection", "status": "in_progress"},
+    {"name": "weather", "status": "pending"},
+    {"name": "decision", "status": "pending"},
+    {"name": "drone", "status": "pending"}
+  ],
+  "request_id": "req_abc123"
+}
+```
+
+### GET /workflow/history
+
+获取工作流历史记录。
+
+**查询参数**：
+- `limit` (int, 可选): 返回条数，默认 20
+
+**响应**：
+```json
+{
+  "history": [
+    {
+      "request_id": "req_abc123",
+      "status": "completed",
+      "started_at": "2026-05-18T10:00:00Z",
+      "completed_at": "2026-05-18T10:05:00Z"
+    }
+  ]
+}
+```
+
+## 仪表盘
+
+### GET /dashboard/context
+
+获取仪表盘上下文数据（天气、最新决策、任务统计）。
+
+**响应**：
+```json
+{
+  "weather": {"temperature": 25, "humidity": 60, "desc": "晴"},
+  "latest_decision": {"pesticide": "吡虫啉", "dosage": "10ml/亩"},
+  "stats": {"total_tasks": 5, "completed": 4, "failed": 1}
+}
+```
+
+## 演示
+
+### POST /demo/upload-image
+
+上传害虫图片触发检测流程。
+
+**请求**：`multipart/form-data`
+- `file`: 图片文件（.jpg, .png, .bmp，< 10MB）
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "status": "processing"
+}
+```
+
+### POST /demo/reset-events
+
+重置事件流（清空 `data/logs/demo_events.jsonl`）。
+
+**响应**：
+```json
+{
+  "status": "reset",
+  "message": "Events cleared"
+}
+```
+
+## 任务
+
+### GET /tasks/{request_id}
+
+获取指定任务详情。
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "status": "completed",
+  "detections": [...],
+  "weather": {...},
+  "decision": {...},
+  "drone_mission": {...}
+}
+```
+
+### GET /tasks/{request_id}/original-image
+
+获取原始上传图片。
+
+### GET /tasks/{request_id}/annotated-image
+
+获取 YOLO 标注后的图片。
+
+## 仿真
+
+### GET /sim/map-state
+
+获取仿真地图状态（农田、无人机位置、轨迹）。
+
+**响应**：
+```json
+{
+  "field": {"points": [...]},
+  "drone": {"lat": 47.397, "lng": 8.545, "alt": 5, "battery": 85},
+  "trajectory": [{"lat": 47.397, "lng": 8.545}],
+  "mission": {"status": "in_progress", "progress": 0.6}
+}
+```
+
+### WebSocket /sim/ws/map-state
+
+实时仿真地图状态推送。
+
+### WebSocket /api/ws/enhanced-state
+
+增强状态推送（含 GPS 坐标、遥测数据、任务进度）。
+
+**消息格式**：
+```json
+{
+  "type": "state_update",
+  "data": {
+    "drone": {...},
+    "mission": {...},
+    "timestamp": "2026-05-18T10:00:00Z"
+  }
+}
+```
+
+## 无人机
+
+### POST /drone/confirm-takeoff
+
+确认无人机起飞（manual 模式下）。
+
+**响应**：
+```json
+{
+  "status": "confirmed",
+  "message": "Takeoff confirmed"
+}
+```

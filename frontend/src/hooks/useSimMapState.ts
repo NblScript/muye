@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { buildSimMapWebSocketUrl, fetchSimMapState } from '../api/simMap'
-import type { SimMapStateResponse } from '../types/simMap'
+import type { SimMapStateResponse, WsEnhancedState } from '../types/simMap'
 
 type UseSimMapStateResult = {
-  data: SimMapStateResponse | null
+  data: WsEnhancedState | SimMapStateResponse | null
   loading: boolean
   error: string | null
   transport: 'websocket' | 'polling'
 }
 
 export function useSimMapState(): UseSimMapStateResult {
-  const [data, setData] = useState<SimMapStateResponse | null>(null)
+  const [data, setData] = useState<WsEnhancedState | SimMapStateResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [transport, setTransport] = useState<'websocket' | 'polling'>('polling')
@@ -105,7 +105,7 @@ export function useSimMapState(): UseSimMapStateResult {
           }
 
           try {
-            const payload = JSON.parse(event.data) as SimMapStateResponse
+            const payload = JSON.parse(event.data) as WsEnhancedState
             setData(payload)
             setLoading(false)
           } catch (parseError) {

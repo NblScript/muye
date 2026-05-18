@@ -39,8 +39,10 @@ services:
       - QWEATHER_API_KEY=${QWEATHER_API_KEY:-}
       # YOLO 配置（内嵌模式时无需外部 Key）
       - YOLO_API_URL=http://127.0.0.1:8010
-      # 虚拟无人机
-      - VIRTUAL_DRONE_API_URL=http://127.0.0.1:9010
+      # PX4 工作流程
+      - DRONE_BACKEND=px4
+      - PX4_SYSTEM_ADDRESS=${PX4_SYSTEM_ADDRESS:-udpin://0.0.0.0:14540}
+      - PX4_AUTO_START_ON_SPRAY=${PX4_AUTO_START_ON_SPRAY:-true}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s

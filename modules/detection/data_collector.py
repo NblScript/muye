@@ -160,8 +160,7 @@ class DataCollectorService:
                 image_path=str(target),
                 simulate=self.simulate_capture or not self.capture_endpoint,
             )
-            # 主动回调一次，避免仅依赖文件监听时出现启动阶段竞态。
-            await self.on_new_image(target)
+            # 不主动回调，完全依赖 watchdog 监听，避免竞态导致重复入队
             return target
         except Exception as exc:
             log_event(

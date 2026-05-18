@@ -20,12 +20,10 @@ def parse_env_bool(value: str | None, default: bool) -> bool:
 
 def current_mode_labels() -> dict[str, str]:
     """Get current mode labels for dashboard display."""
-    drone_backend = os.getenv("DRONE_BACKEND", "simulated").lower()
+    drone_backend = os.getenv("DRONE_BACKEND", "px4").lower()
     drone_mode = {
         "px4": "px4",
-        "remote_api": "virtual_api",
-        "simulated": "simulated",
-    }.get(drone_backend, drone_backend or "simulated")
+    }.get(drone_backend, "px4")
     return {
         "yolo": "real",
         "weather": "mock" if truthy_env("QWEATHER_USE_MOCK") else "real",

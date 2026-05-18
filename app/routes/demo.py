@@ -2,11 +2,13 @@
 
 import io
 import time
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 
+import app.deps as deps
 from modules.infra.common import IMAGES_DIR, ensure_runtime_dirs
 import modules.infra.event_bus as event_bus
 import app.services.workflow_service as workflow_service
@@ -16,11 +18,13 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _save_uploaded_image(file, content: bytes) -> Path:
-    """Save uploaded image to disk."""
+    """Save uploaded image to disk with unique filename."""
     ensure_runtime_dirs()
+    # 使用 UUID 确保唯一性，避免同一秒上传覆盖
+    unique_id = uuid.uuid4().hex[:8]
     timestamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
     filename = workflow_service.sanitize_filename(file.filename)
-    target = IMAGES_DIR / f"{timestamp}-{filename}"
+    target = IMAGES_DIR / f"{timestamp}-{unique_id}-{filename}"
     target.write_bytes(content)
     return target
 
@@ -63,6 +67,7 @@ async def reset_demo_events(confirm: bool = False) -> dict[str, str]:
     if not confirm:
         raise HTTPException(status_code=400, detail="confirm_required")
 
+    deps.clear_takeoff_confirmation_state()
     workflow_service.clear_demo_runtime_state()
     event_bus.FileEventBus().clear()
     return {"status": "cleared"}

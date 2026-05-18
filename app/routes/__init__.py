@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.routes.dashboard import get_dashboard_context, register_dashboard_routes
 from app.routes.demo import register_demo_routes, reset_demo_events, upload_demo_image
+from app.routes.drone import confirm_drone_takeoff, register_drone_routes
 from app.routes.health import api_health, register_health_routes
 from app.routes.sim import get_sim_map_state, register_sim_routes
 from app.routes.tasks import (
@@ -19,6 +20,7 @@ from app.routes.workflow import (
 __all__ = [
     "annotate_image",
     "api_health",
+    "confirm_drone_takeoff",
     "get_dashboard_context",
     "get_sim_map_state",
     "get_task_annotated_image",
@@ -27,6 +29,7 @@ __all__ = [
     "get_workflow_state",
     "register_dashboard_routes",
     "register_demo_routes",
+    "register_drone_routes",
     "register_health_routes",
     "register_sim_routes",
     "register_tasks_routes",

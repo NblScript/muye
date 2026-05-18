@@ -40,6 +40,7 @@ class WorkflowEventEntry(BaseModel):
     stage: str
     status: str
     message: str
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowTimelineEntry(BaseModel):
@@ -67,6 +68,7 @@ class WorkflowTaskState(BaseModel):
     weather: dict[str, Any]
     spray_summary: dict[str, Any]
     decision: dict[str, Any]
+    rag_context: dict[str, Any] = {}
     drone: dict[str, Any]
     drone_timeline: list[WorkflowTimelineEntry]
     recent_events: list[WorkflowEventEntry]

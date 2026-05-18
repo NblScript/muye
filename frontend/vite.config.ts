@@ -18,10 +18,6 @@ export default defineConfig({
             return 'vendor-react'
           }
 
-          if (id.includes('/antd/') || id.includes('/@ant-design/') || id.includes('/rc-')) {
-            return 'vendor-ui'
-          }
-
           if (
             id.includes('/leaflet/') ||
             id.includes('/react-leaflet/')

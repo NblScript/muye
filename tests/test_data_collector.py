@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -85,8 +86,7 @@ async def test_data_collector_capture_simulated_image(
     assert result.exists()
     assert result.suffix == ".jpg"
     assert result.read_bytes() == MINIMAL_JPEG
-    assert len(captured_images) == 1
-    assert captured_images[0] == result
+    assert captured_images == []
 
 
 @pytest.mark.asyncio
@@ -137,3 +137,28 @@ async def test_data_collector_capture_creates_directory(
     result = await service.capture_image()
     assert images_dir.exists()
     assert result.parent == images_dir
+
+
+@pytest.mark.asyncio
+async def test_data_collector_capture_does_not_trigger_callback(
+    images_dir: Path,
+    drone_config: dict,
+    logger: logging.Logger,
+) -> None:
+    """验证 capture_image() 不再主动调用 on_new_image，避免竞态。"""
+    captured_images: list[Path] = []
+
+    async def on_new_image(path: Path) -> None:
+        captured_images.append(path)
+
+    service = DataCollectorService(
+        images_dir=images_dir,
+        drone_config=drone_config,
+        on_new_image=on_new_image,
+        logger=logger,
+    )
+
+    result = await service.capture_image()
+    assert result.exists()
+    # capture_image 不应主动调用 on_new_image，完全依赖 watchdog
+    assert captured_images == []

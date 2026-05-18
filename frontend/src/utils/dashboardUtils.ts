@@ -1,6 +1,20 @@
+import type { TagColor } from '../components/ui/Tag'
 import type { WorkflowDetectionEntry } from '../types/workflow'
 import type { TaskRecord, TaskStatus, PestSummary } from '../types/dashboard.types'
 import type { DashboardTaskEntry } from '../types/workflow'
+
+const PEST_LABELS: Record<string, string> = {
+  aphid: '蚜虫',
+  'rice-planthopper': '稻飞虱',
+  planthopper: '飞虱',
+  'brown-planthopper': '褐飞虱',
+  armyworm: '粘虫',
+  'corn-borer': '玉米螟',
+  'rice-leaf-roller': '稻纵卷叶螟',
+  'red-spider': '红蜘蛛',
+  whitefly: '白粉虱',
+  grub: '蛴螬',
+}
 
 /** Convert backend status string to frontend TaskStatus */
 export function toTaskStatus(status: string): TaskStatus {
@@ -68,31 +82,35 @@ export function mapTaskEntry(item: DashboardTaskEntry): TaskRecord {
 }
 
 /** Get color for task status tag */
-export function statusColor(status: TaskStatus): string {
+export function statusColor(status: TaskStatus): TagColor {
   if (status === '执行中') {
     return 'green'
   }
   if (status === '返航中') {
-    return 'gold'
+    return 'amber'
   }
   return 'blue'
 }
 
 /** Get color for mode tag */
-export function modeColor(value?: string): string {
+export function modeColor(value?: string): TagColor {
   if (value === 'mock') {
-    return 'gold'
+    return 'amber'
   }
   if (value === 'px4') {
     return 'cyan'
   }
-  if (value === 'virtual_api') {
-    return 'geekblue'
-  }
-  if (value === 'simulated') {
-    return 'purple'
-  }
   return 'green'
+}
+
+/** Format pest labels for judge-friendly Chinese display */
+export function formatPestLabel(value: unknown): string {
+  const token = String(value ?? '').trim()
+  if (!token) {
+    return '未知害虫'
+  }
+  const normalized = token.toLowerCase()
+  return PEST_LABELS[normalized] ?? token
 }
 
 /** Summarize pest detections into labels and summary text */
@@ -106,7 +124,7 @@ export function summarizePests(detections: WorkflowDetectionEntry[]): PestSummar
 
   const counts = new Map<string, number>()
   for (const detection of detections) {
-    const pestType = String(detection.pest_type ?? 'unknown')
+    const pestType = formatPestLabel(detection.pest_type)
     counts.set(pestType, (counts.get(pestType) ?? 0) + 1)
   }
 

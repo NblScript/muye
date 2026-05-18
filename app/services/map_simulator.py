@@ -6,13 +6,31 @@ import math
 import threading
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 
 from models.schemas import SimDroneState, SimMapStateResponse, SimPoint
+from modules.infra.common import CONFIG_DIR, load_json
+
+
+@lru_cache(maxsize=1)
+def _load_demo_route() -> tuple[tuple[float, float], ...]:
+    """Load demo route from drone_config.json (px4.demo_field.explicit_route).
+
+    Each config point is [longitude, latitude]; maps to (x=lng, y=lat).
+    """
+    config = load_json(CONFIG_DIR / "drone_config.json")
+    raw: list[list[float]] = (
+        config.get("px4", {}).get("demo_field", {}).get("explicit_route", [])
+    )
+    if not raw:
+        # Fallback: minimal rectangle
+        return ((8.5452, 47.3975), (8.5460, 47.3975), (8.5460, 47.3980), (8.5452, 47.3980))
+    return tuple((pt[0], pt[1]) for pt in raw)
 
 
 @dataclass(frozen=True, slots=True)
 class SimDroneBlueprint:
-    """Blueprint for a simulated drone."""
+    """Blueprint for the PX4 map fallback drone."""
 
     drone_id: str
     name: str
@@ -73,26 +91,15 @@ class Px4MapStateSimulator:
         self._epoch = time.monotonic()
         self._drones = (
             SimDroneBlueprint(
-                drone_id="drone-a07",
-                name="植保无人机 A-07",
+                drone_id="px4-demo",
+                name="PX4 植保无人机",
                 status="作业中",
-                route=((24, 29), (34, 31), (48, 34), (54, 40), (42, 36)),
+                route=_load_demo_route(),
                 speed_units_per_second=6.5,
                 battery_start=86,
                 battery_floor=34,
                 battery_drain_per_second=0.22,
                 phase_offset=0.0,
-            ),
-            SimDroneBlueprint(
-                drone_id="drone-c12",
-                name="植保无人机 C-12",
-                status="返航",
-                route=((104, 78), (98, 74), (94, 70), (90, 66), (80, 50)),
-                speed_units_per_second=4.2,
-                battery_start=58,
-                battery_floor=18,
-                battery_drain_per_second=0.18,
-                phase_offset=0.35,
             ),
         )
 

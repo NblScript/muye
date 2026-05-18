@@ -82,6 +82,7 @@ def test_ai_decision_builds_mock_decision() -> None:
         asyncio.run(engine.close())
 
     assert decision["用药"]["农药名称"] == "示范药剂-aphid"
+    assert decision["用药"]["总量"] == "1.35L"
     assert "优先针对aphid高发区域安排喷洒作业" in decision["农事建议"][0]
 
 
@@ -130,6 +131,7 @@ async def test_ai_decision_generates_valid_schema() -> None:
             ],
             field_context={
                 "name": "牧野示范田",
+                "area_mu": 10.0,
                 "weather_location": "郑州",
                 "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
                 "geofence": [
@@ -146,6 +148,8 @@ async def test_ai_decision_generates_valid_schema() -> None:
     assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
     assert result["decision"]["农事建议"] == ["优先处理高风险区", "作业前核验实时风速"]
     assert "害虫检测结果" in result["structured_input_text"]
+    assert "地块面积：10.0亩" in result["structured_input_text"]
+    assert "总量必须是本次作业全田总用量" in result["structured_input_text"]
     assert "风向=东南风" in result["structured_input_text"]
     assert result["weather"]["temperature"] == 27.5
 
@@ -199,6 +203,69 @@ async def test_ai_decision_repairs_invalid_schema_with_fallback() -> None:
 
     assert result["decision"]["用药"]["农药名称"]
     assert result["decision"]["用药"]["安全提示"]
+    assert result["decision"]["用药"]["总量"].endswith("L")
+
+
+@pytest.mark.asyncio
+async def test_ai_decision_replaces_non_measurable_total_with_area_based_fallback() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": """
+                            {
+                              "用药": {
+                                "农药名称": "吡虫啉",
+                                "浓度": "20%",
+                                "配比": "1:1200",
+                                "总量": "适量",
+                                "安全提示": ["佩戴口罩"]
+                              }
+                            }
+                            """
+                        }
+                    }
+                ]
+            },
+        )
+
+    engine = DecisionEngine(
+        api_url="https://qwen.test/chat",
+        api_key="qwen-key",
+        model="qwen-max",
+        weather_client=StubWeatherClient(),
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        result = await engine.generate_decision(
+            pest_detections=[
+                {
+                    "pest_type": "aphid",
+                    "confidence": 0.95,
+                    "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+                }
+            ],
+            field_context={
+                "name": "牧野示范田",
+                "area_mu": 10.0,
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
+                "geofence": [
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
+                ],
+            },
+            request_id="req-ai-total-fallback",
+        )
+    finally:
+        await engine.close()
+
+    assert result["decision"]["用药"]["农药名称"] == "吡虫啉"
+    assert result["decision"]["用药"]["总量"] == "1.35L"
 
 
 @pytest.mark.asyncio

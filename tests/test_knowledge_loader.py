@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from modules.decision.rag.knowledge_loader import (
+    build_historical_decision_document,
     load_historical_decisions,
     load_knowledge_from_docs,
     load_pesticide_from_json,
@@ -143,3 +144,28 @@ def test_load_historical_decisions_returns_documents(tmp_path: Path) -> None:
         assert documents[0].metadata["source"] == "historical_decision"
     finally:
         store.close()
+
+
+def test_build_historical_decision_document_builds_incremental_index_payload() -> None:
+    document = build_historical_decision_document(
+        request_id="req-123",
+        decision={
+            "用药": {
+                "农药名称": "吡虫啉",
+                "浓度": "1:1000",
+                "配比": "1:1200",
+            },
+            "农事建议": ["避开大风时段"],
+        },
+        pest_types=["aphid", "蚜虫"],
+        field_id="field-001",
+        crop_name="冬小麦",
+        timestamp="2026-05-11T00:00:00Z",
+    )
+
+    assert document is not None
+    assert document.metadata["source"] == "historical_decision"
+    assert document.metadata["request_id"] == "req-123"
+    assert document.metadata["crop_name"] == "冬小麦"
+    assert "检测到的害虫：aphid, 蚜虫" in document.page_content
+    assert "推荐农药：吡虫啉" in document.page_content

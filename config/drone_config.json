@@ -7,55 +7,187 @@
     "http_method": "GET"
   },
   "field": {
-    "field_id": "henan-zz-001",
-    "name": "郑州示范田1号",
-    "area_mu": 68.0,
-    "soil_type": "潮土",
-    "weather_location": "郑州",
+    "field_id": "px4-sitl-demo",
+    "name": "PX4 SITL 小麦作业田",
+    "area_mu": 10.0,
+    "soil_type": "作业地块",
+    "weather_location": "Zurich",
     "location": {
-      "province": "河南省",
-      "city": "郑州",
-      "county": "中原区",
-      "latitude": 34.7473,
-      "longitude": 113.6249
+      "province": "Zurich",
+      "city": "Zurich",
+      "county": "SITL",
+      "latitude": 47.397742,
+      "longitude": 8.545594
     },
     "geofence": [
-      [113.6241, 34.7467],
-      [113.6257, 34.7467],
-      [113.6257, 34.7479],
-      [113.6241, 34.7479]
-    ]
+      [
+        8.545275,
+        47.397586
+      ],
+      [
+        8.545913,
+        47.397586
+      ],
+      [
+        8.545913,
+        47.397898
+      ],
+      [
+        8.545275,
+        47.397898
+      ]
+    ],
+    "explicit_route": [
+      [
+        8.54532,
+        47.397622
+      ],
+      [
+        8.545868,
+        47.397622
+      ],
+      [
+        8.545868,
+        47.397646
+      ],
+      [
+        8.54532,
+        47.397646
+      ],
+      [
+        8.54532,
+        47.39767
+      ],
+      [
+        8.545868,
+        47.39767
+      ],
+      [
+        8.545868,
+        47.397694
+      ],
+      [
+        8.54532,
+        47.397694
+      ],
+      [
+        8.54532,
+        47.397718
+      ],
+      [
+        8.545868,
+        47.397718
+      ],
+      [
+        8.545868,
+        47.397742
+      ],
+      [
+        8.54532,
+        47.397742
+      ],
+      [
+        8.54532,
+        47.397766
+      ],
+      [
+        8.545868,
+        47.397766
+      ],
+      [
+        8.545868,
+        47.39779
+      ],
+      [
+        8.54532,
+        47.39779
+      ],
+      [
+        8.54532,
+        47.397813
+      ],
+      [
+        8.545868,
+        47.397813
+      ],
+      [
+        8.545868,
+        47.397837
+      ],
+      [
+        8.54532,
+        47.397837
+      ],
+      [
+        8.54532,
+        47.397861
+      ],
+      [
+        8.545868,
+        47.397861
+      ]
+    ],
+    "crop_cycle": {
+      "crop_name": "小麦"
+    }
   },
   "flight_constraints": {
-    "altitude_range_m": [2.0, 8.0],
-    "speed_range_mps": [1.0, 6.0],
-    "spray_rate_range_lpm": [0.3, 3.0],
+    "altitude_range_m": [
+      2.0,
+      8.0
+    ],
+    "speed_range_mps": [
+      1.0,
+      6.0
+    ],
+    "spray_rate_range_lpm": [
+      0.3,
+      3.0
+    ],
     "max_safe_wind_speed_mps": 8.0
   },
   "network": {
     "client_ip": "127.0.0.1",
-    "ip_whitelist": ["127.0.0.1", "192.168.1.10"]
+    "ip_whitelist": [
+      "127.0.0.1",
+      "192.168.1.10"
+    ]
   },
   "execution": {
-    "backend": "simulated",
-    "simulate_only": true,
-    "request_timeout_seconds": 15
+    "backend": "px4",
+    "simulate_only": false,
+    "request_timeout_seconds": 15,
+    "takeoff_mode": "manual"
   },
   "px4": {
-    "system_address": "udpin://0.0.0.0:14540",
+    "system_address": "udpout://127.0.0.1:14580",
     "connect_timeout_seconds": 30,
     "mission_timeout_seconds": 300,
+    "arm_timeout_seconds": 45,
+    "arm_retries": 3,
+    "arm_retry_delay_seconds": 1.0,
+    "allow_force_arm": true,
     "auto_arm": true,
     "auto_start_mission": true,
-    "return_to_launch_after_mission": true,
-    "require_global_position": true,
-    "acceptance_radius_m": 2.0,
-    "prefer_demo_field": false,
+    "auto_start_on_spray": true,
+    "return_to_launch_after_mission": false,
+    "require_global_position": false,
+    "acceptance_radius_m": 1.0,
+    "execution_mode": "animated_demo",
+    "use_existing_mission": false,
+    "require_existing_mission": false,
+    "existing_mission_total_waypoints": 0,
+    "mission_takeoff_altitude_m": 2.0,
+    "mission_takeoff_before_start": false,
+    "mission_takeoff_timeout_seconds": 20.0,
+    "mission_takeoff_altitude_tolerance_m": 0.35,
+    "mission_emergency_max_altitude_m": 3.0,
+    "prefer_demo_field": true,
     "demo_field": {
       "field_id": "px4-sitl-demo",
-      "name": "PX4 SITL 冬小麦演示田",
-      "area_mu": 5.6,
-      "soil_type": "演示地块",
+      "name": "PX4 SITL 小麦作业田",
+      "area_mu": 10.0,
+      "soil_type": "作业地块",
       "weather_location": "Zurich",
       "location": {
         "province": "Zurich",
@@ -65,34 +197,112 @@
         "longitude": 8.545594
       },
       "geofence": [
-        [8.545116, 47.397508],
-        [8.546072, 47.397508],
-        [8.546072, 47.397976],
-        [8.545116, 47.397976]
+        [
+          8.545275,
+          47.397586
+        ],
+        [
+          8.545913,
+          47.397586
+        ],
+        [
+          8.545913,
+          47.397898
+        ],
+        [
+          8.545275,
+          47.397898
+        ]
       ],
       "explicit_route": [
-        [8.545183, 47.397562],
-        [8.546005, 47.397562],
-        [8.546005, 47.397598],
-        [8.545183, 47.397598],
-        [8.545183, 47.397634],
-        [8.546005, 47.397634],
-        [8.546005, 47.397670],
-        [8.545183, 47.397670],
-        [8.545183, 47.397706],
-        [8.546005, 47.397706],
-        [8.546005, 47.397742],
-        [8.545183, 47.397742],
-        [8.545183, 47.397778],
-        [8.546005, 47.397778],
-        [8.546005, 47.397814],
-        [8.545183, 47.397814],
-        [8.545183, 47.397849],
-        [8.546005, 47.397849],
-        [8.546005, 47.397885],
-        [8.545183, 47.397885],
-        [8.545183, 47.397921],
-        [8.546005, 47.397921]
+        [
+          8.54532,
+          47.397622
+        ],
+        [
+          8.545868,
+          47.397622
+        ],
+        [
+          8.545868,
+          47.397646
+        ],
+        [
+          8.54532,
+          47.397646
+        ],
+        [
+          8.54532,
+          47.39767
+        ],
+        [
+          8.545868,
+          47.39767
+        ],
+        [
+          8.545868,
+          47.397694
+        ],
+        [
+          8.54532,
+          47.397694
+        ],
+        [
+          8.54532,
+          47.397718
+        ],
+        [
+          8.545868,
+          47.397718
+        ],
+        [
+          8.545868,
+          47.397742
+        ],
+        [
+          8.54532,
+          47.397742
+        ],
+        [
+          8.54532,
+          47.397766
+        ],
+        [
+          8.545868,
+          47.397766
+        ],
+        [
+          8.545868,
+          47.39779
+        ],
+        [
+          8.54532,
+          47.39779
+        ],
+        [
+          8.54532,
+          47.397813
+        ],
+        [
+          8.545868,
+          47.397813
+        ],
+        [
+          8.545868,
+          47.397837
+        ],
+        [
+          8.54532,
+          47.397837
+        ],
+        [
+          8.54532,
+          47.397861
+        ],
+        [
+          8.545868,
+          47.397861
+        ]
       ],
       "presentation_profile": {
         "target_speed_mps": 4.5,
@@ -104,7 +314,7 @@
         "turn_loiter_time_s": 0.8
       },
       "crop_cycle": {
-        "crop_name": "冬小麦"
+        "crop_name": "小麦"
       }
     }
   }

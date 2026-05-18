@@ -174,7 +174,6 @@ export function useWebSocket<T>(url: string, fallback: () => Promise<T>, interva
     clearReconnectTimer()
     stopPolling()
     connect()
-    startPolling()
 
     return () => {
       cancelled = true

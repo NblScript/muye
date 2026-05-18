@@ -1,206 +1,128 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LatLngTuple } from 'leaflet'
-import type { GPSPosition, SimDroneState, SimMapStateResponse, WsEnhancedState } from '../../types/simMap'
-import type { WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
+import type { SimDroneState } from '../../types/simMap'
+import type { WorkflowDetectionEntry } from '../../types/workflow'
 import { mapCenter, type FieldPlot, type FieldStatus } from './mapData'
 import { computeCommandPoint } from './commandPoint'
-import StatusPanel from './StatusPanel'
 
 type FieldMapProps = {
-  transport?: 'websocket' | 'polling'
-  latestTask?: WorkflowTaskState | null
-  simMapState?: SimMapStateResponse | null
-  enhancedState?: WsEnhancedState | null
+  droneStatus?: string
 }
-
-type PointPair = [number, number]
 
 function fieldStatusStyle(status: FieldStatus) {
   if (status === '作业中') {
     return {
-      stroke: '#28d7ff',
-      fill: '#13c2c2',
-      fillOpacity: 0.2,
+      stroke: '#089cc5',
+      fill: '#089cc5',
+      fillOpacity: 0.12,
     }
   }
 
   if (status === '已完成') {
     return {
-      stroke: '#52c41a',
-      fill: '#52c41a',
-      fillOpacity: 0.14,
+      stroke: '#16875a',
+      fill: '#16875a',
+      fillOpacity: 0.12,
     }
   }
 
   return {
-    stroke: '#fadb14',
-    fill: '#faad14',
-    fillOpacity: 0.14,
+    stroke: '#6f63d9',
+    fill: '#6f63d9',
+    fillOpacity: 0.12,
   }
 }
 
 function droneStatusStyle(status: SimDroneState['status']) {
   if (status === '作业中') {
     return {
-      stroke: '#22d3ee',
-      fill: '#67e8f9',
+      stroke: '#089cc5',
+      fill: '#089cc5',
     }
   }
 
   if (status === '返航') {
     return {
-      stroke: '#f97316',
-      fill: '#fdba74',
+      stroke: '#6f63d9',
+      fill: '#8a7cf0',
     }
   }
 
   return {
-    stroke: '#818cf8',
-    fill: '#a5b4fc',
+    stroke: '#6f63d9',
+    fill: '#8a7cf0',
   }
 }
 
-function toNumber(value: unknown) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
-}
-
-function toPointPairs(value: unknown): PointPair[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value
-    .map((item) => {
-      if (!Array.isArray(item) || item.length < 2) {
-        return null
-      }
-      const x = toNumber(item[0])
-      const y = toNumber(item[1])
-      if (x === null || y === null) {
-        return null
-      }
-      return [x, y] as PointPair
-    })
-    .filter((item): item is PointPair => item !== null)
-}
-
-function gpsPositionsToPointPairs(points: GPSPosition[] | null | undefined): PointPair[] {
-  if (!Array.isArray(points)) {
-    return []
-  }
-
-  return points
-    .map((point) => {
-      const latitude = toNumber(point.latitude)
-      const longitude = toNumber(point.longitude)
-      if (latitude === null || longitude === null) {
-        return null
-      }
-      return [longitude, latitude] as PointPair
-    })
-    .filter((item): item is PointPair => item !== null)
-}
-
-function gpsPositionToPointPair(point: GPSPosition | null | undefined): PointPair[] {
-  if (!point) {
-    return []
-  }
-  return gpsPositionsToPointPairs([point])
-}
-
-function getFieldName(field: Record<string, unknown>) {
-  return String(field.field_name ?? field.name ?? field.field_id ?? '未命名地块')
-}
-
-function getFieldCrop(field: Record<string, unknown>) {
-  const cropCycle = asRecord(field.crop_cycle)
-  return String(
-    cropCycle.crop_name
-      ?? field.crop_name
-      ?? cropCycle.crop_code
-      ?? field.crop_code
-      ?? '未标注作物',
-  )
-}
-
-function getFieldStatus(latestTask: WorkflowTaskState | null | undefined): FieldStatus {
-  const droneStatus = String(latestTask?.drone?.status ?? '')
-  const taskStatus = String(latestTask?.status ?? '')
-
-  if (droneStatus === 'spraying' || droneStatus === '作业中' || taskStatus === 'running') {
-    return '作业中'
-  }
-  if (droneStatus === 'completed' || droneStatus === '已完成' || taskStatus === 'completed') {
-    return '已完成'
-  }
-  return '待作业'
-}
-
-function isSimulationCoordinatePairs(points: PointPair[]) {
-  return points.every(([x, y]) => x >= 0 && x <= 160 && y >= 0 && y <= 100)
-}
-
-function buildCoordinateProjector(pointGroups: PointPair[][]) {
-  const allPoints = pointGroups.flat()
-  if (allPoints.length === 0) {
-    return (points: PointPair[], minPoints: number): LatLngTuple[] => {
-      if (points.length < minPoints) {
-        return []
-      }
-      return points.map(([x, y]) => [y, x] as LatLngTuple)
-    }
-  }
-
-  if (isSimulationCoordinatePairs(allPoints)) {
-    return (points: PointPair[], minPoints: number): LatLngTuple[] => {
-      if (points.length < minPoints) {
-        return []
-      }
-      return points.map(([x, y]) => [y, x] as LatLngTuple)
-    }
-  }
-
-  const xs = allPoints.map(([x]) => x)
-  const ys = allPoints.map(([, y]) => y)
-  const minX = Math.min(...xs)
-  const maxX = Math.max(...xs)
-  const minY = Math.min(...ys)
-  const maxY = Math.max(...ys)
-  const spanX = Math.max(maxX - minX, 1e-6)
-  const spanY = Math.max(maxY - minY, 1e-6)
-  const targetMinX = 22
-  const targetMaxX = 138
-  const targetMinY = 16
-  const targetMaxY = 84
-
-  return (points: PointPair[], minPoints: number): LatLngTuple[] => {
-    if (points.length < minPoints) {
-      return []
-    }
-
-    return points.map(([x, y]) => {
-      const normalizedX = targetMinX + ((x - minX) / spanX) * (targetMaxX - targetMinX)
-      const normalizedY = targetMinY + ((y - minY) / spanY) * (targetMaxY - targetMinY)
-      return [normalizedY, normalizedX] as LatLngTuple
-    })
-  }
-}
-
-function buildSyntheticFieldBoundary(areaMu: number | null): LatLngTuple[] {
-  const size = Math.min(22, Math.max(10, Math.sqrt(areaMu ?? 36)))
-  const halfWidth = size
-  const halfHeight = Math.max(8, size * 0.65)
-  return [
-    [50 - halfHeight, 80 - halfWidth],
-    [50 - halfHeight, 80 + halfWidth],
-    [50 + halfHeight, 80 + halfWidth],
-    [50 + halfHeight, 80 - halfWidth],
+function buildDemoFallbackField(): FieldPlot {
+  const boundary: LatLngTuple[] = [
+    [22, 34],
+    [22, 126],
+    [78, 126],
+    [78, 34],
   ]
+
+  return {
+    id: 'demo-fallback-field',
+    name: '默认植保作业田',
+    crop: '小麦',
+    areaMu: 56,
+    status: '作业中',
+    boundary,
+    center: computeCenter(boundary),
+  }
+}
+
+function buildDemoFallbackRoute(): LatLngTuple[] {
+  return [
+    [28, 40],
+    [28, 120],
+    [38, 120],
+    [38, 40],
+    [48, 40],
+    [48, 120],
+    [58, 120],
+    [58, 40],
+    [68, 40],
+    [68, 120],
+  ]
+}
+
+function buildCoverageRouteFromBoundary(boundary: LatLngTuple[]): LatLngTuple[] {
+  if (boundary.length < 3) {
+    return buildDemoFallbackRoute()
+  }
+
+  const latitudes = boundary.map(([lat]) => lat)
+  const longitudes = boundary.map(([, lng]) => lng)
+  const minLat = Math.min(...latitudes)
+  const maxLat = Math.max(...latitudes)
+  const minLng = Math.min(...longitudes)
+  const maxLng = Math.max(...longitudes)
+  const latSpan = maxLat - minLat
+  const lngSpan = maxLng - minLng
+
+  if (!Number.isFinite(latSpan) || !Number.isFinite(lngSpan) || latSpan <= 0 || lngSpan <= 0) {
+    return buildDemoFallbackRoute()
+  }
+
+  const top = minLat + latSpan * 0.14
+  const bottom = maxLat - latSpan * 0.14
+  const left = minLng + lngSpan * 0.12
+  const right = maxLng - lngSpan * 0.12
+  const laneCount = 6
+  const route: LatLngTuple[] = []
+
+  for (let index = 0; index < laneCount; index += 1) {
+    const lat = top + ((bottom - top) * index) / Math.max(1, laneCount - 1)
+    const lane: LatLngTuple[] = [
+      [lat, left],
+      [lat, right],
+    ]
+    route.push(...(index % 2 === 0 ? lane : lane.reverse()))
+  }
+
+  return route
 }
 
 function computeCenter(boundary: LatLngTuple[]): LatLngTuple {
@@ -213,112 +135,6 @@ function computeCenter(boundary: LatLngTuple[]): LatLngTuple {
     { lat: 0, lng: 0 },
   )
   return [total.lat / boundary.length, total.lng / boundary.length]
-}
-
-function buildPrimaryFieldPlot(
-  field: Record<string, unknown>,
-  latestTask: WorkflowTaskState | null | undefined,
-  projectedGeofence: LatLngTuple[],
-  coveragePoints: LatLngTuple[],
-): FieldPlot | null {
-  if (Object.keys(field).length === 0) {
-    return null
-  }
-
-  const areaMu = toNumber(field.area_mu) ?? 0
-  const boundary = projectedGeofence.length >= 3
-    ? projectedGeofence
-    : coveragePoints.length >= 3
-      ? coveragePoints
-      : buildSyntheticFieldBoundary(areaMu)
-
-  return {
-    id: String(field.field_id ?? latestTask?.request_id ?? 'runtime-field'),
-    name: getFieldName(field),
-    crop: getFieldCrop(field),
-    areaMu,
-    status: getFieldStatus(latestTask),
-    boundary,
-    center: computeCenter(boundary),
-  }
-}
-
-function mapDroneStatus(status: string): SimDroneState['status'] {
-  const normalized = status.trim().toLowerCase()
-  if (normalized === 'returning' || normalized === '返航' || normalized === 'completed') {
-    return '返航'
-  }
-  return '作业中'
-}
-
-function interpolateRoutePosition(route: LatLngTuple[], progressPercent: number): LatLngTuple {
-  if (route.length === 0) {
-    return mapCenter
-  }
-  if (route.length === 1) {
-    return route[0]
-  }
-
-  const normalizedProgress = Math.min(1, Math.max(0, progressPercent / 100))
-  const scaledIndex = normalizedProgress * (route.length - 1)
-  const lowerIndex = Math.floor(scaledIndex)
-  const upperIndex = Math.min(route.length - 1, lowerIndex + 1)
-  const segmentProgress = scaledIndex - lowerIndex
-  const [startLat, startLng] = route[lowerIndex]
-  const [endLat, endLng] = route[upperIndex]
-
-  return [
-    startLat + (endLat - startLat) * segmentProgress,
-    startLng + (endLng - startLng) * segmentProgress,
-  ]
-}
-
-function buildTaskDrivenDrones(
-  latestTask: WorkflowTaskState | null | undefined,
-  projectedRoute: LatLngTuple[],
-  projectedPosition: LatLngTuple | null,
-  enhancedState: WsEnhancedState | null | undefined,
-): SimDroneState[] {
-  if (!latestTask && !enhancedState) {
-    return []
-  }
-
-  const drone = asRecord(latestTask?.drone)
-  const waypointIndexValue = Number(drone.current_waypoint_index)
-  const progressValue = Number(enhancedState?.mission.progress ?? drone.progress)
-  const progressPercent = Number.isFinite(progressValue)
-    ? Math.max(0, Math.min(100, progressValue))
-    : 0
-  const hasRouteRelativeWaypointIndex = Number.isFinite(waypointIndexValue)
-    && waypointIndexValue >= 0
-    && waypointIndexValue < projectedRoute.length
-  const fallbackPosition = projectedRoute.length > 0
-    ? (hasRouteRelativeWaypointIndex
-      ? projectedRoute[waypointIndexValue]
-      : interpolateRoutePosition(projectedRoute, progressPercent))
-    : mapCenter
-  const [lat, lng] = projectedPosition ?? fallbackPosition
-  const taskId = String(enhancedState?.drone.id ?? drone.task_id ?? latestTask?.request_id ?? 'px4-primary')
-
-  return [
-    {
-      id: taskId,
-      name: String(enhancedState?.drone.name ?? drone.task_id ?? 'PX4 SITL 飞行器'),
-      status: mapDroneStatus(String(enhancedState?.drone.status ?? drone.status ?? latestTask?.status ?? '作业中')),
-      battery: Math.round(enhancedState?.drone.battery.remaining ?? 100),
-      position: { x: lng, y: lat },
-      route: projectedRoute.map(([routeLat, routeLng]) => ({ x: routeLng, y: routeLat })),
-    },
-  ]
-}
-
-function toLatLngPoint(x: number, y: number): LatLngTuple {
-  return [y, x]
-}
-
-function buildSimRoutePoints(simMapState: SimMapStateResponse | null | undefined): LatLngTuple[] {
-  const route = simMapState?.drones.find((item) => item.route.length >= 2)?.route ?? []
-  return route.map((point) => toLatLngPoint(point.x, point.y))
 }
 
 function toSvgPoint([lat, lng]: LatLngTuple) {
@@ -335,29 +151,33 @@ function toPathD(points: LatLngTuple[]) {
     .join(' ')
 }
 
-const DRONE_SPEED = 0.012
+const DRONE_SPEED = 0.004
+function resolveStaticRoutePosition(route: LatLngTuple[]) {
+  if (route.length === 0) {
+    return mapCenter
+  }
+  return route[0]
+}
 
 function useAnimatedDrones(
   baseDrones: SimDroneState[],
   route: LatLngTuple[],
-  taskStatus: string,
-  skipAnimation: boolean,
+  animationKey: string,
+  shouldAnimate: boolean,
 ): SimDroneState[] {
   const [animated, setAnimated] = useState(baseDrones)
   const progressRef = useRef(0)
   const rafRef = useRef<number | null>(null)
   const baseDronesRef = useRef(baseDrones)
   const routeRef = useRef(route)
-  const taskStatusRef = useRef(taskStatus)
 
   useEffect(() => {
     baseDronesRef.current = baseDrones
     routeRef.current = route
-    taskStatusRef.current = taskStatus
-  }, [baseDrones, route, taskStatus])
+  }, [baseDrones, route])
 
   useEffect(() => {
-    if (skipAnimation) {
+    if (!shouldAnimate) {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null
@@ -396,13 +216,26 @@ function useAnimatedDrones(
         progressRef.current -= 1
       }
 
-      const p = progressRef.current
-      const scaled = p * (routeRef.current.length - 1)
+      const currentRoute = routeRef.current
+      if (currentRoute.length < 2) {
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+
+      const p = Math.max(0, Math.min(0.999, Number.isFinite(progressRef.current) ? progressRef.current : 0))
+      const scaled = p * (currentRoute.length - 1)
       const lo = Math.floor(scaled)
-      const hi = Math.min(routeRef.current.length - 1, lo + 1)
+      const hi = Math.min(currentRoute.length - 1, lo + 1)
       const t = scaled - lo
-      const [lat0, lng0] = routeRef.current[lo]
-      const [lat1, lng1] = routeRef.current[hi]
+      const start = currentRoute[lo]
+      const end = currentRoute[hi]
+      if (!start || !end) {
+        progressRef.current = 0
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+      const [lat0, lng0] = start
+      const [lat1, lng1] = end
       const lat = lat0 + (lat1 - lat0) * t
       const lng = lng0 + (lng1 - lng0) * t
 
@@ -411,7 +244,7 @@ function useAnimatedDrones(
         drones.map((d) => ({
           ...d,
           position: { x: lng, y: lat },
-          status: taskStatusRef.current === 'completed' ? '作业中' : d.status,
+          status: d.status,
         })),
       )
 
@@ -425,7 +258,7 @@ function useAnimatedDrones(
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.length, baseDrones.length, taskStatus, skipAnimation])
+  }, [route.length, baseDrones.length, animationKey, shouldAnimate])
 
   return animated
 }
@@ -454,96 +287,61 @@ function buildDetectionMarkerData(
   })
 }
 
-export default function FieldMap({ transport: _transport, latestTask, simMapState, enhancedState }: FieldMapProps) {
-  const instruction = asRecord(latestTask?.drone?.instruction)
-  const taskField = asRecord(latestTask?.field)
-  const field = enhancedState?.field
-    ? {
-      ...taskField,
-      field_id: enhancedState.field.id,
-      field_name: enhancedState.field.name,
-    }
-    : taskField
+export default function FieldMap({ droneStatus }: FieldMapProps) {
+  const fallbackFieldPlot = buildDemoFallbackField()
+  const primaryFieldPlot = fallbackFieldPlot
+  const displayFieldPlots = [primaryFieldPlot]
+  const commandPoint = computeCommandPoint(primaryFieldPlot.boundary, mapCenter)
+  const fallbackRoutePoints = buildDemoFallbackRoute()
+  const routePoints = buildCoverageRouteFromBoundary(primaryFieldPlot.boundary)
+  const finalRoutePoints = routePoints.length >= 2 ? routePoints : fallbackRoutePoints
+  const routeHoldPosition = resolveStaticRoutePosition(finalRoutePoints)
+  const coveragePoints: LatLngTuple[] = []
 
-  const enhancedFieldBoundary = gpsPositionsToPointPairs(enhancedState?.field?.boundary)
-  const rawFieldGeofence = enhancedFieldBoundary.length >= 3 ? enhancedFieldBoundary : toPointPairs(field.geofence)
-  const rawPresetRoutePoints = toPointPairs(field.explicit_route)
-  const rawInstructionRoutePoints = toPointPairs(instruction['飞行路径'])
-  const enhancedRoutePoints = gpsPositionsToPointPairs(enhancedState?.mission.planned_route)
-  const rawRoutePoints = enhancedRoutePoints.length >= 2
-    ? enhancedRoutePoints
-    : rawInstructionRoutePoints.length >= 2
-      ? rawInstructionRoutePoints
-      : rawPresetRoutePoints
-  const rawCoveragePoints = toPointPairs(asRecord(instruction['覆盖区域']).coordinates)
-  const rawTrajectoryPoints = gpsPositionsToPointPairs(enhancedState?.trajectory.recent_points)
-  const rawDronePosition = gpsPositionToPointPair(enhancedState?.drone.position)
-  const projectPairs = buildCoordinateProjector([
-    rawFieldGeofence,
-    rawPresetRoutePoints,
-    rawInstructionRoutePoints,
-    rawRoutePoints,
-    rawCoveragePoints,
-    rawTrajectoryPoints,
-    rawDronePosition,
-  ])
+  const isSpraying = droneStatus === 'spraying' || droneStatus === '作业中'
+  const droneStatusForStyle = isSpraying ? '作业中' : '待命'
 
-  const projectedGeofence = projectPairs(rawFieldGeofence, 3)
-  const taskRoutePoints = projectPairs(rawRoutePoints, 1)
-  const coveragePoints = projectPairs(rawCoveragePoints, 3)
-  const projectedTrajectoryPoints = projectPairs(rawTrajectoryPoints, 2)
-  const projectedDronePosition = projectPairs(rawDronePosition, 1)[0] ?? null
-  const primaryFieldPlot = buildPrimaryFieldPlot(field, latestTask, projectedGeofence, coveragePoints)
-  const displayFieldPlots = primaryFieldPlot ? [primaryFieldPlot] : []
-  const commandPoint = computeCommandPoint(primaryFieldPlot?.boundary ?? [], mapCenter)
-  const simRoutePoints = buildSimRoutePoints(simMapState)
-  const routePoints = taskRoutePoints.length >= 2 ? taskRoutePoints : simRoutePoints
+  const baseDrones = [{
+    id: 'demo-fallback-drone',
+    name: '植保无人机 01',
+    status: droneStatusForStyle as SimDroneState['status'],
+    battery: 86,
+    position: { x: routeHoldPosition[1], y: routeHoldPosition[0] },
+    route: finalRoutePoints.map(([lat, lng]) => ({ x: lng, y: lat })),
+  }]
 
-  // Detect PX4 real position from telemetry
-  const droneData = asRecord(latestTask?.drone)
-  const px4PositionRaw = asRecord(droneData.position)
-  const hasPx4Lat = toNumber(px4PositionRaw.latitude) !== null
-  const hasPx4Lng = toNumber(px4PositionRaw.longitude) !== null
-  const px4Status = String(droneData.status ?? '').toLowerCase()
-  const isPx4Flying = hasPx4Lat && hasPx4Lng
-    && ['takeoff', 'spraying', 'enroute', 'returning'].includes(px4Status)
-
-  // Build drones: use task-driven (PX4) when available, simMap as fallback when no task
-  const baseDrones = latestTask
-    ? buildTaskDrivenDrones(latestTask, routePoints, projectedDronePosition, enhancedState)
-    : enhancedState
-      ? buildTaskDrivenDrones(null, routePoints, projectedDronePosition, enhancedState)
-    : (simMapState?.drones.length ? simMapState.drones : [])
-
-  const taskStatus = String(latestTask?.status ?? '')
-  // PX4 flying → use real position directly, skip animation
-  // No PX4 → animate along route for demo effect
-  const activeDrones = useAnimatedDrones(baseDrones, routePoints, taskStatus, isPx4Flying)
-  const detections = latestTask?.detections ?? []
-  const detectionMarkers = useMemo(
-    () => buildDetectionMarkerData(detections, primaryFieldPlot?.center ?? mapCenter),
-    [detections, primaryFieldPlot?.center],
+  const activeDrones = useAnimatedDrones(
+    baseDrones,
+    finalRoutePoints,
+    `drone-${droneStatus ?? 'idle'}`,
+    isSpraying,
   )
-  const droneInstruction = asRecord(latestTask?.drone?.instruction)
+  const displayedSprayTrailPoints = finalRoutePoints
+  const isDemoFallback = true
+  const detectionMarkers = useMemo(
+    () => buildDetectionMarkerData([], primaryFieldPlot.center),
+    [],
+  )
   const telemetry = {
-    altitude: toNumber(droneInstruction['高度']),
-    speed: toNumber(droneInstruction['速度']),
-    battery: simMapState?.drones[0]?.battery ?? null,
+    altitude: 5,
+    speed: 4.5,
+    battery: activeDrones[0]?.battery ?? null,
   }
   const viewBox = '0 0 160 100'
 
   return (
     <div className="field-map-shell">
-      <svg
-        className="field-map"
-        viewBox={viewBox}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-label="当前作业地图"
-      >
+      <div className="field-map-canvas">
+        <svg
+          className="field-map"
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="当前作业地图"
+        >
         <defs>
           <pattern id="map-grid" width="8" height="8" patternUnits="userSpaceOnUse">
-            <path d="M 8 0 L 0 0 0 8" fill="none" stroke="rgba(109, 211, 255, 0.16)" strokeWidth="0.35" />
+            <path d="M 8 0 L 0 0 0 8" fill="none" stroke="rgba(32, 91, 154, 0.10)" strokeWidth="0.35" />
           </pattern>
           <filter id="drone-glow">
             <feGaussianBlur stdDeviation="1.2" result="coloredBlur" />
@@ -553,21 +351,21 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
             </feMerge>
           </filter>
           <linearGradient id="trajectory-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#818cf8" />
-            <stop offset="50%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#3b82f6" />
+            <stop offset="0%" stopColor="#089cc5" />
+            <stop offset="50%" stopColor="#6f63d9" />
+            <stop offset="100%" stopColor="#d96d2d" />
           </linearGradient>
         </defs>
 
-        <rect x="0" y="0" width="160" height="100" fill="#07192b" />
+        <rect x="0" y="0" width="160" height="100" fill="#f6f9ff" />
         <rect x="0" y="0" width="160" height="100" fill="url(#map-grid)" opacity="0.7" />
         <rect
           x="0"
           y="0"
           width="160"
           height="100"
-          fill="rgba(8, 26, 45, 0.28)"
-          stroke="rgba(109, 211, 255, 0.22)"
+          fill="rgba(255, 255, 255, 0.46)"
+          stroke="rgba(32, 91, 154, 0.12)"
           strokeWidth="0.5"
         />
 
@@ -587,8 +385,8 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
                 y={fieldItem.center[0]}
                 textAnchor="middle"
                 fontSize="4"
-                fill="#eff9ff"
-                stroke="rgba(5, 18, 31, 0.85)"
+                fill="#102033"
+                stroke="rgba(255, 255, 255, 0.85)"
                 strokeWidth="0.5"
                 paintOrder="stroke"
               >
@@ -601,9 +399,9 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
         {coveragePoints.length >= 3 ? (
           <polygon
             points={toSvgPoints(coveragePoints)}
-            fill="#fb923c"
+            fill="#d96d2d"
             fillOpacity="0.08"
-            stroke="#f97316"
+            stroke="#d96d2d"
             strokeWidth="0.8"
             strokeDasharray="2 2"
           />
@@ -614,9 +412,17 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
             <polyline
               points={toSvgPoints(routePoints)}
               fill="none"
-              stroke="#22c55e"
-              strokeWidth="1.1"
-              strokeDasharray="2.6 2"
+              stroke="rgba(255, 255, 255, 0.92)"
+              strokeWidth="3.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <polyline
+              points={toSvgPoints(routePoints)}
+              fill="none"
+              stroke="#0f766e"
+              strokeWidth="1.8"
+              strokeDasharray="3 1.6"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -626,18 +432,18 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
                 <circle
                   cx={point[1]}
                   cy={point[0]}
-                  r={index === 0 ? 1.5 : 1.1}
-                  fill={index === 0 ? '#86efac' : '#22c55e'}
-                  stroke="#14532d"
-                  strokeWidth="0.5"
+                  r={index === 0 ? 2 : 1.35}
+                  fill={index === 0 ? '#42d392' : '#16875a'}
+                  stroke="rgba(255, 255, 255, 0.72)"
+                  strokeWidth="0.7"
                 />
                 {index === 0 ? (
                   <text
                     x={point[1] + 1.8}
                     y={point[0] - 1.2}
                     fontSize="3"
-                    fill="#d9ffe7"
-                    stroke="rgba(5, 18, 31, 0.85)"
+                    fill="#102033"
+                    stroke="rgba(255, 255, 255, 0.85)"
                     strokeWidth="0.4"
                     paintOrder="stroke"
                   >
@@ -649,12 +455,12 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
           </>
         ) : null}
 
-        {projectedTrajectoryPoints.length >= 2 ? (
+        {displayedSprayTrailPoints.length >= 2 ? (
           <path
-            d={toPathD(projectedTrajectoryPoints)}
+            d={toPathD(displayedSprayTrailPoints)}
             fill="none"
             stroke="url(#trajectory-gradient)"
-            strokeWidth="1.4"
+            strokeWidth="2.4"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -666,6 +472,24 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
 
           return (
             <g key={markerKey} filter="url(#drone-glow)">
+              <g opacity="0.86">
+                <path
+                  d={`M ${drone.position.x} ${drone.position.y + 1.8} L ${drone.position.x - 4.6} ${drone.position.y + 8.2} L ${drone.position.x + 4.6} ${drone.position.y + 8.2} Z`}
+                  fill="#16875a"
+                  fillOpacity="0.12"
+                />
+                <ellipse
+                  cx={drone.position.x}
+                  cy={drone.position.y + 8.2}
+                  rx="5.2"
+                  ry="1.35"
+                  fill="#16875a"
+                  fillOpacity="0.16"
+                />
+                <circle cx={drone.position.x - 2.8} cy={drone.position.y + 5.8} r="0.45" fill="#42d392" fillOpacity="0.52" />
+                <circle cx={drone.position.x} cy={drone.position.y + 6.9} r="0.38" fill="#42d392" fillOpacity="0.46" />
+                <circle cx={drone.position.x + 2.6} cy={drone.position.y + 5.5} r="0.42" fill="#42d392" fillOpacity="0.5" />
+              </g>
               <circle
                 cx={drone.position.x}
                 cy={drone.position.y}
@@ -680,7 +504,7 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
                 cy={drone.position.y}
                 r="1.5"
                 fill={style.fill}
-                stroke="#eff9ff"
+                stroke="#102033"
                 strokeWidth="0.4"
               />
               <text
@@ -688,8 +512,8 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
                 y={drone.position.y - 3.4}
                 textAnchor="middle"
                 fontSize="3.2"
-                fill="#eff9ff"
-                stroke="rgba(5, 18, 31, 0.88)"
+                fill="#102033"
+                stroke="rgba(255, 255, 255, 0.88)"
                 strokeWidth="0.45"
                 paintOrder="stroke"
               >
@@ -705,29 +529,29 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
               cx={marker.point[1]}
               cy={marker.point[0]}
               r="1.8"
-              fill="#ef4444"
-              fillOpacity="0.2"
-              stroke="#ef4444"
+              fill="#c73758"
+              fillOpacity="0.15"
+              stroke="#c73758"
               strokeWidth="0.5"
             />
             <circle
               cx={marker.point[1]}
               cy={marker.point[0]}
               r="0.8"
-              fill="#f87171"
+              fill="#c73758"
             />
           </g>
         ))}
 
         <g>
-          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="1.4" fill="#22d3ee" stroke="#eff9ff" strokeWidth="0.4" />
-          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="2.8" fill="none" stroke="rgba(34, 211, 238, 0.34)" strokeWidth="0.7" />
+          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="1.4" fill="#d78d1f" stroke="#102033" strokeWidth="0.4" />
+          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="2.8" fill="none" stroke="rgba(215, 141, 31, 0.25)" strokeWidth="0.7" />
           <text
             x={commandPoint[1] + 2.2}
             y={commandPoint[0] - 1.6}
             fontSize="3"
-            fill="#dff6ff"
-            stroke="rgba(5, 18, 31, 0.84)"
+            fill="#102033"
+            stroke="rgba(255, 255, 255, 0.84)"
             strokeWidth="0.4"
             paintOrder="stroke"
           >
@@ -736,53 +560,79 @@ export default function FieldMap({ transport: _transport, latestTask, simMapStat
         </g>
       </svg>
 
-      <div className="map-overlay map-legend">
-        <div className="map-legend-list">
-          <div className="map-legend-item">
-            <span className="map-legend-swatch is-working" />
-            <span>作业中</span>
-          </div>
-          <div className="map-legend-item">
-            <span className="map-legend-dot is-drone-active" />
-            <span>无人机</span>
-          </div>
-          <div className="map-legend-item">
-            <span className="map-legend-line is-drone-planned" />
-            <span>航线</span>
-          </div>
-          {detectionMarkers.length > 0 && (
-            <div className="map-legend-item">
-              <span className="map-legend-dot" style={{ background: '#f87171' }} />
-              <span>检测点 ({detectionMarkers.length})</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {(telemetry.altitude !== null || telemetry.speed !== null || telemetry.battery !== null) && (
-        <div className="map-overlay map-telemetry">
-          {telemetry.altitude !== null && (
-            <div className="map-telemetry-item">
-              <span>高度</span>
-              <strong>{telemetry.altitude} m</strong>
-            </div>
-          )}
-          {telemetry.speed !== null && (
-            <div className="map-telemetry-item">
-              <span>速度</span>
-              <strong>{telemetry.speed} m/s</strong>
-            </div>
-          )}
-          {telemetry.battery !== null && (
-            <div className="map-telemetry-item">
-              <span>电量</span>
-              <strong>{telemetry.battery}%</strong>
-            </div>
-          )}
+      {isDemoFallback && (
+        <div
+          className="map-overlay"
+          style={{
+            top: 18,
+            right: 18,
+            padding: '6px 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: isSpraying ? 'var(--accent-green)' : 'var(--accent-amber)',
+            background: isSpraying ? 'rgba(22, 135, 90, 0.08)' : 'rgba(215, 141, 31, 0.08)',
+            borderColor: isSpraying ? 'rgba(22, 135, 90, 0.2)' : 'rgba(215, 141, 31, 0.2)',
+          }}
+        >
+          {isSpraying ? 'PX4 喷洒中' : '等待任务'}
         </div>
       )}
+      </div>
 
-      {enhancedState ? <StatusPanel state={enhancedState} /> : null}
+      <aside className="field-map-sidecar" aria-label="地图状态信息">
+        <section className="map-info-card map-legend" aria-label="地图图例">
+          <div className="map-info-card-title">地图图例</div>
+          <div className="map-legend-list">
+            <div className="map-legend-item">
+              <span className="map-legend-swatch is-working" />
+              <span>作业中地块</span>
+            </div>
+            <div className="map-legend-item">
+              <span className="map-legend-dot is-drone-active" />
+              <span>无人机位置</span>
+            </div>
+            <div className="map-legend-item">
+              <span className="map-legend-line is-drone-planned" />
+              <span>规划航线</span>
+            </div>
+            {detectionMarkers.length > 0 && (
+              <div className="map-legend-item">
+                <span className="map-legend-dot" style={{ background: 'var(--accent-red)' }} />
+                <span>检测点 ({detectionMarkers.length})</span>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {(telemetry.altitude !== null || telemetry.speed !== null || telemetry.battery !== null) && (
+          <section className="map-info-card map-telemetry" aria-label="飞行参数">
+            <div className="map-info-card-title">飞行参数</div>
+            <div className="map-telemetry-grid">
+              {telemetry.altitude !== null && (
+                <div className="map-telemetry-item">
+                  <span>高度</span>
+                  <strong>{telemetry.altitude} m</strong>
+                </div>
+              )}
+              {telemetry.speed !== null && (
+                <div className="map-telemetry-item">
+                  <span>速度</span>
+                  <strong>{telemetry.speed} m/s</strong>
+                </div>
+              )}
+              {telemetry.battery !== null && (
+                <div className="map-telemetry-item">
+                  <span>电量</span>
+                  <strong>{telemetry.battery}%</strong>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+      </aside>
     </div>
   )
 }

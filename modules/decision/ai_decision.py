@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -127,7 +128,7 @@ class DecisionEngine:
                     message="天气信息获取完成",
                     payload={"location_query": str(weather_location), "weather": weather},
                 )
-            rag_context_text = self._build_rag_context_text(
+            rag_context_text, rag_context = self._build_rag_context_text(
                 pest_detections=pest_detections,
                 field_context=field_context,
                 request_id=request_id,
@@ -169,7 +170,7 @@ class DecisionEngine:
                     stage="decision",
                     status="completed",
                     message="千问决策生成完成",
-                    payload={"decision": decision},
+                    payload={"decision": decision, "rag_context": rag_context},
                 )
             log_event(
                 self.logger,
@@ -185,6 +186,7 @@ class DecisionEngine:
                 "decision": decision,
                 "structured_input_text": structured_input_text,
                 "decision_context": decision_context,
+                "rag_context": rag_context,
             }
         except Exception as exc:
             if self.event_bus:
@@ -236,6 +238,7 @@ class DecisionEngine:
         return (
             "请基于以下农田结构化信息输出严格 JSON，不要输出解释。\n"
             f"地块名称：{field_context.get('name', '未知地块')}\n"
+            f"地块面积：{field_context.get('area_mu', '未配置')}亩\n"
             f"地块坐标：纬度={location.get('latitude')}，经度={location.get('longitude')}\n"
             f"天气查询地点：{field_context.get('weather_location') or location.get('city', '未配置')}\n"
             f"地理围栏：{geofence}\n"
@@ -252,6 +255,9 @@ class DecisionEngine:
             f"{rag_context_block}"
             "注意：飞行路径、高度、速度、喷洒速率、覆盖区域和气象限制由系统 planner 生成，"
             "不要输出任何飞控参数。\n"
+            "必须根据地块面积、害虫数量、天气条件和推荐配比给出“用药.总量”；"
+            "总量必须是本次作业全田总用量，不是亩用量，且必须包含明确数字和单位，例如“1.2L”或“1200mL”；"
+            "禁止写“适量”“按标签”“按需”等无法计算的总量。\n"
             "输出 JSON Schema 关键字段："
             "用药.农药名称/浓度/配比/总量/安全提示，"
             "可选字段为农事建议。"
@@ -264,9 +270,9 @@ class DecisionEngine:
         field_context: dict[str, Any],
         request_id: str,
         client_ip: str,
-    ) -> str:
+    ) -> tuple[str, dict[str, Any]]:
         if self.rag_retriever is None:
-            return ""
+            return "", {}
 
         pest_types = [
             str(detection.get("pest_type", "")).strip()
@@ -296,6 +302,21 @@ class DecisionEngine:
                 field_context=field_context,
             )
             rag_context_text = retrieved.to_prompt_text()
+
+            def _docs_to_list(docs, scores):
+                return [
+                    {"content": doc.page_content, "score": round(s, 3), "metadata": doc.metadata}
+                    for doc, s in zip(docs, scores)
+                ]
+
+            rag_context = {
+                "pesticides": _docs_to_list(retrieved.pesticides, retrieved.pesticide_scores),
+                "historical_cases": _docs_to_list(retrieved.historical_cases, retrieved.decision_scores),
+                "knowledge": _docs_to_list(retrieved.knowledge_chunks, retrieved.knowledge_scores),
+                "pest_types": pest_types,
+                "crop_name": crop_name,
+            }
+
             if self.event_bus:
                 self.event_bus.publish(
                     request_id=request_id,
@@ -309,7 +330,7 @@ class DecisionEngine:
                         "historical_case_count": len(retrieved.historical_cases),
                     },
                 )
-            return rag_context_text
+            return rag_context_text, rag_context
         except Exception as exc:
             if self.event_bus:
                 self.event_bus.publish(
@@ -333,7 +354,7 @@ class DecisionEngine:
                 pest_types=pest_types,
                 crop_name=crop_name or "",
             )
-            return ""
+            return "", {}
 
     def _build_decision_context(
         self,
@@ -389,6 +410,7 @@ class DecisionEngine:
                         "顶层必须包含“用药”，可选“农事建议”。"
                         "禁止输出飞行路径、高度、速度、喷洒速率、覆盖区域、气象限制等飞控字段。"
                         "所有字段名必须使用中文，且必填字段不能为空字符串。"
+                        "“用药.总量”必须是本次作业全田总用量，并包含明确数字和单位。"
                     ),
                 },
                 {"role": "user", "content": structured_input_text},
@@ -465,6 +487,7 @@ class DecisionEngine:
                         "请把输入修复为合法 JSON。"
                         "顶层只保留“用药”和可选“农事建议”。"
                         "所有必填字段必须存在且不能为空。"
+                        "“用药.总量”必须是本次作业全田总用量，并包含明确数字和单位。"
                         "不要生成任何飞控字段。"
                         "不要输出解释。"
                     ),
@@ -539,6 +562,10 @@ class DecisionEngine:
         except ValidationError as exc:
             raise DecisionEngineError(f"千问返回 JSON 结构不合法: {exc.message}") from exc
 
+        total_amount = str(payload["用药"].get("总量") or "").strip()
+        if not self._has_measurable_total_amount(total_amount):
+            raise DecisionEngineError("千问返回 JSON 结构不合法: 用药.总量必须包含明确数字和单位")
+
     def _merge_with_fallback(self, value: Any, fallback: Any) -> Any:
         if isinstance(fallback, dict):
             source = value if isinstance(value, dict) else {}
@@ -576,6 +603,8 @@ class DecisionEngine:
         for key in ["农药名称", "浓度", "配比", "总量"]:
             if not medication.get(key):
                 medication[key] = fallback_medication[key]
+        if not self._has_measurable_total_amount(medication.get("总量")):
+            medication["总量"] = fallback_medication["总量"]
         if not medication.get("安全提示"):
             medication["安全提示"] = fallback_medication["安全提示"]
         if not payload.get("农事建议"):
@@ -603,6 +632,12 @@ class DecisionEngine:
             return [value.strip()]
         return []
 
+    def _has_measurable_total_amount(self, value: Any) -> bool:
+        text = self._normalize_text(value).replace(" ", "")
+        if not text:
+            return False
+        return bool(re.search(r"\d+(?:\.\d+)?\s*(mL|ml|ML|毫升|L|l|升|g|G|kg|KG|克|千克)", text))
+
     def _build_mock_decision(
         self,
         pest_detections: list[dict[str, Any]],
@@ -611,7 +646,8 @@ class DecisionEngine:
     ) -> dict[str, Any]:
         primary_pest = pest_detections[0]["pest_type"] if pest_detections else "unknown-pest"
         total_targets = max(len(pest_detections), 1)
-        total_amount_l = round(6 + total_targets * 2.5, 1)
+        area_mu = self._normalize_number(field_context.get("area_mu")) or 10.0
+        total_amount_l = round(max(area_mu, 1.0) * 0.12 + total_targets * 0.15, 2)
 
         return {
             "用药": {

@@ -1,4 +1,5 @@
-import { Card, List, Space, Tag, Typography } from 'antd'
+import { Card, Tag } from '../ui'
+import type { TagColor } from '../ui/Tag'
 import { statusColor } from '../../utils/dashboardUtils'
 import type { TaskRecord } from '../../types/dashboard.types'
 
@@ -10,19 +11,18 @@ interface TaskListProps {
 
 export default function TaskList({ title = '当前任务 / 最近任务', tasks, emptyText = '当前没有可展示的任务队列' }: TaskListProps) {
   return (
-    <Card bordered={false} className="dashboard-card task-card" title={title}>
-      <List
-        itemLayout="vertical"
-        locale={{ emptyText }}
-        dataSource={tasks}
-        renderItem={(item) => (
-          <List.Item className="task-item">
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+    <Card className="dashboard-card task-card" title={title}>
+      {tasks.length === 0 ? (
+        <div className="task-empty">{emptyText}</div>
+      ) : (
+        tasks.map((item) => (
+          <div key={item.id} className="task-item">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
               <div className="task-topline">
-                <Typography.Text className="task-id">{item.id}</Typography.Text>
+                <span className="task-id">{item.id}</span>
                 <div className="task-tag-group">
                   {item.isCurrent ? <Tag color="cyan">当前</Tag> : null}
-                  <Tag color={statusColor(item.status)}>{item.status}</Tag>
+                  <Tag color={statusColor(item.status) as TagColor}>{item.status}</Tag>
                 </div>
               </div>
 
@@ -30,22 +30,22 @@ export default function TaskList({ title = '当前任务 / 最近任务', tasks,
               <div className="task-field">{item.fieldName}</div>
 
               <div className="task-meta">
-                <Typography.Text className="task-meta-text">农药：{item.pesticideName}</Typography.Text>
-                <Typography.Text className="task-meta-text">进度：{item.progress}%</Typography.Text>
+                <span className="task-meta-text">农药：{item.pesticideName}</span>
+                <span className="task-meta-text">进度：{item.progress}%</span>
               </div>
 
               <div className="task-meta">
-                <Typography.Text className="task-meta-text">面积：{item.sprayAreaText}</Typography.Text>
-                <Typography.Text className="task-meta-text">更新：{item.updatedAt}</Typography.Text>
+                <span className="task-meta-text">面积：{item.sprayAreaText}</span>
+                <span className="task-meta-text">更新：{item.updatedAt}</span>
               </div>
 
               <div className="task-progress-track">
                 <div className="task-progress-bar" style={{ width: `${item.progress}%` }} />
               </div>
-            </Space>
-          </List.Item>
-        )}
-      />
+            </div>
+          </div>
+        ))
+      )}
     </Card>
   )
 }

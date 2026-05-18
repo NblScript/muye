@@ -24,6 +24,8 @@ function buildFallbackState(
   workflowState: Awaited<ReturnType<typeof fetchWorkflowState>> | null,
   simMapState: SimMapStateResponse | null,
 ): EnhancedMapState {
+  const latestTask = workflowState?.latest_task
+  const drone = latestTask?.drone
   return {
     timestamp: Date.now() / 1000,
     drone: {
@@ -35,10 +37,10 @@ function buildFallbackState(
       telemetry: { speed: 0 },
     },
     mission: {
-      task_id: workflowState?.latest_task.request_id,
-      status: workflowState?.latest_task.status ?? 'unknown',
-      progress: workflowState?.latest_task.drone.progress ?? 0,
-      current_waypoint: workflowState?.latest_task.drone.current_waypoint_index ?? 0,
+      task_id: latestTask?.request_id,
+      status: latestTask?.status ?? 'unknown',
+      progress: drone?.progress ?? 0,
+      current_waypoint: drone?.current_waypoint_index ?? 0,
       total_waypoints: 0,
       planned_route: [],
     },

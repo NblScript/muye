@@ -192,6 +192,55 @@ def load_historical_decisions(store: SqliteStore, limit: int = 100) -> list[Docu
     return documents
 
 
+def build_historical_decision_document(
+    *,
+    request_id: str,
+    decision: dict[str, object],
+    pest_types: list[str] | None = None,
+    field_id: str | None = None,
+    crop_name: str | None = None,
+    timestamp: str | None = None,
+) -> Document | None:
+    """Build a single historical decision document for incremental RAG indexing."""
+    if not decision:
+        return None
+
+    pesticide = decision.get("用药", {})
+    if not isinstance(pesticide, dict):
+        pesticide = {}
+
+    normalized_pests = [str(item).strip() for item in (pest_types or []) if str(item).strip()]
+    content_parts = [
+        f"历史案例：{request_id}",
+        f"地块：{field_id or ''}",
+        f"检测到的害虫：{', '.join(normalized_pests)}",
+        f"推荐农药：{pesticide.get('农药名称', '')}",
+        f"用药浓度：{pesticide.get('浓度', '')}",
+        f"配比：{pesticide.get('配比', '')}",
+    ]
+    if crop_name:
+        content_parts.append(f"作物：{crop_name}")
+
+    suggestions = decision.get("农事建议")
+    if isinstance(suggestions, list) and suggestions:
+        content_parts.append(f"农事建议：{'; '.join(str(item) for item in suggestions)}")
+    elif isinstance(suggestions, str) and suggestions:
+        content_parts.append(f"农事建议：{suggestions}")
+
+    return Document(
+        page_content="\n".join(content_parts),
+        metadata={
+            "source": "historical_decision",
+            "request_id": request_id,
+            "field_id": field_id or "",
+            "timestamp": timestamp or "",
+            "detected_pests": ", ".join(normalized_pests),
+            "pesticide_name": str(pesticide.get("农药名称", "")),
+            "crop_name": crop_name or "",
+        },
+    )
+
+
 def load_knowledge_from_docs(docs_dir: Path) -> list[Document]:
     """Load markdown documents from the docs directory."""
     documents: list[Document] = []

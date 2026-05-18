@@ -26,7 +26,7 @@ class TestFieldContextResolver:
     def basic_drone_config(self):
         """Create a basic drone_config."""
         return {
-            "execution": {"backend": "simulated"},
+            "execution": {"backend": "px4"},
             "px4": {},
             "field": {},
         }

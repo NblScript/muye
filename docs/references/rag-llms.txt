@@ -1,0 +1,58 @@
+# RAG / LangChain 使用指南
+
+牧野系统的 RAG（检索增强生成）实现基于 LangChain + ChromaDB + Qwen Embeddings。
+
+## 架构
+
+```
+用户查询
+    │
+    ▼
+QwenEmbeddings (modules/decision/rag/embeddings.py)
+    │ 向量化
+    ▼
+ChromaDB 检索 (modules/decision/rag/vectorstore.py)
+    │ 相关文档
+    ▼
+DecisionRAGRetriever (modules/decision/rag/retriever.py)
+    │ 害虫感知过滤
+    ▼
+上下文注入 → Qwen API 决策
+```
+
+## 知识源
+
+1. **农药目录**：`data/seeds/henan/pesticide_catalog.json`
+2. **历史决策**：`data/muye.db` 中的 `decisions` 表
+3. **文档**：项目文档中的农业知识
+
+## 构建知识库
+
+```bash
+python scripts/build_rag_knowledge.py
+```
+
+该脚本：
+1. 从 SQLite 读取农药目录和历史决策
+2. 使用 QwenEmbeddings 生成向量
+3. 存储到 ChromaDB（`data/chroma_db/`）
+
+## 代码入口
+
+- `modules/decision/rag/vectorstore.py` — VectorStoreManager
+- `modules/decision/rag/retriever.py` — DecisionRAGRetriever
+- `modules/decision/rag/embeddings.py` — QwenEmbeddings
+- `modules/decision/rag/knowledge_loader.py` — 知识加载器
+
+## 降级策略
+
+RAG 检索失败时不阻断主流程：
+1. 发出 `rag_degraded` 事件
+2. 使用无上下文的 Qwen 决策
+3. 日志记录降级原因
+
+## 配置
+
+- Embedding 模型：通过 DashScope API（`DASHSCOPE_API_KEY`）
+- ChromaDB 路径：`data/chroma_db/`
+- 检索数量：默认 Top 5

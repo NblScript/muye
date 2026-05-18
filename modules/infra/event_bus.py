@@ -75,10 +75,6 @@ class FileEventBus:
         message: str,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        # Check file size before writing; rotate if needed.
-        if self._should_rotate():
-            self._rotate_log()
-
         event = {
             "event_id": uuid4().hex,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -88,11 +84,21 @@ class FileEventBus:
             "message": message,
             "payload": payload or {},
         }
-        with self.path.open("a", encoding="utf-8") as file:
+        file = self.path.open("a", encoding="utf-8")
+        try:
             fcntl.flock(file.fileno(), fcntl.LOCK_EX)
+            if self._should_rotate():
+                file.close()
+                self._rotate_log()
+                file = self.path.open("a", encoding="utf-8")
             file.write(json.dumps(event, ensure_ascii=False) + "\n")
             file.flush()
-            fcntl.flock(file.fileno(), fcntl.LOCK_UN)
+        finally:
+            try:
+                fcntl.flock(file.fileno(), fcntl.LOCK_UN)
+            except (ValueError, OSError):
+                pass
+            file.close()
         return event
 
     def clear(self) -> None:
@@ -173,6 +179,8 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         if event.get("stage") == "decision" and "decision" in payload:
             task["decision"] = payload["decision"]
+            if "rag_context" in payload:
+                task["rag_context"] = payload["rag_context"]
 
         if event.get("stage") == "drone":
             task["drone"] = {

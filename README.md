@@ -2,44 +2,336 @@
 
 `muye` 是一个基于 Python 的智能农业害虫防治项目，集成了无人机图像采集、YOLO 害虫识别、和风天气数据整合、千问 AI 决策和精准喷洒控制。项目采用异步任务流、模块化设计，并对外部 API 响应进行严格校验。
 
-> 面向智慧农业演示与原型验证的端到端植保指挥系统。
+> 面向智慧农业作业验证的端到端植保指挥系统。
 
 ## 项目简介
 
-牧野将“虫情感知、气象感知、AI 决策、无人机执行、前端可视化”整合为一条完整链路，目标不是单点展示某个模型，而是提供一个可以真实联调、可视化演示、可持续扩展的智慧农业指挥中心原型。系统既支持本地离线能力验证，也支持接入真实天气服务和真实大模型接口，适合用于课程设计、路演演示、方案验证和后续工程化扩展。
+牧野将“虫情感知、气象感知、AI 决策、无人机执行、前端可视化”整合为一条完整链路，目标不是单点展示某个模型，而是提供一个可以真实联调、可视化运行、可持续扩展的智慧农业指挥中心原型。系统既支持本地离线能力验证，也支持接入真实天气服务、真实大模型接口和 PX4 SITL 飞行链路，适合用于植保无人机调度原型验证、方案验证和后续工程化扩展。
 
 核心亮点：
 
-- 端到端闭环：从农田图片输入到虫害识别、药剂建议、飞行参数生成，再到虚拟无人机执行状态回放。
-- 双模式运行：天气与千问均支持 `real/mock` 两种模式，兼顾真实联调与稳定演示。
+- 端到端闭环：从农田图片输入到虫害识别、药剂建议、飞行参数生成，再到 PX4 SITL 执行状态回放。
+- 单一作业流程：无人机执行统一收敛到 PX4 SITL 链路，避免运行时在虚拟模式和 PX4 模式之间切换。
 - 本地可部署：YOLO 模型通过本地 API 服务封装，支持直接加载 `best.pt` 权重运行。
 - 可视化指挥中心：基于 `Vite + React + TypeScript` 构建指挥大屏，统一承接图片上传、识别结果、天气/决策卡片、态势图、任务历史与事件日志。
-- 工程化结构清晰：配置、模块、测试、虚拟服务、前端和事件总线分层明确，便于维护与继续开发。
+- 工程化结构清晰：配置、模块、测试、前端和事件总线分层明确，便于维护与继续开发。
 - 混合存储起步：保留 JSONL 事件流，同时将主处理链摘要同步写入 SQLite，方便后续查询与扩展。
 - 状态可追溯：无人机任务推进状态也会落入 SQLite，便于历史检索和后续报表扩展。
 
 适用场景：
 
-- 智慧农业项目演示与答辩
 - 植保无人机调度原型验证
 - YOLO + 大模型 + 外部 API 的系统集成实践
 - 后续扩展为真实设备控制平台的工程起点
+
+## 项目技术说明
+
+### 1. 项目定位与建设目标
+
+`muye` 是一个面向智慧农业害虫防治场景的端到端原型系统。系统围绕“虫情感知、气象感知、AI 决策、无人机执行、前端可视化”构建完整闭环，目标不是单点展示某个模型能力，而是验证一个可联调、可运行、可扩展的智慧植保指挥中心方案。
+
+项目建设目标包括：
+
+- 实现农田害虫图像的自动识别与结果结构化输出
+- 引入天气、知识库、历史案例等上下文信息，生成更可靠的施药建议
+- 将 AI 决策结果转化为可执行的无人机航线与喷洒参数
+- 通过前端指挥大屏实时展示任务状态、地图态势和处理流程
+- 对关键运行过程进行结构化存储，便于追溯、检索和后续统计分析
+
+从系统形态上看，项目可以作为植保无人机调度原型，也可以作为后续接入真实设备、真实数据和正式规则引擎的工程起点。
+
+### 2. 总体技术架构
+
+项目采用前后端分离、领域模块化和混合存储的架构设计，整体分为五层：
+
+1. 前端展示层  
+   位于 `frontend/`，技术栈为 `React + Vite + TypeScript`。  
+   负责承接指挥大屏、作业地图、任务面板、图片对照、天气卡片、决策信息、流程状态和历史记录等展示能力。
+
+2. 应用编排层  
+   位于 `app/`，技术栈为 `FastAPI`。  
+   负责聚合业务模块、装配 API、统一对前端暴露接口，同时承担主处理链调度能力。
+
+3. 核心业务层  
+   位于 `modules/`，按领域拆分为：
+   - `detection`：害虫检测与图像处理
+   - `decision`：AI 决策与 RAG 知识增强
+   - `drone`：无人机控制、任务规划与 PX4 仿真
+   - `infra`：天气、事件总线、SQLite 存储、公共工具
+
+4. 数据模型层  
+   位于 `models/`。  
+   定义 Pydantic schema 和农业数据参考模型，作为前后端接口与数据结构的统一边界。
+
+5. 数据与配置层  
+   位于 `data/` 与 `config/`。  
+   负责运行数据、日志、种子数据、SQLite 数据库、Chroma 向量库及 YAML/JSON 配置管理。
+
+### 3. 核心业务流程
+
+系统完整数据流如下：
+
+1. 用户上传农田图片，或由数据采集服务自动写入图片目录
+2. 检测模块调用 YOLO 模型服务，输出害虫类别、置信度与位置信息
+3. 天气模块获取当前气象数据
+4. 决策模块结合害虫结果、天气信息、可选结构化上下文与 RAG 检索结果，调用千问模型生成施药建议
+5. 无人机模块基于地块、天气和决策结果规划飞行路径、高度、速度、喷洒速率和覆盖区域
+6. 当起飞模式为 `manual` 时，系统等待人工确认；为 `auto` 时则直接继续
+7. 控制模块驱动 PX4 SITL 执行任务；进入喷洒阶段前会自动关联启动 PX4
+8. 前端通过 HTTP + WebSocket 获取实时状态、地图态势和任务日志
+9. SQLite 与事件总线分别记录结构化任务摘要和实时事件流
+
+这条主链路体现了项目的核心价值：将“识别、分析、决策、执行、展示”整合成一个统一系统，而非若干孤立模块的拼接。
+
+### 4. 关键模块设计
+
+#### 4.1 检测模块 detection
+
+检测域主要由 `modules/detection/` 提供能力。
+
+- `image_processor.py`  
+  负责调用 YOLO API 并对返回结果做校验，保证后续链路拿到的是统一格式的 `pest_type / confidence / position`。
+- `local_yolo_api.py`  
+  负责封装本地 YOLO 模型服务，支持直接加载模型权重运行。
+- `data_collector.py`  
+  负责定时采图与目录监听，支持模拟采图和自动入队处理。
+
+技术上，检测模块通过独立 API 服务与主流程解耦，使模型服务可以单独替换、调优或外置部署，不会影响应用层编排逻辑。
+
+#### 4.2 决策模块 decision
+
+决策域是系统的智能核心，主要位于 `modules/decision/`。
+
+- `ai_decision.py`  
+  将害虫检测、天气信息、地块上下文整合为结构化 prompt，调用千问模型输出施药建议和农事建议。  
+  为避免大模型输出不稳定，系统使用 `jsonschema` 对结果做结构化校验，确保输出满足预期字段约束。
+
+- `decision_context.py`  
+  提供可插拔的结构化增强上下文能力。  
+  当启用配置项后，可从 SQLite 中提取土壤、历史天气、候选农药等数据拼入决策输入；未启用时则保持基础链路简洁，避免强依赖数据库参与决策。
+
+系统明确将职责切分为：
+
+- 大模型负责“用药建议”和“农事建议”
+- 任务规划器负责“飞行路径、喷洒参数、气象限制”等执行细节
+
+这种边界划分提高了系统可控性，也更符合工程实践。
+
+#### 4.3 RAG 知识增强模块
+
+RAG 模块位于 `modules/decision/rag/`，是决策增强的重要组成部分。
+
+当前实现包含：
+
+- `embeddings.py`  
+  `QwenEmbeddings` 封装 DashScope 的 `text-embedding-v3` 接口
+- `vectorstore.py`  
+  `VectorStoreManager` 管理 ChromaDB 持久化向量库
+- `retriever.py`  
+  `DecisionRAGRetriever` 负责基于害虫类型和作物名称进行知识检索
+- `knowledge_loader.py`  
+  负责从 SQLite、JSON 种子数据和 `docs/` 文档加载知识条目
+
+当前向量库支持三个 collection：
+
+- `pesticides`：农药知识
+- `decisions`：历史决策案例
+- `agri_knowledge`：文档型农业知识
+
+系统在每次 AI 决策前执行 RAG 检索，将相关农药推荐、历史案例和农业知识片段拼接到 prompt 中；如果检索失败，系统只记录告警并自动降级到基础决策模式，不阻塞主流程。
+
+为了适配比赛演示与中英标签混用场景，RAG 检索器还增加了 demo 级害虫同义词归一化，如 `aphid / 蚜虫`、`rice-planthopper / 稻飞虱` 等，提高检索命中率。
+
+此外，主流程已经支持在决策完成后将新决策异步增量写入 `COLLECTION_DECISIONS`，使系统可以在演示过程中逐步积累历史案例，而不完全依赖手动重建向量库。
+
+#### 4.4 无人机模块 drone
+
+无人机域位于 `modules/drone/`，负责把 AI 输出转换为可执行作业任务。
+
+核心组件包括：
+
+- `controller.py`  
+  统一控制无人机执行链路，当前对外运行流程固定为 `px4`。
+- `mission_planner.py`  
+  根据地块、天气和决策结果生成航线、飞行高度、速度、喷洒速率和覆盖区域
+- `px4_simulator.py`  
+  对接 `PX4 SITL + MAVSDK Mission`，负责连接、定位等待、读取已上传 Mission、解锁、启动任务、任务跟踪和完成监听。默认只启动 QGC/PX4 已规划并上传的 Mission，牧野不上传航点，也不接管起飞高度。
+当前现场流程固定采用人工确认起飞。  
+决策完成后系统发布 `pending_confirmation` 事件，前端显示“确认起飞”按钮；操作人员确认后，系统自动启动 PX4 SITL 并继续执行喷洒航线。
+
+PX4 工作流程包含连接、定位等待、原生 Mission 准备、解锁、任务启动和完成状态回写，前端通过任务状态和地图态势同步呈现。
+
+#### 4.5 基础设施模块 infra
+
+基础设施域位于 `modules/infra/`，承担全局支撑能力。
+
+- `event_bus.py`  
+  采用 JSONL 文件事件总线，作为跨模块实时通信与时间线回放来源。  
+  它是系统领域间通信的唯一事件通道，降低模块间耦合。
+- `sqlite_store.py`  
+  提供 SQLite schema 管理、迁移、写入与查询能力。  
+  当前已落地任务、检测、天气、决策、无人机状态更新、农业基础数据、喷洒记录等多张表。
+- `weather.py`  
+  封装和风天气接口，支持 `real/mock` 双模式。
+- `common.py`  
+  管理日志、目录、配置加载和公共工具函数。
+
+系统采用 `JSONL + SQLite` 混合存储策略：
+
+- JSONL 负责实时事件流和前端时序展示
+- SQLite 负责结构化摘要、历史检索和农业数据支撑
+
+### 5. 前端展示系统设计
+
+前端位于 `frontend/`，是当前唯一前端主线，技术栈为 `React + Vite + TypeScript`。
+
+前端的主要职责是把复杂的处理链路转化为“评委和用户能看懂的系统行为”。当前承载能力包括：
+
+- 首页指挥大屏
+- 地图态势展示
+- 图片上传
+- 原图 / 标注图对照
+- 天气卡片
+- AI 决策卡片
+- 工作流步骤条
+- 无人机执行面板
+- 任务历史检索
+- WebSocket 实时状态接收与断线降级轮询
+
+地图组件 `FieldMap.tsx` 当前已经不依赖 Leaflet 运行时地图容器，而是改为纯 SVG 虚拟农田渲染，直接绘制：
+
+- 地块边界
+- 覆盖区域
+- 飞行路径
+- 无人机位置
+- 检测点位
+- 指挥点
+
+这种实现方式更适合比赛演示，因为它对外部地图底图无依赖，也减少了底图加载、容器初始化和缩放适配带来的不稳定因素。
+
+### 6. 系统运行方式
+
+当前项目推荐使用统一脚本启动，而不是手工分别拉起多个服务。
+
+主要脚本包括：
+
+- `scripts/prepare.sh`  
+  环境准备脚本，检查 Python/Node 依赖、巡检图片和 RAG 知识库
+- `scripts/demo.sh`  
+  一键运行主入口，负责启动主 API、YOLO API、前端开发服务器，并只投喂一张巡检图片
+- `scripts/precheck.sh`  
+  启动前预检函数库
+
+`demo.sh` 固定走“单张图片 → AI 决策 → 人工确认起飞 → PX4 喷洒”流程，支持：
+
+- `--image <path>`
+- `--api-port`
+- `--frontend-port`
+- `--skip-precheck`
+- `--skip-inject`
+
+当前默认部署拓扑为：
+
+- 主 API：`18000`
+- YOLO API：`8010`
+- 前端：`5173`
+
+需要注意的是，部分旧文档仍保留过期端口描述，当前应以脚本和应用代码中的实际配置为准。
+
+### 7. 测试与质量保障
+
+项目配有较完整的自动化测试体系，覆盖主流程、API 契约、无人机控制、SQLite 迁移、RAG 检索、脚本导入和前端部分逻辑。
+
+核心测试包括：
+
+- `tests/test_main.py`：主入口与主流程
+- `tests/test_drone_controller.py`：无人机执行逻辑
+- `tests/test_mission_planner.py`：航线规划
+- `tests/test_sqlite_migration.py`：数据库迁移与兼容
+- `tests/test_rag_embeddings.py`：Embedding 接口契约
+- `tests/test_rag_retriever.py`：RAG 查询逻辑
+- `tests/test_knowledge_loader.py`：知识加载与增量索引构造
+
+从工程策略看，项目强调：
+
+- 改动前先跑测试
+- 新功能必须补测试
+- 实际行为变化需要同步文档和项目记忆
+
+### 8. 项目创新点与工程特点
+
+本项目的创新不只在于模型组合，而在于系统级整合，主要体现在：
+
+1. 从识别到执行的完整闭环  
+   项目不是“识别结果展示”或“AI 建议生成”这种单环节系统，而是贯通到无人机任务执行与前端态势展示。
+
+2. 多源信息参与决策  
+   决策不是只基于害虫图像，而是同时结合天气、农药知识、历史案例和结构化农业数据上下文。
+
+3. 大模型与规划器职责分离  
+   避免让大模型直接生成飞控参数，而是由规则化任务规划器完成飞行路径与喷洒约束，提升工程可控性。
+
+4. 单一 PX4 工作流程  
+   无人机执行固定走 PX4 SITL，避免运行时在虚拟模式与 PX4 模式之间切换。
+
+5. 混合存储策略  
+   使用 `JSONL + SQLite + ChromaDB` 分别处理实时事件、结构化历史和向量知识，结构简单但功能完整。
+
+6. 前端虚拟农田态势图  
+   通过纯 SVG 实现作业地图，更适合答辩和比赛场景下的稳定展示。
+
+### 9. 当前局限与后续扩展方向
+
+虽然系统主链路已经打通，但当前仍存在一些工程边界：
+
+- RAG 已接入，但 `agri_knowledge` 与历史案例的自动补齐机制仍可继续完善
+- `QwenEmbeddings` 和真实天气接口依赖外部 API Key
+- `pesticide_catalog` 当前仍以演示 seed 为主，非正式全量生产数据
+- PX4 仿真链路在真实环境中仍依赖外部组件，如 Gazebo、MAVSDK、QGroundControl
+- 决策增强上下文目前仍以“把结构化数据拼入 prompt”为主，尚未形成正式规则引擎
+- 前端在比赛演示场景下仍可进一步打磨讲解节奏、布局和动画效果
+
+后续扩展方向可包括：
+
+- 接入正式农药目录和更多农业知识
+- 引入 reranking 或更强检索策略提升 RAG 质量
+- 扩展农业统计、报表与决策可解释性
+- 接入真实无人机硬件链路
+- 引入更精细的任务调度与多机协同能力
+
+### 10. 总结
+
+`muye` 是一个围绕智慧农业害虫防治场景构建的系统级原型平台。它的价值不在于单独证明 YOLO、LLM 或 PX4 中某一项技术，而在于将这些能力有机整合为一个可运行、可展示、可演进的闭环系统。
+
+从当前代码与文档状态来看，项目已经具备以下工程特征：
+
+- 主链路闭环打通
+- 前后端边界明确
+- 模块职责清晰
+- 数据留痕完整
+- 演示模式稳定
+- 后续扩展路径清楚
 
 ## 项目结构
 
 ```text
 muye/
-├── AGENTS.md                        # AI Agent 导航入口（~100行）
-├── ARCHITECTURE.md                  # 架构总览（分层 + 数据流）
-├── QUALITY_SCORE.md                 # 模块质量评分
+├── AGENTS.md                        # AI Agent 情境地图（核心入口）
+├── ARCHITECTURE.md                  # 架构总览（分层 + 依赖规则）
+├── CLAUDE.md                        # 最高命令（文档同步强制规则）
 ├── CHANGELOG.md                     # 发行变更日志
-├── PROJECT_MEMORY.md                # 当前优先级、架构决策和下一步计划
+├── DESIGN.md                        # 通用设计指南
+├── FRONTEND.md                      # 前端开发规范
+├── PLANS.md                         # 高层路线图
+├── PRODUCT_SENSE.md                 # 产品理念和用户故事
+├── QUALITY_SCORE.md                 # 质量评分标准
+├── RELIABILITY.md                   # 可靠性要求和 SLO
+├── SECURITY.md                      # 安全规范
 ├── README.md                        # 项目总说明
 ├── requirements.txt                 # Python 依赖清单
 │
 ├── app/                             # FastAPI 应用层
 │   ├── main.py                      # 主入口 + 路由注册
-│   ├── drone_api.py                 # 虚拟无人机 API（独立服务）
 │   ├── yolo_api.py                  # 本地 YOLO API（独立服务）
 │   ├── config.py                    # 环境解析与配置工具
 │   ├── deps.py                      # 运行时依赖访问辅助
@@ -70,7 +362,6 @@ muye/
 │   │   ├── controller.py            # 无人机任务执行与状态回写
 │   │   ├── mission_planner.py       # 飞行/喷洒规划
 │   │   ├── px4_simulator.py         # PX4 SITL / MAVSDK 执行链路
-│   │   ├── virtual_api.py           # 虚拟无人机 HTTP 服务
 │   │   └── __init__.py
 │   ├── detection/                   # 检测域
 │   │   ├── image_processor.py       # YOLO 识别调用与校验
@@ -102,20 +393,22 @@ muye/
 │   ├── chroma_db/                   # RAG 向量知识库
 │   └── muye.db                      # SQLite 结构化业务库
 │
-├── docs/                            # 精简文档系统 (Harness-style)
-│   ├── design/                      # 设计文档
-│   │   └── index.md                 # 核心信念 + 架构原则
-│   ├── plans/                       # 执行计划
+├── docs/                            # Agent-First 文档系统
+│   ├── design-docs/                 # 设计文档
+│   │   ├── index.md                 # 设计文档索引
+│   │   └── core-beliefs.md          # 核心工程信念
+│   ├── exec-plans/                  # 执行计划
 │   │   ├── active/                  # 正在执行的计划
 │   │   ├── completed/               # 已完成的计划
-│   │   ├── tech-debt.md             # 技术债务追踪
-│   │   └── *.md                     # 历史计划
-│   ├── reference/                   # 参考
-│   │   ├── api.md                   # API 端点列表
-│   │   └── data-model.md            # SQLite schema
-│   ├── operations/                  # 运维
-│   │   └── runbooks/                # 操作手册
-│   └── WORKLOG.md                   # 会话级工作记录
+│   │   └── tech-debt-tracker.md     # 技术债务追踪
+│   ├── generated/                   # 自动生成文档
+│   │   └── db-schema.md             # SQLite schema
+│   ├── product-specs/               # 产品规格
+│   │   └── demo-pipeline.md         # 演示流程规格
+│   └── references/                  # 参考文档
+│       ├── api.md                   # API 端点列表
+│       ├── data-model.md            # 数据模型
+│       └── rag-llms.txt             # RAG 使用指南
 │
 ├── frontend/                        # React 前端
 │   ├── src/                         # 前端源码
@@ -125,21 +418,20 @@ muye/
 │   └── PROJECT_STRUCTURE.md         # 前端结构说明
 │
 ├── scripts/                         # 辅助脚本
-│   ├── start_demo.sh                # 演示模式启动
-│   ├── start_px4_visual_demo.sh     # PX4 + Gazebo 演示
-│   ├── start_competition_mode.sh    # 比赛模式
-│   ├── start_all_in_one.sh          # 一键启动
+│   ├── prepare.sh                   # 环境准备（依赖检查、演示图片）
+│   ├── demo.sh                      # 一键演示主入口
+│   ├── precheck.sh                  # 环境检查工具库
 │   ├── build_rag_knowledge.py       # 构建 RAG 向量知识库
 │   └── import_*.py / generate_*.py  # 数据导入脚本
 │
 └── tests/                           # 自动化测试
     ├── test_main.py                 # 主入口 / API 契约 / 主流程测试
-    ├── test_drone_controller.py     # 无人机 backend 测试
+    ├── test_drone_controller.py     # PX4 执行链路测试
     ├── test_mission_planner.py      # 航线与演示 profile 测试
     ├── test_sqlite_migration.py     # SQLite schema / migration 测试
     ├── test_rag_embeddings.py       # RAG Embeddings API 契约测试
     ├── test_rag_retriever.py        # RAG Retriever 测试
-    └── ...                          # 其余 AI / 天气 / YOLO / 虚拟无人机测试
+    └── ...                          # 其余 AI / 天气 / YOLO 测试
 ```
 
 ## 当前开发主线
@@ -150,8 +442,6 @@ muye/
   负责两件事：
   1. 农业处理主流程编排
   2. 给 React 大屏提供 `api_app`
-- `app/drone_api.py`
-  独立无人机 API 服务，负责虚拟任务状态机。
 - `app/yolo_api.py`
   独立 YOLO 推理服务，接收图片返回害虫检测结果。
 - `modules/` 核心业务逻辑按领域分组：`decision/`、`drone/`、`detection/`、`infra/`。
@@ -159,20 +449,21 @@ muye/
   是唯一前端主线，不再存在 Streamlit 页面
 - `modules/infra/sqlite_store.py + modules/infra/event_bus.py`
   分别负责结构化历史和实时事件
-- `scripts/start_demo.sh`
-  是最直接的本地演示入口，会同时启动：
-  - `app/main.py --with-demo-stack`
-  - `uvicorn app.main:api_app`
+- `scripts/demo.sh`
+  是最直接的本地运行入口，会同时启动：
+  - `app/main:api_app` (FastAPI 主 API)
+  - `app.yolo_api:app` (YOLO 推理 API)
   - `frontend` 的 Vite 开发服务器
+  - 自动注入巡检图片
 
 ## 目录导读
 
 如果你是第一次接手这个仓库，建议按这个顺序看：
 
-1. [AGENTS.md](AGENTS.md) — AI Agent 导航入口
+1. [AGENTS.md](AGENTS.md) — AI Agent 情境地图（核心入口）
 2. [ARCHITECTURE.md](ARCHITECTURE.md) — 架构总览
-3. [README.md](README.md) — 项目总说明
-4. [PROJECT_MEMORY.md](PROJECT_MEMORY.md) — 当前优先级和决策
+3. [CLAUDE.md](CLAUDE.md) — 最高命令（文档同步规则）
+4. [README.md](README.md) — 项目总说明
 5. [frontend/PROJECT_STRUCTURE.md](frontend/PROJECT_STRUCTURE.md) — 前端结构
 6. [tests/test_main.py](tests/test_main.py) — 主流程测试
 
@@ -183,25 +474,20 @@ muye/
 1. `app/main.py`
    - 装配 YOLO、天气、决策、无人机执行和 SQLite 写入链路。
    - 暴露前端聚合 API：`/health`、`/workflow/*`、`/dashboard/*`、`/tasks/*`、`/demo/*`、`/sim/*`。
-   - 在一键演示模式下可同时接管本地 YOLO API 和虚拟无人机 API。
+   - 在一键运行模式下可接管本地 YOLO API，主流程固定走 PX4 SITL。
 
-2. `app/drone_api.py`
-   - 独立虚拟无人机 API 服务（端口 8001）。
-   - 提供任务创建与任务状态查询接口。
-   - 自动模拟排队、起飞、前往作业区、喷洒、返航和完成状态。
-
-3. `app/yolo_api.py`
-   - 独立本地 YOLO 推理 API 服务（端口 8002）。
+2. `app/yolo_api.py`
+   - 独立本地 YOLO 推理 API 服务（端口 8010）。
    - 接收图片，返回害虫类型、置信度、位置信息。
 
 ### 核心业务层（modules/）
 
-4. `modules/detection/` — 检测域
+3. `modules/detection/` — 检测域
    - `image_processor.py`：异步调用 YOLO API，校验害虫类型、置信度、位置信息。
    - `local_yolo_api.py`：嵌入式 YOLO API，支持直接加载 `best.pt` 权重。
    - `data_collector.py`：每 24 小时自动触发无人机采图，使用 watchdog 监听新图片。
 
-5. `modules/decision/` — 决策域
+4. `modules/decision/` — 决策域
    - `ai_decision.py`：将害虫检测和天气信息整合成结构化文本，调用千问 API 输出用药建议 + 农事建议 JSON。使用 jsonschema 强制校验返回结构。已集成 RAG 检索增强：决策前自动检索农药知识库和历史案例，失败时降级不中断。
    - `decision_context.py`：决策增强上下文抽象。
    - `rag/`：RAG 决策增强模块（LangChain + ChromaDB）。
@@ -210,13 +496,12 @@ muye/
      - `retriever.py`：DecisionRAGRetriever 根据害虫类型和作物名称检索。
      - `knowledge_loader.py`：从 SQLite 或 JSON 文件加载农药知识。
 
-6. `modules/drone/` — 无人机域
+5. `modules/drone/` — 无人机域
    - `controller.py`：无人机任务执行与状态回写。
    - `mission_planner.py`：飞行/喷洒规划。
    - `px4_simulator.py`：PX4 SITL / MAVSDK 执行链路。
-   - `virtual_api.py`：虚拟无人机 HTTP 服务。
 
-7. `modules/infra/` — 基础设施域
+6. `modules/infra/` — 基础设施域
    - `common.py`：公共路径、日志、配置加载。
    - `event_bus.py`：JSONL 事件总线，跨模块通信的唯一通道。
    - `sqlite_store.py`：SQLite schema 和读写封装。
@@ -278,152 +563,68 @@ QWEATHER_API_KEY="在此填入你的和风天气API_KEY"
 QWEATHER_GEO_URL="https://api.qweather.com/geo/v2/city/lookup"
 QWEATHER_WEATHER_URL="https://api.qweather.com/v7/weather/now"
 
-DRONE_API_URL="http://127.0.0.1:9010/missions"
-DRONE_API_KEY="virtual-drone-token"
-VIRTUAL_DRONE_HOST="127.0.0.1"
-VIRTUAL_DRONE_PORT="9010"
-VIRTUAL_DRONE_ALLOWED_IPS="127.0.0.1,::1"
+DRONE_BACKEND="px4"
+PX4_SYSTEM_ADDRESS="udpin://0.0.0.0:14540"
+PX4_AUTO_START_ON_SPRAY="true"
 SERVICE_CLIENT_IP="127.0.0.1"
 ```
 
 说明：
 
 - 请将训练好的权重文件放到 `models/best.pt`。
-- 主流程会优先从 SQLite `fields` / `field_crop_cycles` 读取运行时地块上下文；`drone_config.json` 里的地块信息只作为回退配置。
-- `drone_config.json` 中的 `field.weather_location` 或 `field.location.city` 用于回退天气地点查询，建议填写河南城市名，例如 `郑州`。
+- 主流程中的业务数据仍可从 SQLite `fields` / `field_crop_cycles` 读取；PX4 实际执行默认走 `native_mission + use_existing_mission`，只调用 MAVSDK Mission 插件启动 QGC/PX4 已上传 Mission，不使用河南/业务地块经纬度作为飞控航点。
+- `drone_config.json` 中的 `field.weather_location` 或 `field.location.city` 只作为业务天气查询回退，不作为 PX4 飞控航点来源。
 - 本地 YOLO API 默认读取 `YOLO_LOCAL_MODEL_PATH`，主流程默认调用 `YOLO_API_URL`。
 - `YOLO_API_KEY` 同时用于主项目访问本地 YOLO API 的 Bearer Token。
 - `MUYE_SQLITE_PATH` 默认是 `data/muye.db`，主处理链会把任务、检测、天气和决策摘要同步写入该库。
-- `MUYE_ACTIVE_FIELD_ID` 可指定当前演示链路优先使用的数据库地块 ID。
+- `MUYE_ACTIVE_FIELD_ID` 可指定当前作业链路优先使用的数据库地块 ID。
 - `drone_config.json` 中 `simulate_capture=true` 时，系统会自动生成一张最小 JPEG 作为采图结果，便于本地联调。
-- `execution.simulate_only=true` 时，无人机喷洒任务只做本地模拟，不访问虚拟无人机 API。
-- 使用 `--with-virtual-drone-api` 或 `--with-demo-stack` 时，主程序会自动接管无人机接口地址并关闭本地模拟模式。
-- `DRONE_BACKEND=px4` 时，项目会改走 PX4 SITL / MAVSDK 执行链路。
-- 本地 PX4 演示建议同时设置 `PX4_USE_SITL_DEMO_FIELD=true`，让任务使用仓库内置的 Zurich SITL 小地块，而不是直接飞往业务配置里的真实农田坐标。
-- 当前比赛演示脚本默认使用 `PX4_SYSTEM_ADDRESS=udpin://0.0.0.0:14540`，直接监听 PX4 的 Onboard MAVLink 远端端口，现场启动更稳。
+- `DRONE_BACKEND=px4` 是当前唯一对外运行链路，项目会走 PX4 SITL / MAVSDK 执行。
+- 本地 PX4 运行默认使用 `px4.execution_mode=native_mission` 和 `px4.use_existing_mission=true`；后端会先读取 PX4 中已有 Mission，确认存在航点后才调用 `start_mission()`。
+- 前端地图大屏不绑定 PX4 航线，继续只做任务动画演示；PX4 中的真实 SITL 飞机按 QGroundControl/PX4 中规划并上传的 Mission 飞行。
+- 如 PX4 中没有已上传 Mission，系统会直接提示先在 QGroundControl 中规划航线并 Upload 到飞机，不再由牧野临时生成或上传航点。
+- PX4 实际飞行不会用业务 planner 的河南经纬度航线生成飞控航点；业务 planner 的经纬度航线只用于前端展示和任务记录。
+- 使用步骤：先启动 PX4/QGroundControl，规划航线并 Upload 到飞机；再运行 `bash scripts/demo.sh`，前端确认起飞后牧野只调用 `start_mission()`。
+- 演示模式下 `return_to_launch_after_mission=false`，固定本地航线末尾回到起飞点附近，避免额外 RTL 造成观感上偏离路线。
+- 当前脚本默认使用 `PX4_SYSTEM_ADDRESS=udpin://0.0.0.0:14540`，直接监听 PX4 的 Onboard MAVLink 远端端口。
 
 ## 运行方式
 
-推荐一键启动整套演示：
+### 环境准备
 
 ```bash
 cd /home/qingking/muye
-./scripts/start_demo.sh
+./scripts/prepare.sh
 ```
 
-如果你想启动后自动投喂仓库里的示例图片并触发一轮完整流程：
+检查 Python/Node.js 依赖、准备巡检图片、确认 YOLO 模型。
+
+### 一键运行（PX4 工作流程）
 
 ```bash
 cd /home/qingking/muye
-./scripts/start_demo.sh --sample-image IP000000042.jpg
+./scripts/demo.sh
 ```
 
-如果当前机器上 `18000` 已被占用，也可以显式换一个前端 API 端口：
+脚本会启动主 API、后台处理链、YOLO API 和 React 前端，然后只投喂一张巡检图片。  
+决策完成后前端显示“确认起飞”，操作人员点击确认后，系统自动启动 PX4 SITL 并执行喷洒航线。
 
-```bash
-cd /home/qingking/muye
-./scripts/start_demo.sh --api-port 18100
-```
+### 常用参数
 
-默认启动后：
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--image <path>` | `data/samples` 第一张图片 | 指定本轮投喂图片 |
+| `--api-port <port>` | `18000` | API 端口 |
+| `--frontend-port <port>` | `5173` | 前端端口 |
+| `--skip-precheck` | - | 跳过环境检查 |
+| `--skip-inject` | - | 跳过图片投喂 |
 
-- 后端主流程会以 `--with-demo-stack` 方式运行
-- 演示脚本拉起的前端 API 会监听 `127.0.0.1:18000`
-- 本地 YOLO API 会监听 `127.0.0.1:8010`
-- 虚拟无人机 API 会监听 `127.0.0.1:9010`
-- React 前端会监听 `127.0.0.1:8501`
-- 按 `Ctrl+C` 会一起停止前后端进程
+### 默认启动后
 
-## PX4 SITL 演示
-
-如果要把项目切到 PX4 仿真执行链路，推荐直接跑下面这条命令：
-
-```bash
-cd /home/qingking/muye
-./scripts/run_px4_demo.sh
-```
-
-这条脚本会完成下面几件事：
-
-- 启动 `~/PX4-Autopilot` 下的 `make px4_sitl gz_x500`
-- 默认切到 `muye_demo_field` Gazebo 世界，场景里带演示农田、四角桩和可见边界
-- 自动清理代理环境变量，避免 PX4 本地构建/运行链路被代理干扰
-- 以 `DRONE_BACKEND=px4` 启动 Muye 后端和本地 YOLO API
-- 强制切换到仓库内置的 Zurich SITL 演示地块
-- 注入示例图 `IP000000042.jpg`，等待任务真正执行到 PX4 `completed`
-
-如果 PX4 已经在另一个终端跑着，可以复用现有实例：
-
-```bash
-cd /home/qingking/muye
-./scripts/run_px4_demo.sh --skip-px4
-```
-
-常用参数：
-
-- `--px4-dir /path/to/PX4-Autopilot`：指定 PX4 仓库路径
-- `--sample-image /path/to/image.jpg`：替换演示图片
-- `--system-address udpin://0.0.0.0:14540`：覆盖 MAVSDK 连接地址
-- `--world muye_demo_field`：覆盖 Gazebo 世界名称；如果想手工启动，也可执行 `PX4_GZ_WORLD=muye_demo_field make px4_sitl gz_x500`
-- `--keep-px4`：演示结束后不关闭 PX4 SITL
-
-如果比赛演示时希望把 `PX4/Gazebo + Muye 前端` 一起拉起来，直接运行：
-
-```bash
-cd /home/qingking/muye
-./scripts/start_px4_visual_demo.sh --sample-image IP000000042.jpg
-```
-
-这条脚本会：
-
-- 启动 `PX4 SITL + Gazebo`
-- 以 `PX4` 模式启动 Muye 后端
-- 启动 React 指挥大屏
-- 如果本机已安装 `QGroundControl`，会自动尝试一并拉起
-
-常用参数：
-
-- `--skip-px4`：复用已运行的 PX4 SITL
-- `--skip-qgc`：只看 Gazebo 和 Muye，不启动 QGroundControl
-- `--qgc-path /path/to/QGroundControl.AppImage`：手工指定 QGroundControl 路径
-- `--frontend-port 8501`：指定前端端口
-- `--api-port 18100`：指定前端 API 端口，避免现场端口冲突
-
-如果想切到“比赛模式”，让脚本在启动后自动拉起浏览器并给出现场展示提示，运行：
-
-```bash
-cd /home/qingking/muye
-./scripts/start_competition_mode.sh --sample-image IP000000042.jpg
-```
-
-如果你只想记一个最直接的一键命令，直接运行：
-
-```bash
-cd /home/qingking/muye
-./scripts/start_all_in_one.sh
-```
-
-这条脚本默认会：
-
-- 拉起 `PX4 SITL + Gazebo`
-- 拉起 Muye 后端
-- 拉起 React 前端
-- 自动打开浏览器中的控制台页面
-- 自动尝试打开 `QGroundControl` 无人机页面
-
-常用参数：
-
-- `--with-sample`：启动后自动注入仓库内置演示图片，直接触发完整演示流程
-- `--sample-image /path/to/image.jpg`：改用你自己的演示图片
-- `--skip-px4`：复用已经运行中的 PX4
-- `--skip-qgc`：不打开 QGroundControl
-- `--skip-browser`：不自动打开网页
-
-比赛模式额外参数：
-
-- `--browser-cmd /usr/bin/firefox`：指定浏览器程序
-- `--api-port 18100`：透传给底层 visual demo 脚本，覆盖前端 API 端口
-- 其余 `PX4/QGC` 相关参数会透传给 `start_px4_visual_demo.sh`
+- 主 API 监听 `127.0.0.1:18000`
+- YOLO API 监听 `127.0.0.1:8010`
+- React 前端监听 `127.0.0.1:5173`
+- 按 `Ctrl+C` 会一起停止所有服务
 
 ## 河南参考数据导入
 
@@ -513,34 +714,28 @@ PYTHONPATH=. .venv/bin/python scripts/import_henan_soil_records_csv.py
 
 当前 `soil_records.csv` 主要用于本地联调和后续决策扩展验证；等你拿到真实土壤检测数据后，可以直接替换为真实 CSV 再走同一条导入链。
 
-## 工程记忆
+## 文档系统
 
-为了避免后续协作时丢失上下文，项目内约定维护两份工程记忆文件：
+项目采用 Agent-First 文档体系，所有知识存储在 Git 仓库中：
 
-- `PROJECT_MEMORY.md`
-  - 记录当前优先级
-  - 记录关键架构决策
-  - 记录最近一次验证结论
-  - 记录下一步计划
-- `CHANGELOG.md`
-  - 记录高层修改日志
-  - 用来快速回顾最近版本做了什么
-- `docs/WORKLOG.md`
-  - 记录本轮协作做了什么
-  - 记录当前交接点
-  - 用来帮助新会话快速接上上一轮工作
+- `AGENTS.md` — AI Agent 情境地图，每次对话的核心入口
+- `CLAUDE.md` — 最高命令，强制规则：修改代码必须同步更新文档
+- `ARCHITECTURE.md` — 架构分层和依赖规则
+- `DESIGN.md` — 设计指南和命名约定
+- `docs/design-docs/` — 设计文档和核心工程信念
+- `docs/exec-plans/` — 执行计划和技术债务
+- `docs/generated/` — 自动生成文档（DB Schema）
+- `docs/product-specs/` — 产品规格
+- `docs/references/` — API、数据模型、RAG 参考
 
-后续每次涉及架构、数据模型、演示链路或关键运行方式变化时，都应同步更新这些记忆文件。
+每次涉及架构、数据模型、演示链路或关键运行方式变化时，运行 `python3 scripts/verify_docs.py` 验证文档一致性。
 
-当前项目已经支持以下真实/模拟组合：
+当前项目推荐运行组合：
 
 - YOLO：真实本地模型 `best.pt`
 - 和风天气：真实接口
 - 千问：支持真实接口，也支持通过 `QWEN_USE_MOCK` 切换为模拟模式
-- 无人机：
-  - `simulated`
-  - 虚拟无人机 API
-  - `PX4 SITL / MAVSDK`
+- 无人机：`PX4 SITL / MAVSDK`
 
 当你的 [api_keys.env](/home/qingking/muye/config/api_keys.env) 中设置为：
 
@@ -549,20 +744,20 @@ QWEATHER_USE_MOCK="false"
 QWEN_USE_MOCK="false"
 ```
 
-系统会运行在“真实天气 + 真实千问 + 当前 `DRONE_BACKEND` 指定的无人机 backend”模式。
+系统会运行在“真实天气 + 真实千问 + PX4 SITL”模式。
 
-推荐一键启动本地 YOLO API、虚拟无人机 API 与主系统：
+推荐一键启动本地 YOLO API 与主系统：
 
 ```bash
 cd /home/qingking/muye
-python -m app.main --with-demo-stack
+python -m app.main --with-yolo-api --drone-backend px4
 ```
 
 执行一次完整链路后退出：
 
 ```bash
 cd /home/qingking/muye
-python -m app.main --with-demo-stack --once
+python -m app.main --with-yolo-api --drone-backend px4 --once
 ```
 
 如果你希望分开启动，也可以先启动本地 YOLO API：
@@ -570,13 +765,6 @@ python -m app.main --with-demo-stack --once
 ```bash
 cd /home/qingking/muye
 python -m app.yolo_api
-```
-
-再启动虚拟无人机 API：
-
-```bash
-cd /home/qingking/muye
-python -m app.drone_api
 ```
 
 可选检查：
@@ -609,7 +797,7 @@ python -m app.main
 ```bash
 cd /home/qingking/muye
 . .venv/bin/activate
-python -m app.main --with-demo-stack
+python -m app.main --with-yolo-api --drone-backend px4
 ```
 
 终端 2，启动前端 API：
@@ -625,14 +813,14 @@ python -m uvicorn app.main:api_app --host 127.0.0.1 --port 18000
 ```bash
 cd /home/qingking/muye
 cd frontend
-npm run dev -- --host 127.0.0.1 --port 8501
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 如果不是通过脚本启动，而是手工启动前端，且前端 API 不在默认 `18000`，需要显式指定代理目标：
 
 ```bash
 cd /home/qingking/muye/frontend
-MUYE_API_TARGET=http://127.0.0.1:18100 npm run dev -- --host 127.0.0.1 --port 8501
+MUYE_API_TARGET=http://127.0.0.1:18100 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 启动后：
@@ -665,7 +853,7 @@ PYTHONPATH=. .venv/bin/pytest -q
 - 事件总线的写入、清空与任务视图聚合
 - 和风天气地点查询与天气实况两步流程
 - 本地 YOLO API 的鉴权与标准输出格式
-- 虚拟无人机与 PX4 状态推进
+- PX4 状态推进
 - 千问决策 JSON Schema 校验与结构化输入构建
 - SQLite 迁移、结构化历史读取与农业数据写入
 - 主流程 `spray_records` / `pesticide_catalog` / 地块上下文联动
@@ -767,11 +955,11 @@ PYTHONPATH=. .venv/bin/pytest -q
   - 包含基础的 YOLO、天气、千问、无人机控制和测试结构
 
 - `v0.2-initial`
-  - 当前稳定演示版本
-  - 已支持真实 YOLO、真实和风天气、真实千问增强链路、虚拟无人机和可视化指挥中心前端
+  - 当前稳定运行版本
+  - 已支持真实 YOLO、真实和风天气、真实千问增强链路、PX4 SITL 和可视化指挥中心前端
 
 - `v0.3-initial`
-  - 增加一键启动脚本 `scripts/start_demo.sh`
+  - 增加一键启动脚本 `scripts/demo.sh`
   - README 补齐完整演示启动流程与实际可用测试命令
   - 已验证后端全链路与 React 演示前端可一起运行
 

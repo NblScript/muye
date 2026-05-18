@@ -1,8 +1,7 @@
-import { Alert, Empty, Spin, Tag, Typography } from 'antd'
-
+import { useState } from 'react'
+import { Alert, Button, Empty, Tag, useToast } from '../ui'
+import { confirmDroneTakeoff } from '../../api/workflow'
 import type { WorkflowStateResponse, WorkflowTaskState, WorkflowTimelineEntry } from '../../types/workflow'
-
-const { Text } = Typography
 
 const DRONE_STAGE_LABELS: Record<string, string> = {
   submitted: '任务提交',
@@ -12,6 +11,7 @@ const DRONE_STAGE_LABELS: Record<string, string> = {
   ready: '定位就绪',
   uploaded: '航线上传',
   armed: '解锁待飞',
+  pending_confirmation: '等待确认起飞',
   takeoff: '起飞',
   enroute: '前往作业区',
   spraying: '喷洒执行',
@@ -22,29 +22,16 @@ const DRONE_STAGE_LABELS: Record<string, string> = {
 }
 
 const DRONE_STAGE_SEQUENCES: Record<string, string[]> = {
-  px4: ['connecting', 'connected', 'ready', 'uploaded', 'armed', 'takeoff', 'spraying', 'completed'],
-  virtual_api: ['submitted', 'queued', 'takeoff', 'enroute', 'spraying', 'returning', 'completed'],
-  simulated: ['queued', 'takeoff', 'spraying', 'completed'],
-  generic: ['submitted', 'queued', 'connecting', 'connected', 'ready', 'uploaded', 'armed', 'takeoff', 'enroute', 'spraying', 'returning', 'completed'],
+  px4: ['connecting', 'connected', 'ready', 'uploaded', 'armed', 'pending_confirmation', 'takeoff', 'spraying', 'completed'],
+  generic: ['submitted', 'queued', 'connecting', 'connected', 'ready', 'uploaded', 'armed', 'pending_confirmation', 'takeoff', 'enroute', 'spraying', 'returning', 'completed'],
 }
 
 function formatTimestamp(value?: string | null) {
-  if (!value) {
-    return '-'
-  }
-
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
+  if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   }).format(date)
 }
 
@@ -53,81 +40,59 @@ function inferDroneBackend(task: WorkflowTaskState) {
   const timeline = task.drone_timeline ?? []
   const taskId = String(drone.task_id ?? '').toLowerCase()
   const statuses = new Set<string>()
-
   for (const item of timeline) {
     const status = String(item.status ?? '').toLowerCase()
-    if (status) {
-      statuses.add(status)
-    }
+    if (status) statuses.add(status)
   }
-
   const currentStatus = String(drone.status ?? '').toLowerCase()
-  if (currentStatus) {
-    statuses.add(currentStatus)
-  }
-
-  if (taskId.startsWith('px4-') || ['connecting', 'connected', 'ready', 'uploaded', 'armed'].some((item) => statuses.has(item))) {
+  if (currentStatus) statuses.add(currentStatus)
+  if (taskId.startsWith('px4-') || ['connecting', 'connected', 'ready', 'uploaded', 'armed'].some((s) => statuses.has(s))) {
     return { key: 'px4', label: 'PX4 SITL' }
   }
-
-  if (taskId.startsWith('vd-') || ['submitted', 'enroute', 'returning'].some((item) => statuses.has(item))) {
-    return { key: 'virtual_api', label: '虚拟无人机 API' }
-  }
-
-  if (taskId.startsWith('sim-')) {
-    return { key: 'simulated', label: '内置模拟' }
-  }
-
-  return { key: 'generic', label: '无人机链路' }
+  return { key: 'px4', label: 'PX4 SITL' }
 }
 
 function buildStageSequence(task: WorkflowTaskState, backendKey: string) {
   const sequence = [...(DRONE_STAGE_SEQUENCES[backendKey] ?? DRONE_STAGE_SEQUENCES.generic)]
   const currentStatus = String(task.drone?.status ?? '').toLowerCase()
-
   for (const item of task.drone_timeline ?? []) {
     const status = String(item.status ?? '').toLowerCase()
-    if (status && !sequence.includes(status)) {
-      sequence.push(status)
-    }
+    if (status && !sequence.includes(status)) sequence.push(status)
   }
-
-  if (currentStatus && !sequence.includes(currentStatus)) {
-    sequence.push(currentStatus)
-  }
-
+  if (currentStatus && !sequence.includes(currentStatus)) sequence.push(currentStatus)
   return sequence
 }
 
 function stageState(sequence: string[], timeline: Map<string, WorkflowTimelineEntry>, currentStatus: string, status: string) {
-  if (status === currentStatus) {
-    return 'current'
-  }
-
-  if (timeline.has(status)) {
-    return 'done'
-  }
-
+  if (status === currentStatus) return 'current'
+  if (timeline.has(status)) return 'done'
   const currentIndex = sequence.indexOf(currentStatus)
   const statusIndex = sequence.indexOf(status)
-  if (currentIndex >= 0 && statusIndex >= 0 && statusIndex < currentIndex) {
-    return 'done'
-  }
-
+  if (currentIndex >= 0 && statusIndex >= 0 && statusIndex < currentIndex) return 'done'
   return 'pending'
 }
 
-function statusTagColor(status: string) {
-  if (status === 'completed') {
-    return 'success'
-  }
-  if (status === 'error' || status === 'failed') {
-    return 'error'
-  }
-  if (status === 'running' || status === 'spraying') {
-    return 'processing'
-  }
+function statusTagColor(status: string): 'green' | 'red' | 'amber' | 'purple' | 'default' {
+  if (status === 'completed') return 'green'
+  if (status === 'error' || status === 'failed') return 'red'
+  if (status === 'running' || status === 'spraying') return 'amber'
+  if (status === 'pending_confirmation') return 'purple'
   return 'default'
+}
+
+function statusClassName(status: string) {
+  const normalized = String(status ?? '').toLowerCase()
+  if (normalized === 'error' || normalized === 'failed') return 'is-error'
+  if (normalized === 'completed') return 'is-completed'
+  if (normalized === 'running' || normalized === 'pending_confirmation') return 'is-running'
+  return ''
+}
+
+function eventMessageWithReason(event: { message: string; payload?: Record<string, unknown> }) {
+  const reason = event.payload?.error
+  if (typeof reason !== 'string' || !reason.trim()) return event.message
+  if (event.message.includes(reason)) return event.message
+  return `${event.message}：${reason.trim()}`
 }
 
 type WorkflowPanelProps = {
@@ -137,16 +102,31 @@ type WorkflowPanelProps = {
 }
 
 export default function WorkflowPanel({ data, loading = false, error = null }: WorkflowPanelProps) {
+  const [confirming, setConfirming] = useState(false)
+  const toast = useToast()
+
+  const handleConfirmTakeoff = async () => {
+    setConfirming(true)
+    try {
+      await confirmDroneTakeoff()
+      toast.success('起飞确认成功')
+    } catch {
+      toast.error('确认起飞失败，请检查后端服务')
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   if (loading && !data) {
     return (
       <div className="workflow-loading">
-        <Spin />
+        <span className="spinner" />
       </div>
     )
   }
 
   if (error && !data) {
-    return <Alert type="error" message="任务流程加载失败" description={error} showIcon />
+    return <Alert type="error" message="任务流程加载失败" description={error} />
   }
 
   if (!data) {
@@ -156,12 +136,11 @@ export default function WorkflowPanel({ data, loading = false, error = null }: W
   const task = data.latest_task
   const backend = inferDroneBackend(task)
   const currentStatus = String(task.drone?.status ?? '').toLowerCase()
+  const isPendingConfirmation = currentStatus === 'pending_confirmation'
   const timelineByStatus = new Map<string, WorkflowTimelineEntry>()
   for (const item of task.drone_timeline ?? []) {
     const status = String(item.status ?? '').toLowerCase()
-    if (status) {
-      timelineByStatus.set(status, item)
-    }
+    if (status) timelineByStatus.set(status, item)
   }
 
   const sequence = buildStageSequence(task, backend.key)
@@ -169,24 +148,50 @@ export default function WorkflowPanel({ data, loading = false, error = null }: W
   const instruction = task.drone?.instruction ?? {}
   const routePoints = Array.isArray(instruction.飞行路径) ? instruction.飞行路径.length : 0
   const coveragePoints = Array.isArray(instruction.覆盖区域?.coordinates) ? instruction.覆盖区域?.coordinates.length : 0
+  const failureReason = typeof task.error === 'string' && task.error.trim() ? task.error.trim() : null
 
   return (
     <div className="workflow-shell">
       <div className="workflow-topline">
         <div>
-          <Text className="workflow-kicker">Mission Command</Text>
+          <span className="workflow-kicker">Mission Command</span>
           <div className="workflow-title">{task.drone?.message || task.message || '等待无人机任务状态'}</div>
           <div className="workflow-subtitle">
             请求 {task.request_id.slice(0, 12)} · 最近更新 {formatTimestamp(task.updated_at)} · 当前阶段 {DRONE_STAGE_LABELS[currentStatus] || currentStatus || '-'}
           </div>
         </div>
-
         <div className="workflow-badge-group">
           <Tag color={statusTagColor(task.status)}>{task.status}</Tag>
           <Tag color="cyan">{backend.label}</Tag>
-          <Tag color={data.source === 'event_bus' ? 'geekblue' : 'gold'}>{data.source === 'event_bus' ? '实时事件' : '仿真回退'}</Tag>
+          <Tag color={data.source === 'event_bus' ? 'blue' : 'amber'}>{data.source === 'event_bus' ? '实时事件' : '仿真回退'}</Tag>
         </div>
       </div>
+
+      {failureReason && (
+        <Alert
+          type="error"
+          message="业务失败原因"
+          description={
+            <div className="workflow-failure-detail">
+              <strong>{failureReason}</strong>
+              <span>任务已停在 {DRONE_STAGE_LABELS[String(task.current_stage ?? '').toLowerCase()] || task.current_stage || '当前'} 阶段，请调整业务条件后重新发起任务。</span>
+            </div>
+          }
+        />
+      )}
+
+      {isPendingConfirmation && (
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+          <Button
+            variant="primary"
+            size="lg"
+            loading={confirming}
+            onClick={handleConfirmTakeoff}
+          >
+            确认起飞
+          </Button>
+        </div>
+      )}
 
       <div className="workflow-stage-grid">
         {sequence.map((status) => {
@@ -240,22 +245,23 @@ export default function WorkflowPanel({ data, loading = false, error = null }: W
       </div>
 
       <div className="workflow-log-header">
-        <Text className="panel-label">Recent Events</Text>
+        <span className="label-uppercase">Recent Events</span>
       </div>
       <div className="workflow-log-box">
         {task.recent_events.length === 0 ? (
           <div className="workflow-log-empty">暂无事件</div>
         ) : (
           task.recent_events.slice().reverse().map((event, index) => (
-            <div key={`${event.timestamp}-${event.stage}-${index}`} className="workflow-log-line">
+            <div key={`${event.timestamp}-${event.stage}-${index}`} className={`workflow-log-line ${statusClassName(event.status)}`}>
               <span className="workflow-log-time">{formatTimestamp(event.timestamp)}</span>
               <span className="workflow-log-stage">{event.stage}</span>
               <span className="workflow-log-status">{event.status}</span>
-              <span className="workflow-log-message">{event.message}</span>
+              <span className="workflow-log-message">{eventMessageWithReason(event)}</span>
             </div>
           ))
         )}
       </div>
+      {toast.holder}
     </div>
   )
 }

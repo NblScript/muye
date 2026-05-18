@@ -163,6 +163,14 @@ class TelemetryService:
 
         latitude = _to_float(position.get("latitude"))
         longitude = _to_float(position.get("longitude"))
+        local_north = _to_float(position.get("local_north_m"))
+        local_east = _to_float(position.get("local_east_m"))
+        if (latitude is None or longitude is None) and local_north is not None and local_east is not None:
+            # Frontend schema is GPS-shaped, but PX4 execution is local NED-only.
+            # Use a tiny synthetic coordinate frame so the UI can draw local motion
+            # without uploading or depending on real latitude/longitude waypoints.
+            latitude = local_north / 111_000
+            longitude = local_east / 111_000
         if latitude is None or longitude is None:
             return None
 
@@ -220,7 +228,6 @@ class TelemetryService:
             "returning": DroneStatusEnum.RETURNING,
             "rtl": DroneStatusEnum.RETURNING,
             "completed": DroneStatusEnum.COMPLETED,
-            "simulated": DroneStatusEnum.COMPLETED,
         }
         return status_map.get(str(status).strip().lower(), DroneStatusEnum.ERROR)
 

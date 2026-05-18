@@ -13,18 +13,18 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# 启动主处理流程（内嵌 YOLO API + Virtual Drone API）
+# 启动主处理流程（内嵌 YOLO API + PX4 工作流）
 PYTHONPATH="$ROOT_DIR" python -m app.main \
-    --with-demo-stack \
+    --with-yolo-api \
+    --drone-backend px4 \
     --no-capture-on-startup \
     &
 MAIN_PID=$!
 
 # 等待内嵌服务就绪
-echo "等待内嵌 YOLO API 和 Virtual Drone API 就绪..."
+echo "等待内嵌 YOLO API 就绪..."
 for i in $(seq 1 60); do
-    if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')" 2>/dev/null && \
-       python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9010/health')" 2>/dev/null; then
+    if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')" 2>/dev/null; then
         echo "内嵌服务已就绪"
         break
     fi

@@ -1,4 +1,5 @@
-import { Tag } from 'antd'
+import { Tag } from '../../ui'
+import type { TagColor } from '../../ui/Tag'
 
 import type { DroneState } from '../../../types/simMap'
 
@@ -12,14 +13,14 @@ const STATUS_LABELS: Record<DroneState['status'], string> = {
   error: '异常',
 }
 
-const STATUS_COLORS: Record<DroneState['status'], string> = {
+const STATUS_COLORS: Record<DroneState['status'], TagColor> = {
   connecting: 'blue',
   ready: 'cyan',
-  takeoff: 'processing',
+  takeoff: 'amber',
   spraying: 'green',
   returning: 'orange',
-  completed: 'success',
-  error: 'error',
+  completed: 'green',
+  error: 'red',
 }
 
 type DroneStatusCardProps = {

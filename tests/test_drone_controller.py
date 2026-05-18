@@ -28,7 +28,7 @@ def build_drone_config() -> dict:
                 [113.6241, 34.7479],
             ]
         },
-        "execution": {"simulate_only": True, "backend": "simulated"},
+        "execution": {"simulate_only": False, "backend": "px4"},
         "px4": {
             "system_address": "udpin://0.0.0.0:14540",
             "connect_timeout_seconds": 5,
@@ -60,8 +60,6 @@ def test_publish_drone_update_adds_px4_position_to_telemetry_service(monkeypatch
 
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
     )
 
     try:
@@ -95,12 +93,11 @@ def test_publish_drone_update_adds_px4_position_to_telemetry_service(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_drone_controller_persists_simulated_status_updates_to_sqlite(tmp_path) -> None:
+async def test_drone_controller_persists_px4_status_updates_to_sqlite(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
+    drone_config = build_drone_config()
     controller = DroneController(
-        drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
+        drone_config=drone_config,
         sqlite_store=store,
     )
     decision = {
@@ -119,77 +116,6 @@ async def test_drone_controller_persists_simulated_status_updates_to_sqlite(tmp_
     }
     field_context = {
         "field_id": "req-field-1",
-        "name": "测试地块",
-        "area_mu": 66.0,
-        "geofence": build_drone_config()["field"]["geofence"],
-        "crop_cycle": {"crop_name": "冬小麦"},
-    }
-    execution_plan = controller.plan_spray_mission(
-        field_context=field_context,
-        current_weather=weather,
-    )
-
-    try:
-        result = await controller.execute_spray_mission(
-            decision=decision,
-            current_weather=weather,
-            request_id="req-drone-sqlite-1",
-            execution_plan=execution_plan,
-            field_context=field_context,
-        )
-        updates = store.fetch_all(
-            """
-            SELECT task_id, status, message, progress
-            FROM drone_mission_updates
-            WHERE request_id = ?
-            ORDER BY id ASC
-            """,
-            ("req-drone-sqlite-1",),
-        )
-        task_view = store.fetch_task_views(search="req-drone-sqlite-1", limit=5)[0]
-    finally:
-        await controller.close()
-        store.close()
-
-    assert result["status"] == "simulated"
-    assert result["final_status"] == "completed"
-    assert result["last_known_status"] == "completed"
-    assert len(updates) == 4
-    assert [item["status"] for item in updates] == ["queued", "takeoff", "spraying", "completed"]
-    assert updates[-1]["progress"] == 100
-    assert task_view["drone"]["status"] == "completed"
-    assert task_view["drone"]["task_id"] == result["task_id"]
-    assert task_view["drone"]["message"] == "虚拟无人机任务完成"
-
-
-@pytest.mark.asyncio
-async def test_drone_controller_persists_px4_status_updates_to_sqlite(tmp_path) -> None:
-    store = SqliteStore(tmp_path / "muye.db")
-    drone_config = build_drone_config()
-    drone_config["execution"]["simulate_only"] = False
-    drone_config["execution"]["backend"] = "px4"
-    controller = DroneController(
-        drone_config=drone_config,
-        api_url="",
-        api_key="",
-        sqlite_store=store,
-    )
-    decision = {
-        "用药": {
-            "农药名称": "吡虫啉",
-            "浓度": "1000倍",
-            "配比": "1:1000",
-            "总量": "1L",
-            "安全提示": ["佩戴防护装备"],
-        },
-    }
-    weather = {
-        "temperature": 26,
-        "humidity": 61,
-        "wind_speed": 3.1,
-    }
-    field_context = {
-        "field_id": "req-field-px4-1",
         "name": "测试地块",
         "area_mu": 66.0,
         "geofence": build_drone_config()["field"]["geofence"],
@@ -350,6 +276,28 @@ def test_px4_simulator_build_mission_item_uses_waypoint_timing_controls() -> Non
     assert item.yaw_deg == 90.0
 
 
+def test_px4_simulator_replaces_far_route_with_sitl_demo_route() -> None:
+    drone_config = build_drone_config()
+    demo_route = [
+        [8.545183, 47.397562],
+        [8.546005, 47.397562],
+        [8.546005, 47.397598],
+    ]
+    drone_config["px4"]["demo_field"] = {"explicit_route": demo_route}
+    simulator = PX4Simulator(drone_config)
+
+    route = simulator._resolve_px4_route(  # type: ignore[attr-defined]
+        {
+            "飞行路径": [
+                [113.6241, 34.7467],
+                [113.6257, 34.7479],
+            ],
+        }
+    )
+
+    assert route == demo_route
+
+
 def test_px4_simulator_builds_in_place_turn_pivot_items() -> None:
     simulator = PX4Simulator(build_drone_config())
 
@@ -406,8 +354,6 @@ def test_build_spray_record_returns_none_when_field_id_missing(tmp_path) -> None
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 
@@ -428,8 +374,6 @@ def test_build_spray_record_builds_valid_record(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 
@@ -479,8 +423,6 @@ def test_build_spray_record_parses_dosage_with_ml_unit(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 
@@ -502,19 +444,16 @@ def test_build_spray_record_normalizes_result_status(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 
-    # Test simulated status maps to completed
     record = controller.build_spray_record(
         request_id="test-req-4",
         field_context={"field_id": "field-789"},
         decision={},
         weather={},
         execution_plan={},
-        mission_result={"status": "simulated"},
+        mission_result={"status": "completed"},
     )
     store.close()
     assert record is not None
@@ -525,14 +464,11 @@ def test_normalize_spray_result_status_various_statuses(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 
     test_cases = [
         ({"status": "completed"}, "completed"),
-        ({"status": "simulated"}, "completed"),
         ({"status": "failed"}, "failed"),
         ({"status": "error"}, "failed"),
         ({"status": "cancelled"}, "cancelled"),
@@ -555,8 +491,6 @@ def test_extract_numeric_value(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 
@@ -575,8 +509,6 @@ def test_parse_total_dosage_liters(tmp_path) -> None:
     store = SqliteStore(tmp_path / "muye.db")
     controller = DroneController(
         drone_config=build_drone_config(),
-        api_url="",
-        api_key="",
         sqlite_store=store,
     )
 

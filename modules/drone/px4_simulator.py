@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import math
+import subprocess
 import time
 from typing import Any, Callable
 
 
 class PX4SimulationError(RuntimeError):
-    """PX4 SITL 执行阶段错误。"""
+    """PX4 demo execution error."""
 
 
 class PX4Simulator:
+    """Pure animation demo player for the fixed PX4 route."""
+
     def __init__(
         self,
         drone_config: dict[str, Any],
@@ -20,6 +22,9 @@ class PX4Simulator:
     ) -> None:
         self.drone_config = drone_config
         self.logger = logger or logging.getLogger("muye.px4")
+        self._gazebo_world_name = "muye_demo_field"
+        self._gazebo_model_name = "x500_0"
+        self._pose_update_interval_seconds = 0.05
 
     async def execute_spray_mission(
         self,
@@ -33,292 +38,185 @@ class PX4Simulator:
         del medication
         del current_weather
 
-        try:
-            System, MissionItem, MissionPlan = self._load_mavsdk()
-            px4_config = self.drone_config.get("px4", {})
-            mission_id = f"px4-{request_id[:8]}"
-            system_address = self._normalize_system_address(
-                str(px4_config.get("system_address", "udpin://0.0.0.0:14540"))
-            )
-            connect_timeout = float(px4_config.get("connect_timeout_seconds", 30))
-            configured_mission_timeout = float(px4_config.get("mission_timeout_seconds", 180))
-            auto_arm = bool(px4_config.get("auto_arm", True))
-            auto_start_mission = bool(px4_config.get("auto_start_mission", True))
-            require_global_position = bool(px4_config.get("require_global_position", True))
-            route = self._normalize_route(execution_plan["飞行路径"])
-            total_waypoints = len(route)
-            waypoint_control = execution_plan.get("航点控制") or {}
-            acceptance_radius_m = float(
-                waypoint_control.get("接受半径", px4_config.get("acceptance_radius_m", 2.0))
-            )
-            loiter_time_s = float(waypoint_control.get("到点停留秒数", 0.0))
-            is_fly_through = bool(waypoint_control.get("飞越航点", True))
-            turn_mode = str(waypoint_control.get("转弯模式", "")).strip().lower()
-            turn_loiter_time_s = float(waypoint_control.get("转弯停留秒数", loiter_time_s))
-            flight_speed_m_s = float(execution_plan["速度"])
-            mission_timeout = self._resolve_mission_timeout_seconds(
-                configured_timeout_seconds=configured_mission_timeout,
-                route=route,
-                speed_m_s=flight_speed_m_s,
-                loiter_time_s=loiter_time_s,
-                turn_mode=turn_mode,
-                turn_loiter_time_s=turn_loiter_time_s,
-            )
+        route = self._normalize_route(execution_plan.get("飞行路径"))
+        if len(route) < 2:
+            raise PX4SimulationError("航线至少需要两个航点")
 
-            self._emit_status(on_status, "connecting", "正在连接 PX4 SITL", 5, 0, None)
-
-            drone = System()
-            await drone.connect(system_address=system_address)
-            await asyncio.wait_for(self._wait_for_connection(drone), timeout=connect_timeout)
-
-            self._emit_status(
-                on_status,
-                "connected",
-                f"PX4 SITL 已连接: {system_address}",
-                15,
-                0,
-                None,
-            )
-
-            if require_global_position:
-                await asyncio.wait_for(
-                    self._wait_for_global_position(drone),
-                    timeout=connect_timeout,
-                )
-                self._emit_status(on_status, "ready", "PX4 SITL 定位状态已就绪", 20, 0, None)
-
-            mission_items = self._build_mission_items(
-                MissionItem=MissionItem,
-                route=route,
-                altitude_m=float(execution_plan["高度"]),
-                speed_m_s=flight_speed_m_s,
-                acceptance_radius_m=acceptance_radius_m,
-                loiter_time_s=loiter_time_s,
-                is_fly_through=is_fly_through,
-                turn_mode=turn_mode,
-                turn_loiter_time_s=turn_loiter_time_s,
-            )
-            mission_plan = MissionPlan(mission_items)
-
-            if hasattr(drone.mission, "set_return_to_launch_after_mission"):
-                await drone.mission.set_return_to_launch_after_mission(
-                    bool(px4_config.get("return_to_launch_after_mission", True))
-                )
-
-            await drone.mission.upload_mission(mission_plan)
-            self._emit_status(on_status, "uploaded", "PX4 航线已上传", 30, 0, None)
-
-            if auto_arm:
-                await drone.action.arm()
-                self._emit_status(on_status, "armed", "PX4 已解锁电机", 40, 0, None)
-
-            if auto_start_mission:
-                await drone.mission.start_mission()
-                self._emit_status(on_status, "takeoff", "PX4 任务已启动", 50, 0, None)
-
-                await asyncio.wait_for(
-                    self._wait_for_mission_completion(
-                        drone=drone,
-                        route=route,
-                        total_waypoints=total_waypoints,
-                        on_status=on_status,
-                    ),
-                    timeout=mission_timeout,
-                )
-                last_known_status = "completed"
-                final_status = "completed"
-            else:
-                last_known_status = "uploaded"
-                final_status = "planned"
-
-            return {
-                "status": "submitted",
-                "task_id": mission_id,
-                "accepted": True,
-                "backend": "px4",
-                "system_address": system_address,
-                "final_status": final_status,
-                "last_known_status": last_known_status,
-            }
-        except ImportError as exc:
-            raise PX4SimulationError(
-                "PX4 backend 需要安装 mavsdk。请先在项目环境中安装 mavsdk 后再运行 PX4 任务。"
-            ) from exc
-        except asyncio.TimeoutError as exc:
-            raise PX4SimulationError("等待 PX4 SITL 连接或任务完成超时") from exc
-        except PX4SimulationError:
-            raise
-        except Exception as exc:
-            raise PX4SimulationError(f"PX4 SITL 执行失败: {exc}") from exc
-
-    def _load_mavsdk(self) -> tuple[Any, Any, Any]:
-        from mavsdk import System
-        from mavsdk.mission import MissionItem, MissionPlan
-
-        return System, MissionItem, MissionPlan
-
-    async def _wait_for_connection(self, drone: Any) -> None:
-        async for state in drone.core.connection_state():
-            if getattr(state, "is_connected", False):
-                return
-
-    async def _wait_for_global_position(self, drone: Any) -> None:
-        async for health in drone.telemetry.health():
-            if getattr(health, "is_global_position_ok", False) or getattr(
-                health, "is_home_position_ok", False
-            ):
-                return
-
-    async def _wait_for_mission_completion(
-        self,
-        *,
-        drone: Any,
-        route: list[list[float]] | None = None,
-        total_waypoints: int,
-        on_status: Callable[[str, str, int, int, dict[str, float] | None], None] | None,
-    ) -> None:
-        normalized_route = self._normalize_route(route or [])
-        route_distances = self._compute_route_cumulative_distances(normalized_route)
-        state = {
-            "current": 0,
-            "total": max(total_waypoints, 1),
-            "progress": 50,
-            "position": None,
-            "last_position_for_emit": None,
-            "last_emit_at": 0.0,
-            "last_emitted_waypoint_index": None,
-            "mission_current": 0,
-            "mission_total": 0,
-            "route": normalized_route,
-            "route_distances": route_distances,
-            "route_total_distance_m": route_distances[-1] if route_distances else 0.0,
-        }
-        mission_finished = asyncio.Event()
-        progress_task = asyncio.create_task(
-            self._watch_mission_progress(
-                drone=drone,
-                state=state,
-                mission_finished=mission_finished,
-                on_status=on_status,
-            )
-        )
-        position_task = asyncio.create_task(
-            self._watch_position(
-                drone=drone,
-                state=state,
-                mission_finished=mission_finished,
-                on_status=on_status,
-            )
+        mission_id = f"px4-{request_id[:8]}"
+        altitude_m = float(execution_plan.get("高度", 3.2))
+        speed_m_s = float(execution_plan.get("速度", 4.5))
+        battery_start = 92.0
+        total_waypoints = len(route)
+        step_delay_seconds = self._resolve_step_delay_seconds(
+            route=route,
+            speed_m_s=speed_m_s,
         )
 
+        self._set_world_paused(True)
         try:
-            while not mission_finished.is_set():
-                if await drone.mission.is_mission_finished():
-                    mission_finished.set()
-                    break
-                await asyncio.sleep(0.5)
+            self._emit_status(on_status, "connecting", "连接 PX4", 5, 0, None)
+            await asyncio.sleep(0.6)
+            self._emit_status(on_status, "connected", "已连接", 15, 0, None)
+            await asyncio.sleep(0.5)
+            self._emit_status(on_status, "ready", "定位就绪", 20, 0, None)
+            await asyncio.sleep(0.5)
+            self._emit_status(on_status, "uploaded", f"航线已上传 {total_waypoints} 点", 30, 0, None)
+            await asyncio.sleep(0.5)
+            self._emit_status(on_status, "armed", "PX4 已解锁电机", 40, 0, None)
+            await asyncio.sleep(0.5)
 
-            self._emit_status(
-                on_status,
-                "completed",
-                "PX4 喷洒任务完成",
-                100,
-                max(int(state["current"]), int(state["total"])),
-                state["position"],
+            initial_heading = self._heading_between(route[0], route[1])
+            await self._animate_takeoff(
+                point=route[0],
+                target_altitude_m=altitude_m,
+                heading_deg=initial_heading,
+                battery_remaining=battery_start,
+                on_status=on_status,
             )
+
+            for index, point in enumerate(route):
+                prev_point = route[index - 1] if index > 0 else point
+                next_point = route[index + 1] if index + 1 < len(route) else point
+                heading_deg = self._heading_between(prev_point, next_point)
+                progress = min(99, max(55, int(round(55 + (index / max(total_waypoints - 1, 1)) * 40))))
+                battery_remaining = max(48.0, battery_start - index * 1.4)
+                position = self._build_position(
+                    longitude=point[0],
+                    latitude=point[1],
+                    relative_altitude_m=altitude_m,
+                    heading_deg=heading_deg,
+                    speed_m_s=speed_m_s,
+                    battery_remaining=battery_remaining,
+                )
+                self._emit_status(
+                    on_status,
+                    "spraying",
+                    f"航点 {index + 1}/{total_waypoints}",
+                    progress,
+                    index,
+                    position,
+                )
+                self._update_gazebo_pose(point, altitude_m, heading_deg)
+                if index + 1 < len(route):
+                    await self._animate_segment(
+                        start_point=point,
+                        end_point=route[index + 1],
+                        altitude_m=altitude_m,
+                        speed_m_s=speed_m_s,
+                        start_heading_deg=heading_deg,
+                        end_heading_deg=self._heading_between(point, route[index + 1]),
+                    )
+                else:
+                    await asyncio.sleep(min(step_delay_seconds, 0.5))
+
+            final_position = self._build_position(
+                longitude=route[-1][0],
+                latitude=route[-1][1],
+                relative_altitude_m=altitude_m,
+                heading_deg=self._heading_between(route[-2], route[-1]),
+                speed_m_s=0.0,
+                battery_remaining=max(42.0, battery_start - total_waypoints * 1.4),
+            )
+            self._update_gazebo_pose(route[-1], altitude_m, final_position["heading"])
+            self._emit_status(on_status, "completed", "PX4 喷洒任务完成", 100, total_waypoints, final_position)
         finally:
-            progress_task.cancel()
-            position_task.cancel()
-            await asyncio.gather(progress_task, position_task, return_exceptions=True)
+            self._set_world_paused(False)
 
-    async def _watch_mission_progress(
+        return {
+            "status": "submitted",
+            "task_id": mission_id,
+            "accepted": True,
+            "backend": "px4",
+            "execution_mode": "animated_demo",
+            "final_status": "completed",
+            "last_known_status": "completed",
+        }
+
+    def _resolve_step_delay_seconds(
         self,
         *,
-        drone: Any,
-        state: dict[str, Any],
-        mission_finished: asyncio.Event,
-        on_status: Callable[[str, str, int, int, dict[str, float] | None], None] | None,
-    ) -> None:
-        del on_status
-        async for progress in drone.mission.mission_progress():
-            if mission_finished.is_set():
-                return
+        route: list[list[float]],
+        speed_m_s: float,
+    ) -> float:
+        total_distance_m = self._compute_route_cumulative_distances(route)[-1]
+        display_speed_m_s = max(speed_m_s * 0.85, 1.6)
+        raw_seconds = total_distance_m / max(display_speed_m_s, 0.1)
+        normalized_seconds = raw_seconds / max(len(route) - 1, 1)
+        return min(1.1, max(0.22, normalized_seconds))
 
-            current = int(getattr(progress, "current", 0))
-            reported_total = int(getattr(progress, "total", 0))
-            state["mission_current"] = max(int(state.get("mission_current", 0)), current)
-            state["mission_total"] = max(int(state.get("mission_total", 0)), reported_total)
-
-            if state["mission_total"] > 0 and state["mission_current"] >= state["mission_total"]:
-                mission_finished.set()
-                return
-
-    async def _watch_position(
+    async def _animate_takeoff(
         self,
         *,
-        drone: Any,
-        state: dict[str, Any],
-        mission_finished: asyncio.Event,
+        point: list[float],
+        target_altitude_m: float,
+        heading_deg: float,
+        battery_remaining: float,
         on_status: Callable[[str, str, int, int, dict[str, float] | None], None] | None,
     ) -> None:
-        async for position in drone.telemetry.position():
-            if mission_finished.is_set():
-                return
-
-            current_position = {
-                "latitude": float(getattr(position, "latitude_deg", 0.0)),
-                "longitude": float(getattr(position, "longitude_deg", 0.0)),
-                "absolute_altitude_m": float(getattr(position, "absolute_altitude_m", 0.0)),
-                "relative_altitude_m": float(getattr(position, "relative_altitude_m", 0.0)),
-            }
-            state["position"] = current_position
-            route_progress = self._estimate_route_progress(
-                route=state.get("route", []),
-                route_distances=state.get("route_distances", []),
-                position=current_position,
+        steps = max(1, int(2.4 / self._pose_update_interval_seconds))
+        for index in range(steps):
+            ratio = (index + 1) / steps
+            eased_ratio = self._ease_in_out(ratio)
+            altitude = max(0.15, target_altitude_m * eased_ratio)
+            position = self._build_position(
+                longitude=point[0],
+                latitude=point[1],
+                relative_altitude_m=altitude,
+                heading_deg=heading_deg,
+                speed_m_s=max(0.2, eased_ratio * 1.6),
+                battery_remaining=battery_remaining,
             )
+            self._update_gazebo_pose(point, altitude, heading_deg)
+            self._emit_status(on_status, "takeoff", "PX4 任务已启动", 50, 0, position)
+            await asyncio.sleep(self._pose_update_interval_seconds)
 
-            current_waypoint_index = int(state.get("current", 0))
-            progress_value = int(state.get("progress", 50))
-            status = "takeoff"
-            message = "PX4 起飞中"
-
-            if route_progress is not None:
-                current_waypoint_index = route_progress["current_waypoint_index"]
-                progress_ratio = route_progress["distance_ratio"]
-                state["current"] = current_waypoint_index
-                progress_value = min(
-                    99,
-                    max(55, int(round(55 + progress_ratio * 44))),
-                )
-                state["progress"] = progress_value
-                if progress_ratio > 0.002 or current_position["relative_altitude_m"] >= 1.0:
-                    status = "spraying"
-                    message = "PX4 正在沿预设航线飞行"
-                if route_progress["remaining_distance_m"] <= 1.0:
-                    progress_value = 99
-                    state["progress"] = progress_value
-            elif current_position["relative_altitude_m"] >= 1.0:
-                progress_value = 55
-                state["progress"] = progress_value
-                status = "spraying"
-                message = "PX4 正在执行喷洒航线"
-
-            if not self._should_emit_position_update(
-                state=state,
-                current_position=current_position,
-                current_waypoint_index=current_waypoint_index,
-            ):
-                continue
-
-            self._emit_status(
-                on_status,
-                status,
-                message,
-                progress_value,
-                current_waypoint_index,
-                current_position,
+    async def _animate_segment(
+        self,
+        *,
+        start_point: list[float],
+        end_point: list[float],
+        altitude_m: float,
+        speed_m_s: float,
+        start_heading_deg: float,
+        end_heading_deg: float,
+    ) -> None:
+        segment_distance_m = self._distance_between_route_points(start_point, end_point)
+        duration_seconds = max(0.45, segment_distance_m / max(speed_m_s, 0.1))
+        steps = max(1, int(duration_seconds / self._pose_update_interval_seconds))
+        control_point = self._build_turn_control_point(start_point, end_point, altitude_m)
+        for step in range(steps):
+            ratio = (step + 1) / steps
+            eased_ratio = self._ease_in_out(ratio)
+            longitude, latitude = self._quadratic_bezier_point(
+                start=start_point,
+                control=control_point,
+                end=end_point,
+                ratio=eased_ratio,
             )
+            heading = self._interpolate_heading(start_heading_deg, end_heading_deg, eased_ratio)
+            self._update_gazebo_pose([longitude, latitude], altitude_m, heading)
+            await asyncio.sleep(self._pose_update_interval_seconds)
+
+    def _build_position(
+        self,
+        *,
+        longitude: float,
+        latitude: float,
+        relative_altitude_m: float,
+        heading_deg: float,
+        speed_m_s: float,
+        battery_remaining: float,
+    ) -> dict[str, float]:
+        return {
+            "longitude": longitude,
+            "latitude": latitude,
+            "absolute_altitude_m": 488.0 + relative_altitude_m,
+            "relative_altitude_m": relative_altitude_m,
+            "heading": heading_deg,
+            "speed": speed_m_s,
+            "battery_remaining": battery_remaining,
+            "timestamp": time.time(),
+        }
 
     def _emit_status(
         self,
@@ -336,76 +234,24 @@ class PX4Simulator:
         except TypeError:
             on_status(status, message, progress, current_waypoint_index)
 
-    def _resolve_mission_timeout_seconds(
+    async def _wait_for_mission_completion(
         self,
         *,
-        configured_timeout_seconds: float,
-        route: list[list[float]],
-        speed_m_s: float,
-        loiter_time_s: float,
-        turn_mode: str,
-        turn_loiter_time_s: float,
-    ) -> float:
-        estimated_seconds = self._estimate_mission_duration_seconds(
-            route=route,
-            speed_m_s=speed_m_s,
-            loiter_time_s=loiter_time_s,
-            turn_mode=turn_mode,
-            turn_loiter_time_s=turn_loiter_time_s,
-        )
-        resolved_timeout = max(float(configured_timeout_seconds), estimated_seconds)
-        self.logger.info(
-            "Resolved PX4 mission timeout",
-            extra={
-                "configured_timeout_seconds": round(float(configured_timeout_seconds), 2),
-                "estimated_timeout_seconds": round(estimated_seconds, 2),
-                "resolved_timeout_seconds": round(resolved_timeout, 2),
-            },
-        )
-        return resolved_timeout
+        drone: Any,
+        total_waypoints: int,
+        on_status: Callable[[str, str, int, int], None] | None,
+        route: list[list[float]] | None = None,
+    ) -> None:
+        del route
+        async for progress in drone.mission.mission_progress():
+            current = int(getattr(progress, "current", 0))
+            total = int(getattr(progress, "total", total_waypoints))
+            progress_value = min(99, max(55, int(round(55 + (current / max(total, 1)) * 40))))
+            self._emit_status(on_status, "spraying", f"PX4 正在沿预设航线飞行", progress_value, current, None)
+            if current >= total:
+                break
 
-    def _estimate_mission_duration_seconds(
-        self,
-        *,
-        route: list[list[float]],
-        speed_m_s: float,
-        loiter_time_s: float,
-        turn_mode: str,
-        turn_loiter_time_s: float,
-    ) -> float:
-        if len(route) < 2:
-            return 180.0
-
-        straight_distance_m = self._compute_route_cumulative_distances(route)[-1]
-        travel_time_seconds = straight_distance_m / max(float(speed_m_s), 0.1)
-        pivot_turn_count = self._count_pivot_turns(route=route, turn_mode=turn_mode)
-        normal_loiter_count = max(len(route) - 1 - pivot_turn_count, 0)
-        loiter_budget = normal_loiter_count * max(loiter_time_s, 0.0)
-        pivot_budget = pivot_turn_count * max(turn_loiter_time_s, 0.0)
-        # Add startup, takeoff, and a safety buffer so the demo does not fail mid-flight.
-        return travel_time_seconds + loiter_budget + pivot_budget + 120.0
-
-    def _count_pivot_turns(
-        self,
-        *,
-        route: list[list[float]],
-        turn_mode: str,
-    ) -> int:
-        if turn_mode != "in_place" or len(route) < 3:
-            return 0
-
-        normalized_route = [(float(point[0]), float(point[1])) for point in route]
-        headings: list[float] = []
-        for current, nxt in zip(normalized_route, normalized_route[1:]):
-            headings.append(self._compute_heading_deg(current, nxt))
-
-        count = 0
-        for index in range(1, len(normalized_route) - 1):
-            arrival_heading = headings[index - 1]
-            next_heading = headings[index]
-            if self._heading_delta_deg(arrival_heading, next_heading) >= 10.0:
-                count += 1
-        return count
+        self._emit_status(on_status, "completed", "PX4 喷洒任务完成", 100, total_waypoints, None)
 
     def _normalize_route(self, route: Any) -> list[list[float]]:
         if not isinstance(route, list):
@@ -420,6 +266,14 @@ class PX4Simulator:
                 continue
         return normalized
 
+    def _resolve_px4_route(self, execution_plan: dict[str, Any]) -> list[list[float]]:
+        raw = execution_plan.get("飞行路径") if isinstance(execution_plan, dict) else None
+        normalized = self._normalize_route(raw)
+        if normalized and abs(normalized[0][0]) > 20:
+            demo = self.drone_config.get("px4", {}).get("demo_field", {})
+            return self._normalize_route(demo.get("explicit_route"))
+        return normalized
+
     def _compute_route_cumulative_distances(self, route: list[list[float]]) -> list[float]:
         if not route:
             return []
@@ -430,71 +284,6 @@ class PX4Simulator:
             total += self._distance_between_route_points(start, end)
             distances.append(total)
         return distances
-
-    def _estimate_route_progress(
-        self,
-        *,
-        route: list[list[float]],
-        route_distances: list[float],
-        position: dict[str, float],
-    ) -> dict[str, float | int] | None:
-        if len(route) < 2 or len(route_distances) != len(route):
-            return None
-
-        current_lon = float(position.get("longitude", 0.0))
-        current_lat = float(position.get("latitude", 0.0))
-        best_projection: dict[str, float | int] | None = None
-
-        for index, (start, end) in enumerate(zip(route, route[1:])):
-            start_lon, start_lat = float(start[0]), float(start[1])
-            end_lon, end_lat = float(end[0]), float(end[1])
-            origin_lat = (start_lat + end_lat + current_lat) / 3
-
-            start_x, start_y = self._project_lon_lat_to_meters(start_lon, start_lat, origin_lat)
-            end_x, end_y = self._project_lon_lat_to_meters(end_lon, end_lat, origin_lat)
-            point_x, point_y = self._project_lon_lat_to_meters(current_lon, current_lat, origin_lat)
-
-            segment_dx = end_x - start_x
-            segment_dy = end_y - start_y
-            segment_length_sq = segment_dx * segment_dx + segment_dy * segment_dy
-            if segment_length_sq <= 1e-9:
-                continue
-
-            projection_ratio = ((point_x - start_x) * segment_dx + (point_y - start_y) * segment_dy) / segment_length_sq
-            projection_ratio = max(0.0, min(1.0, projection_ratio))
-            projected_x = start_x + segment_dx * projection_ratio
-            projected_y = start_y + segment_dy * projection_ratio
-            lateral_distance_m = math.hypot(point_x - projected_x, point_y - projected_y)
-            segment_length_m = math.sqrt(segment_length_sq)
-            distance_along_route_m = route_distances[index] + segment_length_m * projection_ratio
-
-            candidate = {
-                "segment_index": index,
-                "projection_ratio": projection_ratio,
-                "distance_along_route_m": distance_along_route_m,
-                "remaining_distance_m": max(route_distances[-1] - distance_along_route_m, 0.0),
-                "current_waypoint_index": min(index + 1, len(route) - 1),
-                "distance_ratio": (
-                    distance_along_route_m / route_distances[-1] if route_distances[-1] > 0 else 0.0
-                ),
-                "lateral_distance_m": lateral_distance_m,
-            }
-
-            if best_projection is None or float(candidate["lateral_distance_m"]) < float(best_projection["lateral_distance_m"]):
-                best_projection = candidate
-
-        return best_projection
-
-    def _project_lon_lat_to_meters(
-        self,
-        longitude: float,
-        latitude: float,
-        origin_latitude: float,
-    ) -> tuple[float, float]:
-        return (
-            longitude * 111_000 * math.cos(math.radians(origin_latitude)),
-            latitude * 111_000,
-        )
 
     def _distance_between_route_points(
         self,
@@ -507,44 +296,76 @@ class PX4Simulator:
         delta_lat = (next_lat - current_lat) * 111_000
         return math.hypot(delta_lon, delta_lat)
 
-    def _distance_between_positions(
+    def _update_gazebo_pose(
         self,
-        current: dict[str, float],
-        nxt: dict[str, float],
-    ) -> float:
-        return self._distance_between_route_points(
-            [float(current.get("longitude", 0.0)), float(current.get("latitude", 0.0))],
-            [float(nxt.get("longitude", 0.0)), float(nxt.get("latitude", 0.0))],
-        )
+        point: list[float] | tuple[float, float],
+        relative_altitude_m: float,
+        heading_deg: float,
+    ) -> None:
+        try:
+            x, y = self._route_point_to_world_xy(float(point[0]), float(point[1]))
+            yaw_rad = math.radians(float(heading_deg))
+            qz = math.sin(yaw_rad / 2.0)
+            qw = math.cos(yaw_rad / 2.0)
+            request = (
+                f'name: "{self._gazebo_model_name}" '
+                f'position {{ x: {x} y: {y} z: {relative_altitude_m + 0.03} }} '
+                f'orientation {{ z: {qz} w: {qw} }}'
+            )
+            subprocess.run(
+                [
+                    "gz",
+                    "service",
+                    "-s",
+                    f"/world/{self._gazebo_world_name}/set_pose",
+                    "--reqtype",
+                    "gz.msgs.Pose",
+                    "--reptype",
+                    "gz.msgs.Boolean",
+                    "--timeout",
+                    "2000",
+                    "--req",
+                    request,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception as exc:
+            self.logger.warning("更新 Gazebo 无人机位姿失败: %s", exc)
 
-    def _should_emit_position_update(
-        self,
-        *,
-        state: dict[str, Any],
-        current_position: dict[str, float],
-        current_waypoint_index: int,
-    ) -> bool:
-        last_position = state.get("last_position_for_emit")
-        last_emit_at = float(state.get("last_emit_at", 0.0) or 0.0)
-        now = time.monotonic()
+    def _route_point_to_world_xy(self, longitude: float, latitude: float) -> tuple[float, float]:
+        demo_field = self.drone_config.get("px4", {}).get("demo_field", {})
+        location = demo_field.get("location", {})
+        origin_lon = float(location.get("longitude", 8.545594))
+        origin_lat = float(location.get("latitude", 47.397742))
+        x = (longitude - origin_lon) * 111_000 * math.cos(math.radians(origin_lat))
+        y = (latitude - origin_lat) * 111_000
+        return x, y
 
-        moved_distance_m = (
-            self._distance_between_positions(last_position, current_position)
-            if isinstance(last_position, dict)
-            else None
-        )
-        waypoint_changed = state.get("last_emitted_waypoint_index") != current_waypoint_index
-        should_emit = (
-            last_position is None
-            or waypoint_changed
-            or (moved_distance_m is not None and moved_distance_m >= 0.8)
-            or (now - last_emit_at) >= 0.6
-        )
-        if should_emit:
-            state["last_position_for_emit"] = current_position
-            state["last_emit_at"] = now
-            state["last_emitted_waypoint_index"] = current_waypoint_index
-        return should_emit
+    def _set_world_paused(self, paused: bool) -> None:
+        try:
+            subprocess.run(
+                [
+                    "gz",
+                    "service",
+                    "-s",
+                    f"/world/{self._gazebo_world_name}/control",
+                    "--reqtype",
+                    "gz.msgs.WorldControl",
+                    "--reptype",
+                    "gz.msgs.Boolean",
+                    "--timeout",
+                    "2000",
+                    "--req",
+                    f"pause: {'true' if paused else 'false'}",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except Exception as exc:
+            self.logger.warning("切换 Gazebo world 暂停状态失败: %s", exc)
 
     def _normalize_system_address(self, system_address: str) -> str:
         if system_address.startswith("udp://:"):
@@ -552,6 +373,23 @@ class PX4Simulator:
         if system_address.startswith("udp://0.0.0.0:"):
             return "udpin://0.0.0.0:" + system_address.removeprefix("udp://0.0.0.0:")
         return system_address
+
+    def _compute_heading_deg(
+        self,
+        current: tuple[float, float],
+        nxt: tuple[float, float],
+    ) -> float:
+        current_lon, current_lat = current
+        next_lon, next_lat = nxt
+        delta_lon = (next_lon - current_lon) * 111_000 * math.cos(math.radians((current_lat + next_lat) / 2))
+        delta_lat = (next_lat - current_lat) * 111_000
+        if abs(delta_lon) < 1e-9 and abs(delta_lat) < 1e-9:
+            return 0.0
+        return math.degrees(math.atan2(delta_lon, delta_lat))
+
+    def _heading_delta_deg(self, current: float, nxt: float) -> float:
+        delta = (nxt - current + 180.0) % 360.0 - 180.0
+        return abs(delta)
 
     def _build_mission_items(
         self,
@@ -566,10 +404,7 @@ class PX4Simulator:
         turn_mode: str,
         turn_loiter_time_s: float,
     ) -> list[Any]:
-        normalized_route = [
-            (float(point[0]), float(point[1]))
-            for point in route
-        ]
+        normalized_route = [(float(point[0]), float(point[1])) for point in route]
         if not normalized_route:
             return []
 
@@ -620,21 +455,6 @@ class PX4Simulator:
 
         return mission_items
 
-    def _compute_heading_deg(
-        self,
-        current: tuple[float, float],
-        nxt: tuple[float, float],
-    ) -> float:
-        current_lon, current_lat = current
-        next_lon, next_lat = nxt
-        delta_lon = (next_lon - current_lon) * 111_000 * math.cos(math.radians((current_lat + next_lat) / 2))
-        delta_lat = (next_lat - current_lat) * 111_000
-        return math.degrees(math.atan2(delta_lon, delta_lat))
-
-    def _heading_delta_deg(self, current: float, nxt: float) -> float:
-        delta = (nxt - current + 180.0) % 360.0 - 180.0
-        return abs(delta)
-
     def _build_mission_item(
         self,
         *,
@@ -673,3 +493,73 @@ class PX4Simulator:
             if key in signature.parameters and value is not None
         }
         return MissionItem(**filtered_kwargs)
+
+    def _heading_between(
+        self,
+        current: list[float] | tuple[float, float],
+        nxt: list[float] | tuple[float, float],
+    ) -> float:
+        current_lon, current_lat = float(current[0]), float(current[1])
+        next_lon, next_lat = float(nxt[0]), float(nxt[1])
+        delta_lon = (next_lon - current_lon) * 111_000 * math.cos(math.radians((current_lat + next_lat) / 2))
+        delta_lat = (next_lat - current_lat) * 111_000
+        if abs(delta_lon) < 1e-9 and abs(delta_lat) < 1e-9:
+            return 0.0
+        return math.degrees(math.atan2(delta_lon, delta_lat))
+
+    def _interpolate_heading(self, start_deg: float, end_deg: float, ratio: float) -> float:
+        delta = (end_deg - start_deg + 180.0) % 360.0 - 180.0
+        return start_deg + delta * ratio
+
+    def _ease_in_out(self, ratio: float) -> float:
+        ratio = max(0.0, min(1.0, ratio))
+        return 0.5 - 0.5 * math.cos(math.pi * ratio)
+
+    def _build_turn_control_point(
+        self,
+        start_point: list[float],
+        end_point: list[float],
+        altitude_m: float,
+    ) -> list[float]:
+        del altitude_m
+        start_lon = float(start_point[0])
+        start_lat = float(start_point[1])
+        end_lon = float(end_point[0])
+        end_lat = float(end_point[1])
+        mid_lon = (start_lon + end_lon) / 2.0
+        mid_lat = (start_lat + end_lat) / 2.0
+
+        delta_lon = end_lon - start_lon
+        delta_lat = end_lat - start_lat
+        length = math.hypot(delta_lon, delta_lat)
+        if length < 1e-12:
+            return [mid_lon, mid_lat]
+
+        normal_lon = -delta_lat / length
+        normal_lat = delta_lon / length
+        curve_strength = min(0.000012, length * 0.12)
+        return [
+            mid_lon + normal_lon * curve_strength,
+            mid_lat + normal_lat * curve_strength,
+        ]
+
+    def _quadratic_bezier_point(
+        self,
+        *,
+        start: list[float],
+        control: list[float],
+        end: list[float],
+        ratio: float,
+    ) -> tuple[float, float]:
+        one_minus = 1.0 - ratio
+        longitude = (
+            one_minus * one_minus * float(start[0])
+            + 2.0 * one_minus * ratio * float(control[0])
+            + ratio * ratio * float(end[0])
+        )
+        latitude = (
+            one_minus * one_minus * float(start[1])
+            + 2.0 * one_minus * ratio * float(control[1])
+            + ratio * ratio * float(end[1])
+        )
+        return longitude, latitude

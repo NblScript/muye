@@ -1,78 +1,71 @@
-# QUALITY_SCORE.md — 模块质量评分
+# QUALITY_SCORE.md — 牧野质量评分标准
 
-> 每个模块的质量评分，帮助 AI Agent 快速识别风险区域。
+## 测试覆盖率
 
-## 评分标准
+### 当前状态
 
-| 等级 | 测试覆盖 | 文档 | 复杂度 | 风险 |
-|------|---------|------|--------|------|
-| A | >80% | 完整 | 低 | 低 |
-| B | 50-80% | 基本 | 中 | 中 |
-| C | <50% | 缺失 | 高 | 高 |
-| D | 无测试 | 无 | 极高 | 极高 |
+- 后端测试：66+ 测试用例，覆盖所有核心模块
+- 测试文件：`tests/` 目录，21 个测试文件
 
-## 模块评分
+### 标准
 
-### app/（应用层）
-
-| 模块 | 等级 | 测试 | 说明 |
-|------|------|------|------|
-| app/main.py | B | 间接 | 通过 E2E 测试覆盖，缺少单元测试 |
-| app/routes/ | B | 间接 | 通过集成测试覆盖 |
-| app/services/ | B | 间接 | workflow_service 有集成测试 |
-| app/deps.py | A | 有 | 简单依赖注入 |
-| app/config.py | A | 有 | 配置解析 |
-
-### modules/decision/（决策域）
-
-| 模块 | 等级 | 测试 | 说明 |
-|------|------|------|------|
-| ai_decision.py | B | 有 | jsonschema 校验 + API mock |
-| decision_context.py | B | 有 | test_decision_context.py |
-| rag/embeddings.py | B | 有 | test_rag_embeddings.py |
-| rag/vectorstore.py | B | 有 | ChromaDB 交互 |
-| rag/retriever.py | B | 有 | test_rag_retriever.py |
-| rag/knowledge_loader.py | B | 有 | test_knowledge_loader.py |
-
-### modules/drone/（无人机域）
-
-| 模块 | 等级 | 测试 | 说明 |
-|------|------|------|------|
-| controller.py | B | 有 | 无人机状态管理测试 |
-| mission_planner.py | B | 有 | 航线计算测试 |
-| px4_simulator.py | C | 间接 | 需要 SITL 环境 |
-| virtual_api.py | A | 有 | test_virtual_drone_api.py 完整 |
-
-### modules/detection/（检测域）
-
-| 模块 | 等级 | 测试 | 说明 |
-|------|------|------|------|
-| image_processor.py | B | 有 | 图像处理测试 |
-| local_yolo_api.py | B | 有 | YOLO API 测试 |
-| data_collector.py | C | 间接 | 通过集成测试覆盖 |
-
-### modules/infra/（基础设施域）
-
-| 模块 | 等级 | 测试 | 说明 |
-|------|------|------|------|
-| common.py | A | 有 | 工具函数测试 |
-| event_bus.py | A | 有 | 事件总线完整测试 |
-| sqlite_store.py | A | 有 | SQLite CRUD 完整测试 |
-| weather.py | B | 有 | 天气 API mock 测试 |
-
-## 整体评分
-
-| 维度 | 评分 | 说明 |
+| 指标 | 目标 | 当前 |
 |------|------|------|
-| 测试覆盖 | B+ | 145 个测试，核心链路全覆盖 |
-| 文档完整 | B | 架构/设计/API 文档齐全，模块内文档待补充 |
-| 代码规范 | B | 类型注解 + jsonschema，部分模块缺少 docstring |
-| 可维护性 | A- | 领域分组清晰，依赖方向正确 |
-| 部署简易 | A | SQLite 零运维，单命令启动 |
+| 核心模块覆盖 | 100% | 通过 |
+| API 端点覆盖 | 100% | 通过 |
+| 边界情况覆盖 | 关键路径 | 部分 |
+| 前端测试 | 核心组件 | 待提升（TD-001） |
 
-## 待改进项（按优先级）
+### 测试规范
 
-1. **px4_simulator.py** — 需要 SITL 集成测试
-2. **data_collector.py** — 缺少独立单元测试
-3. **app/main.py** — 缺少启动流程的单元测试
-4. **sqlite_store.py** — 1786 行/47 方法，建议按功能拆分 mixin
+- **命名**：`test_<模块名>.py`，方法名 `test_<场景>_<预期结果>()`
+- **隔离**：每个测试独立，不依赖执行顺序
+- **Mock**：仅 Mock 外部服务（Qwen API、和风天气、PX4 SITL）
+- **断言**：使用明确的断言，包含失败消息
+
+## 代码质量
+
+### 检查清单
+
+- [ ] 无空 `except` 块
+- [ ] 无未使用的 import
+- [ ] 函数长度不超过 50 行
+- [ ] 类长度不超过 300 行
+- [ ] 所有公共 API 有 docstring
+- [ ] 无硬编码的密钥或端点
+- [ ] 错误处理遵循 [DESIGN.md](DESIGN.md) 规范
+
+### Linting
+
+```bash
+# Python
+ruff check app/ modules/ tests/
+
+# TypeScript
+cd frontend && npm run lint
+```
+
+## 文档新鲜度
+
+### 规则
+
+1. **代码变更必须同步更新文档**：修改 API 端点 → 更新 `docs/references/api.md`
+2. **数据库 schema 变更必须更新**：修改模型 → 更新 `docs/generated/db-schema.md`
+3. **架构变更必须更新**：新增模块 → 更新 `ARCHITECTURE.md` 和 `AGENTS.md`
+
+### 验证
+
+- CI 中检查文档最后修改时间
+- 超过 30 天未更新的文档标记为"可能过时"
+- AGENTS.md 中的链接必须指向存在的文件
+
+## 性能基准
+
+| 指标 | 目标 |
+|------|------|
+| API 响应时间（健康检查） | < 100ms |
+| API 响应时间（工作流状态） | < 500ms |
+| YOLO 推理时间（单张图片） | < 5s |
+| AI 决策时间（含 RAG） | < 15s |
+| 前端首屏加载 | < 3s |
+| WebSocket 消息延迟 | < 200ms |

@@ -167,18 +167,19 @@ class TaskMixin:
             params.append(status)
 
         if search:
-            keyword = f"%{search.strip()}%"
+            escaped = search.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            keyword = f"%{escaped}%"
             filters.append(
                 """
                 (
-                  request_id LIKE ?
-                  OR field_id LIKE ?
-                  OR image_path LIKE ?
+                  request_id LIKE ? ESCAPE '\\'
+                  OR field_id LIKE ? ESCAPE '\\'
+                  OR image_path LIKE ? ESCAPE '\\'
                   OR EXISTS (
                     SELECT 1
                     FROM detections
                     WHERE detections.request_id = tasks.request_id
-                      AND detections.label LIKE ?
+                      AND detections.label LIKE ? ESCAPE '\\'
                   )
                 )
                 """

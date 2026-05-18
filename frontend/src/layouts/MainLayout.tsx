@@ -1,42 +1,40 @@
-import { Layout, Menu, Typography } from 'antd'
-import {
-  DashboardOutlined,
-  HistoryOutlined,
-  SettingOutlined,
-} from '@ant-design/icons'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: '指挥台' },
-  { key: '/history', icon: <HistoryOutlined />, label: '历史报表' },
-  { key: '/settings', icon: <SettingOutlined />, label: '设置' },
+const navItems = [
+  { path: '/', label: '指挥台', icon: '⊞' },
+  { path: '/px4-viewer', label: 'PX4观察', icon: '◉' },
+  { path: '/history', label: '历史报表', icon: '≡' },
+  { path: '/settings', label: '设置', icon: '⚙' },
 ]
 
 export default function MainLayout() {
-  const navigate = useNavigate()
-  const location = useLocation()
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Layout.Header style={{ display: 'flex', alignItems: 'center' }}>
-        <Typography.Title
-          level={4}
-          style={{ color: '#fff', margin: 0, marginRight: 32, whiteSpace: 'nowrap' }}
-        >
-          牧野智农指挥台
-        </Typography.Title>
-        <Menu
-          theme="dark"
-          mode="horizontal"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-          style={{ flex: 1, minWidth: 0 }}
-        />
-      </Layout.Header>
-      <Layout.Content style={{ padding: '16px' }}>
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="app-header-left">
+          <h1 className="app-logo">牧野</h1>
+          <span className="app-logo-sub">智农指挥台</span>
+        </div>
+        <nav className="app-nav">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.path === '/'}
+              className={({ isActive }) => `nav-link ${isActive ? 'is-active' : ''}`}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+        <div className="app-header-right">
+          <span className="status-dot status-dot-green" />
+        </div>
+      </header>
+      <main className="app-content">
         <Outlet />
-      </Layout.Content>
-    </Layout>
+      </main>
+    </div>
   )
 }

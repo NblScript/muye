@@ -1,4 +1,4 @@
-import { Progress } from 'antd'
+import { Progress } from '../../ui'
 
 import type { MissionState, TrajectoryState } from '../../../types/simMap'
 
@@ -20,7 +20,7 @@ export default function ProgressCard({ mission, trajectory }: ProgressCardProps)
         <span>任务进度</span>
         <strong>{progress.toFixed(0)}%</strong>
       </div>
-      <Progress percent={progress} size="small" showInfo={false} strokeColor="#22c55e" />
+      <Progress percent={progress} size="small" strokeColor="var(--accent-green)" />
       <div className="status-panel-grid status-panel-grid-compact">
         <div>
           <span>航点</span>
