@@ -4,11 +4,14 @@ import json
 import logging
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from jsonschema import ValidationError, validate
+
+if TYPE_CHECKING:
+    from modules.decision.agents.consultation import ExpertConsultation
 
 from modules.infra.common import log_event, strip_code_fence
 from modules.decision.decision_context import DecisionContextProvider
@@ -64,6 +67,7 @@ class DecisionEngine:
         decision_context_provider: DecisionContextProvider | None = None,
         rag_retriever: DecisionRAGRetriever | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        consultation: ExpertConsultation | None = None,
     ) -> None:
         self.api_url = api_url
         self.api_key = api_key
@@ -74,6 +78,7 @@ class DecisionEngine:
         self.event_bus = event_bus
         self.decision_context_provider = decision_context_provider
         self.rag_retriever = rag_retriever
+        self.consultation = consultation
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
@@ -155,6 +160,25 @@ class DecisionEngine:
                     field_context=field_context,
                     weather_data=weather,
                 )
+            elif self.consultation is not None:
+                # 多智能体会诊路径
+                consultation_result = await self.consultation.consult(
+                    pest_detections=pest_detections,
+                    weather_data=weather,
+                    field_context=field_context,
+                    decision_context=decision_context,
+                    rag_context_text=rag_context_text,
+                    request_id=request_id,
+                    client_ip=client_ip,
+                )
+                decision = {
+                    "用药": consultation_result["用药"],
+                }
+                if "农事建议" in consultation_result:
+                    decision["农事建议"] = consultation_result["农事建议"]
+                rag_context["consultation_detail"] = consultation_result.get("detail", {})
+                rag_context["confidence"] = consultation_result.get("confidence", 0)
+                rag_context["agreement"] = consultation_result.get("agreement", "")
             else:
                 decision = await self._request_qwen_decision(
                     structured_input_text=structured_input_text,

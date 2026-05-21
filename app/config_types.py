@@ -85,6 +85,10 @@ class MuyeConfig:
     qwen_embedding_dimensions: int = 1024
     qwen_embedding_timeout_seconds: float = 60.0
 
+    # 多智能体会诊配置
+    multi_agent_enabled: bool = False
+    multi_agent_timeout_seconds: float = 60.0
+
     @classmethod
     def from_env(cls, drone_config: dict[str, Any] | None = None) -> "MuyeConfig":
         """从环境变量构建配置。
@@ -207,4 +211,7 @@ class MuyeConfig:
             qwen_embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v3"),
             qwen_embedding_dimensions=int(os.getenv("QWEN_EMBEDDING_DIMENSIONS", "1024")),
             qwen_embedding_timeout_seconds=float(os.getenv("QWEN_EMBEDDING_TIMEOUT_SECONDS", "60")),
+            # 多智能体会诊配置
+            multi_agent_enabled=_parse_env_bool(os.getenv("MUYE_MULTI_AGENT_ENABLED"), False),
+            multi_agent_timeout_seconds=float(os.getenv("MUYE_MULTI_AGENT_TIMEOUT_SECONDS", "60")),
         )

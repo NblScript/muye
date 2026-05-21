@@ -25,6 +25,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from modules.decision.ai_decision import DecisionEngine
+from modules.decision.agents.consultation import ExpertConsultation
 from modules.infra.common import (
     CONFIG_DIR,
     DATA_DIR,
@@ -336,6 +337,18 @@ class MuyeApplication:
         if self.config.enable_sqlite_decision_context:
             decision_context_provider = SqliteDecisionContextProvider(self.sqlite_store)
         self.rag_retriever = self._initialize_rag()
+        consultation = None
+        if self.config.multi_agent_enabled:
+            consultation = ExpertConsultation(
+                api_url=self.config.qwen_api_url,
+                api_key=self.config.qwen_api_key,
+                model=self.config.qwen_model,
+                rag_retriever=self.rag_retriever,
+                event_bus=self.event_bus,
+                logger=self.logger,
+                timeout_seconds=self.config.multi_agent_timeout_seconds,
+            )
+            self.logger.info("多智能体会诊模式已启用")
         self.decision_engine = DecisionEngine(
             api_url=self.config.qwen_api_url,
             api_key=self.config.qwen_api_key,
@@ -347,6 +360,7 @@ class MuyeApplication:
             event_bus=self.event_bus,
             decision_context_provider=decision_context_provider,
             rag_retriever=self.rag_retriever,
+            consultation=consultation,
         )
         self.drone_controller = DroneController(
             drone_config=self.drone_config,
