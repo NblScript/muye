@@ -55,7 +55,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | 域 | 路径 | 职责 |
 |----|------|------|
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
-| decision | `modules/decision/` | AI 决策 + RAG 知识增强 |
+| decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 多智能体会诊 |
 | drone | `modules/drone/` | 无人机控制 + 任务规划 + PX4 仿真 |
 | infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
 
@@ -110,3 +110,14 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 2. 查看 `git log` 了解最近变更
 3. 检查 `data/logs/` 下的日志文件
 4. 向用户发出明确的问题描述和建议
+
+## 多智能体会诊
+
+系统支持多智能体专家会诊模式（默认关闭）。通过 `MUYE_MULTI_AGENT_ENABLED=true` 启用。
+
+启用后，决策管线变为：3 个专家角色（昆虫学家/农学家/植保专家）并行调用 Qwen API，各自从 RAG 检索不同知识，加权投票汇总后输出决策。
+
+代码位于 `modules/decision/agents/`：
+- `expert_roles.py` — 角色定义
+- `consultation.py` — 会诊编排
+- `voting.py` — 投票机制

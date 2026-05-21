@@ -17,7 +17,7 @@ ChromaDB 检索 (modules/decision/rag/vectorstore.py)
 DecisionRAGRetriever (modules/decision/rag/retriever.py)
     │ 害虫感知过滤
     ▼
-上下文注入 → Qwen API 决策
+上下文注入 → Qwen API 决策（单 LLM 或多智能体会诊）
 ```
 
 ## 知识源
@@ -56,3 +56,17 @@ RAG 检索失败时不阻断主流程：
 - Embedding 模型：通过 DashScope API（`DASHSCOPE_API_KEY`）
 - ChromaDB 路径：`data/chroma_db/`
 - 检索数量：默认 Top 5
+
+## 多智能体会诊模式
+
+启用后（`MUYE_MULTI_AGENT_ENABLED=true`），RAG 检索为每个专家角色提供不同角度的知识：
+
+| 专家角色 | RAG 检索重点 |
+|---------|-------------|
+| 昆虫学家 | 害虫生活习性、危害特征、繁殖规律 |
+| 农学家 | 作物状态、气象影响、综合防治策略 |
+| 植保专家 | 农药选择、用量计算、安全间隔期、禁忌 |
+
+代码位于 `modules/decision/agents/`：
+- `consultation.py` — 为每个角色调用 RAG 检索，并行调用 3 个专家
+- `expert_roles.py` — 定义每个角色的检索模板（`retrieval_query_template`）

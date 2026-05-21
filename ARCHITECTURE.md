@@ -66,12 +66,16 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 
 - **入口**：通过 `app/services/workflow_service.py` 调用
 - **核心**：`modules/decision/`
-  - `ai_decision.py` — DecisionEngine，调用 Qwen API
+  - `ai_decision.py` — DecisionEngine，调用 Qwen API（支持单 LLM 和多智能体会诊两种模式）
   - `decision_context.py` — SqliteDecisionContextProvider
   - `rag/` — RAG 子系统
     - `embeddings.py` — QwenEmbeddings 适配器
     - `vectorstore.py` — ChromaDB 向量存储
     - `retriever.py` — DecisionRAGRetriever（害虫感知过滤）
+  - `agents/` — 多智能体会诊子系统（`MUYE_MULTI_AGENT_ENABLED=true` 启用）
+    - `expert_roles.py` — 3 个专家角色定义（昆虫学家/农学家/植保专家）
+    - `consultation.py` — ExpertConsultation 会诊编排（并行调用 + 降级）
+    - `voting.py` — 加权投票 + 置信度计算 + 分歧检测
     - `knowledge_loader.py` — 知识加载器
 - **数据流**：害虫列表 + 天气 → RAG 检索 → Qwen API → 用药/农事建议 JSON
 
@@ -115,6 +119,8 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
     │ 增强上下文
     ▼
 Qwen 决策 (decision/ai_decision)
+    │ 单 LLM 模式：直接输出
+    │ 多智能体模式：3 专家并行 → 加权投票
     │ 用药建议 + 农事建议
     ▼
 任务规划 (drone/mission_planner)
@@ -150,3 +156,5 @@ Qwen 决策 (decision/ai_decision)
 | jsonschema 校验 | 强制 LLM 输出结构 | 纯 prompt 约束（不可靠） |
 | JSONL 事件流 | 可追溯、可重放 | 内存事件（不可持久化） |
 | 独立 YOLO 服务 | 检测与主 API 解耦 | 内嵌推理（阻塞主流程） |
+| 多智能体会诊 | 多视角投票提高决策质量 | 单 LLM 决策（单一视角） |
+| 配置开关控制 | 渐进式启用新功能 | 硬切换（风险高） |
