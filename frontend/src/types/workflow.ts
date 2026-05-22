@@ -63,12 +63,29 @@ export interface RagDocument {
   metadata?: Record<string, unknown>
 }
 
+export interface ExpertSummary {
+  name: string
+  weight: number
+  农药名称: string
+  总量: string
+}
+
+export interface ConsultationDetail {
+  experts?: Record<string, ExpertSummary>
+  failed_roles?: string[]
+  active_count?: number
+  vote_distribution?: Record<string, number>
+}
+
 export interface RagContext {
   pesticides?: RagDocument[]
   historical_cases?: RagDocument[]
   knowledge?: RagDocument[]
   pest_types?: string[]
   crop_name?: string | null
+  consultation_detail?: ConsultationDetail
+  confidence?: number
+  agreement?: string
 }
 
 export interface WorkflowTaskState {

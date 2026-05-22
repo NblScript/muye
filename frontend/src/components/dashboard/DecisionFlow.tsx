@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Card, Drawer } from '../ui'
 import type { RagContext, RagDocument, WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
+import type { ConsultationDetail, ExpertSummary } from '../../types/workflow'
 
 interface StepData {
   key: string
@@ -46,9 +47,12 @@ function buildSteps(task: WorkflowTaskState | null): StepData[] {
   }
 
   const ragFields: { label: string; value: string }[] = []
+  const isMultiAgent = Boolean(task.rag_context?.consultation_detail)
   if (hasDecision) {
-    const ragSource = hasRag ? 'RAG 知识检索 + 千问大模型' : '千问大模型'
-    ragFields.push({ label: '知识来源', value: ragSource })
+    const ragSource = isMultiAgent
+      ? '多智能体会诊'
+      : hasRag ? 'RAG 知识检索 + 千问大模型' : '千问大模型'
+    ragFields.push({ label: '决策模式', value: ragSource })
   }
   if (hasRag) {
     const ctx = task.rag_context!
@@ -62,6 +66,9 @@ function buildSteps(task: WorkflowTaskState | null): StepData[] {
   }
   if (agronomyTips.length > 0) {
     ragFields.push({ label: '农事建议', value: agronomyTips[0] })
+  }
+  if (task.rag_context?.confidence != null) {
+    ragFields.push({ label: '会诊置信度', value: `${(task.rag_context.confidence * 100).toFixed(0)}%` })
   }
 
   const outputFields: { label: string; value: string }[] = []
@@ -245,6 +252,97 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
             <DocList title="农业知识" docs={rag.knowledge ?? []} color="var(--accent-cyan)" />
           </section>
         )}
+
+        {/* 多智能体会诊 */}
+        {rag?.consultation_detail && (() => {
+          const detail = rag.consultation_detail!
+          const experts = detail.experts ?? {}
+          const confidence = rag.confidence ?? 0
+          const agreement = rag.agreement ?? ''
+          const failedRoles = detail.failed_roles ?? []
+          const votes = detail.vote_distribution ?? {}
+          const agreementLabel: Record<string, string> = {
+            unanimous: '一致通过',
+            majority: '多数通过',
+            divided: '意见分歧',
+            single_expert: '单专家',
+          }
+          const agreementColor: Record<string, string> = {
+            unanimous: 'var(--accent-green)',
+            majority: 'var(--accent-amber)',
+            divided: 'var(--accent-red)',
+            single_expert: 'var(--text-muted)',
+          }
+          return (
+            <section style={{ marginBottom: 24 }}>
+              <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.03em' }}>
+                🧑‍⚕️ 多智能体专家会诊
+              </h4>
+              {/* 置信度和一致性 */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                <div style={{
+                  flex: 1, padding: '8px 12px', background: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                    {(confidence * 100).toFixed(0)}%
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>会诊置信度</div>
+                </div>
+                <div style={{
+                  flex: 1, padding: '8px 12px', background: 'var(--bg-surface)',
+                  borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: agreementColor[agreement] ?? 'var(--text-primary)' }}>
+                    {agreementLabel[agreement] ?? agreement}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>专家一致性</div>
+                </div>
+              </div>
+              {/* 各专家意见 */}
+              {Object.entries(experts).length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {Object.entries(experts).map(([role, info]) => (
+                    <div key={role} style={{
+                      padding: '8px 12px', background: 'var(--bg-surface)',
+                      borderRadius: 'var(--radius-sm)', fontSize: 12,
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                      <div>
+                        <span style={{ fontWeight: 600, marginRight: 8 }}>{info.name}</span>
+                        <span style={{ color: 'var(--text-primary)' }}>{info['农药名称']}</span>
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                        权重 {(info.weight * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* 失败专家 */}
+              {failedRoles.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--accent-red)', marginBottom: 8 }}>
+                  {failedRoles.length} 位专家调用失败，已降级处理
+                </div>
+              )}
+              {/* 投票分布 */}
+              {Object.keys(votes).length > 1 && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>投票分布</div>
+                  {Object.entries(votes).map(([name, weight]) => (
+                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, minWidth: 80 }}>{name}</span>
+                      <div style={{ flex: 1, height: 6, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${weight * 100}%`, height: '100%', background: 'var(--accent-cyan)', borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(weight * 100).toFixed(0)}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )
+        })()}
 
         {/* 决策结果 */}
         {Object.keys(decision).length > 0 && (
