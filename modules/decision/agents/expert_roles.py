@@ -35,6 +35,7 @@ EXPERT_ROLES: dict[str, dict[str, Any]] = {
     "entomologist": {
         "name": "昆虫学家",
         "weight": 0.4,
+        "llm_provider": "qwen",
         "system_prompt": (
             "你是一位资深昆虫学家，专注于农业害虫的识别、习性和危害评估。"
             "你必须只输出一个 JSON 对象。"
@@ -51,6 +52,7 @@ EXPERT_ROLES: dict[str, dict[str, Any]] = {
     "agronomist": {
         "name": "农学家",
         "weight": 0.35,
+        "llm_provider": "deepseek",
         "system_prompt": (
             "你是一位资深农学家，专注于作物栽培、环境因素和综合防治策略。"
             "你必须只输出一个 JSON 对象。"
@@ -67,6 +69,7 @@ EXPERT_ROLES: dict[str, dict[str, Any]] = {
     "pesticide_specialist": {
         "name": "植保专家",
         "weight": 0.25,
+        "llm_provider": "xiaomi",
         "system_prompt": (
             "你是一位植物保护专家，专注于农药选择、用量计算和安全间隔期。"
             "你必须只输出一个 JSON 对象。"

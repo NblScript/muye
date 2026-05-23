@@ -51,6 +51,10 @@ def weighted_vote(
 
     final_pesticide = pesticide_votes.most_common(1)[0][0] if pesticide_votes else "未知"
 
+    # 归一化投票分布到 0-1 范围（用于前端柱状图）
+    total_vote_weight = sum(pesticide_votes.values()) or 1.0
+    normalized_votes = {name: round(w / total_vote_weight, 2) for name, w in pesticide_votes.items()}
+
     # 2. 选取最终用药方案：优先采纳推荐农药与投票结果一致的专家方案
     best_opinion: dict[str, Any] | None = None
     best_weight = 0.0
@@ -114,7 +118,7 @@ def weighted_vote(
         "experts": expert_summaries,
         "failed_roles": list(failed),
         "active_count": len(active),
-        "vote_distribution": dict(pesticide_votes),
+        "vote_distribution": normalized_votes,
     }
 
     return result

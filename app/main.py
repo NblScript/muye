@@ -339,16 +339,32 @@ class MuyeApplication:
         self.rag_retriever = self._initialize_rag()
         consultation = None
         if self.config.multi_agent_enabled:
+            providers: dict[str, dict[str, str]] = {}
+            providers["qwen"] = {
+                "api_url": self.config.qwen_api_url,
+                "api_key": self.config.qwen_api_key,
+                "model": self.config.qwen_model,
+            }
+            if self.config.deepseek_api_key:
+                providers["deepseek"] = {
+                    "api_url": self.config.deepseek_api_url,
+                    "api_key": self.config.deepseek_api_key,
+                    "model": self.config.deepseek_model,
+                }
+            if self.config.xiaomi_api_key and self.config.xiaomi_api_url:
+                providers["xiaomi"] = {
+                    "api_url": self.config.xiaomi_api_url,
+                    "api_key": self.config.xiaomi_api_key,
+                    "model": self.config.xiaomi_model,
+                }
             consultation = ExpertConsultation(
-                api_url=self.config.qwen_api_url,
-                api_key=self.config.qwen_api_key,
-                model=self.config.qwen_model,
+                providers=providers,
                 rag_retriever=self.rag_retriever,
                 event_bus=self.event_bus,
                 logger=self.logger,
                 timeout_seconds=self.config.multi_agent_timeout_seconds,
             )
-            self.logger.info("多智能体会诊模式已启用")
+            self.logger.info("多智能体会诊模式已启用，providers: %s", list(providers.keys()))
         self.decision_engine = DecisionEngine(
             api_url=self.config.qwen_api_url,
             api_key=self.config.qwen_api_key,

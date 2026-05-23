@@ -190,6 +190,28 @@ class DecisionRAGRetriever:
                     expanded.append(normalized_alias)
         return expanded
 
+    def retrieve_by_query(
+        self,
+        query: str,
+        collections: list[str] | None = None,
+        k: int = 5,
+    ) -> list[tuple[Document, float]]:
+        """Retrieve documents using a custom query string across specified collections.
+
+        Returns list of (document, score) tuples sorted by relevance.
+        """
+        target = collections or [COLLECTION_PESTICIDES, COLLECTION_KNOWLEDGE, COLLECTION_DECISIONS]
+        results: list[tuple[Document, float]] = []
+        for collection in target:
+            if collection not in (COLLECTION_PESTICIDES, COLLECTION_KNOWLEDGE, COLLECTION_DECISIONS):
+                continue
+            docs_scores = self.vector_store.similarity_search_with_score(
+                collection, query, k=k,
+            )
+            results.extend(docs_scores)
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:k]
+
     def _extract_crop_name(self, field_context: dict[str, Any] | None) -> str | None:
         if not field_context:
             return None

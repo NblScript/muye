@@ -20,22 +20,29 @@ class ExpertConsultation:
 
     def __init__(
         self,
-        api_url: str,
-        api_key: str,
-        model: str,
+        providers: dict[str, dict[str, str]],
         rag_retriever: DecisionRAGRetriever | None = None,
         event_bus: FileEventBus | None = None,
         logger: logging.Logger | None = None,
         timeout_seconds: float = 60.0,
     ) -> None:
-        self.api_url = api_url
-        self.api_key = api_key
-        self.model = model
+        self.providers = providers
         self.rag_retriever = rag_retriever
         self.event_bus = event_bus
         self.logger = logger or logging.getLogger(__name__)
         self.timeout_seconds = timeout_seconds
         self._client = httpx.AsyncClient(timeout=timeout_seconds)
+
+    def _get_provider(self, provider_name: str) -> dict[str, str]:
+        """获取指定 provider 配置，若不存在则回退到第一个可用 provider。"""
+        if provider_name in self.providers:
+            return self.providers[provider_name]
+        fallback = next(iter(self.providers.values()))
+        self.logger.warning(
+            "provider %s 未配置，回退到 %s",
+            provider_name, fallback.get("model", "unknown"),
+        )
+        return fallback
 
     async def consult(
         self,
@@ -144,12 +151,18 @@ class ExpertConsultation:
 
         # 害虫检测
         if pest_detections:
-            parts.append("## 害虫检测结果")
+            pest_counts: dict[str, int] = {}
             for d in pest_detections:
-                parts.append(
-                    f"- 害虫：{d.get('pest_type', '未知')} "
-                    f"置信度：{d.get('confidence', 0):.1%}"
+                name = d.get("pest_type", "未知")
+                pest_counts[name] = pest_counts.get(name, 0) + 1
+            parts.append("## 害虫检测结果")
+            for name, count in pest_counts.items():
+                conf = next(
+                    (f"{d['confidence']:.1%}" for d in pest_detections if d.get("pest_type") == name and d.get("confidence")),
+                    "N/A",
                 )
+                parts.append(f"- {name}：{count} 头，置信度 {conf}")
+            parts.append(f"- 检测目标总数：{len(pest_detections)}")
 
         # 天气
         if weather_data:
@@ -157,16 +170,25 @@ class ExpertConsultation:
             parts.append(
                 f"- 温度：{weather_data.get('temperature', 'N/A')}°C "
                 f"湿度：{weather_data.get('humidity', 'N/A')}% "
-                f"天气：{weather_data.get('weather_desc', 'N/A')}"
+                f"风速：{weather_data.get('wind_speed', 'N/A')}m/s "
+                f"风向：{weather_data.get('wind_direction', 'N/A')} "
+                f"天气：{weather_data.get('summary', weather_data.get('weather_desc', 'N/A'))}"
             )
 
         # 农田
         if field_context:
+            crop_cycle = field_context.get("crop_cycle")
+            crop_name = crop_cycle.get("crop_name", "N/A") if isinstance(crop_cycle, dict) else field_context.get("crop_name", "N/A")
+            area_mu = field_context.get("area_mu", "N/A")
             parts.append("## 农田信息")
             parts.append(
                 f"- 农田：{field_context.get('name', 'N/A')} "
-                f"面积：{field_context.get('area_mu', 'N/A')}亩 "
-                f"作物：{field_context.get('crop_name', 'N/A')}"
+                f"面积：{area_mu}亩 "
+                f"作物：{crop_name}"
+            )
+            parts.append(
+                "【关键要求】用药.总量必须按 {} 亩全田面积计算，".format(area_mu)
+                + "包含明确数字和单位（如 1.2L），禁止写「适量」「按需」。"
             )
 
         # 决策上下文
@@ -176,7 +198,7 @@ class ExpertConsultation:
 
         # RAG 上下文
         if rag_context_text:
-            parts.append("## 知识库检索结果")
+            parts.append("## 知识库通用检索结果")
             parts.append(rag_context_text)
 
         return "\n".join(parts)
@@ -197,11 +219,15 @@ class ExpertConsultation:
                 query = config["retrieval_query_template"].format(
                     pest_names=pest_names, crop_name=crop_name,
                 )
-                context = self.rag_retriever.retrieve(
-                    pest_types=[pest_names],
-                    crop_name=crop_name,
-                )
-                role_knowledge[role] = context.to_prompt_text()
+                docs_scores = self.rag_retriever.retrieve_by_query(query, k=5)
+                if not docs_scores:
+                    role_knowledge[role] = ""
+                    continue
+                lines = [f"=== {config['retrieval_focus']}（RAG 检索）==="]
+                for i, (doc, score) in enumerate(docs_scores, 1):
+                    lines.append(f"\n{i}. {doc.page_content}")
+                    lines.append(f"   参考值：{score:.2f}")
+                role_knowledge[role] = "\n".join(lines)
             except Exception as e:
                 self.logger.warning(
                     "角色 %s RAG 检索失败: %s", config["name"], e
@@ -219,6 +245,7 @@ class ExpertConsultation:
     ) -> dict[str, Any]:
         """调用单个专家角色。"""
         config = EXPERT_ROLES[role]
+        provider = self._get_provider(config.get("llm_provider", ""))
 
         # 构建角色特定的用户 prompt
         knowledge_section = ""
@@ -232,7 +259,8 @@ class ExpertConsultation:
         )
 
         # 调用 LLM
-        raw = await self._invoke_qwen(
+        raw = await self._invoke_llm(
+            provider=provider,
             request_id=request_id,
             messages=[
                 {"role": "system", "content": config["system_prompt"]},
@@ -245,7 +273,8 @@ class ExpertConsultation:
 
         # 校验失败时尝试修复
         if opinion is None:
-            repair_raw = await self._invoke_qwen(
+            repair_raw = await self._invoke_llm(
+                provider=provider,
                 request_id=request_id,
                 messages=[
                     {
@@ -253,9 +282,9 @@ class ExpertConsultation:
                         "content": (
                             "你是农业植保 JSON 修复助手。"
                             "请把输入修复为合法 JSON。"
-                            "顶层只保留“用药”和可选“农事建议”。"
+                            "顶层只保留[用药]和可选[农事建议]。"
                             "所有必填字段必须存在且不能为空。"
-                            "“用药.总量”必须是本次作业全田总用量。"
+                            "[用药.总量]必须是本次作业全田总用量。"
                             "不要输出解释。"
                         ),
                     },
@@ -272,29 +301,46 @@ class ExpertConsultation:
 
         return opinion
 
-    async def _invoke_qwen(
+    async def _invoke_llm(
         self,
+        provider: dict[str, str],
         request_id: str,
         messages: list[dict[str, str]],
     ) -> dict[str, Any]:
-        """调用 Qwen API。"""
-        url = self._resolve_chat_url(self.api_url)
-        response = await self._client.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "X-Request-ID": request_id,
-            },
-            json={
-                "model": self.model,
-                "temperature": 0.1,
-                "response_format": {"type": "json_object"},
-                "messages": messages,
-            },
-        )
-        response.raise_for_status()
-        return response.json()
+        """调用 LLM API（Qwen 或 DeepSeek）。"""
+        url = self._resolve_chat_url(provider["api_url"])
+        try:
+            response = await self._client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {provider['api_key']}",
+                    "Content-Type": "application/json",
+                    "X-Request-ID": request_id,
+                },
+                json={
+                    "model": provider["model"],
+                    "temperature": 0.1,
+                    "response_format": {"type": "json_object"},
+                    "messages": messages,
+                },
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:500] if e.response else ""
+            self.logger.error(
+                "LLM API (%s) 返回 HTTP %s: url=%s body=%s",
+                provider.get("model", "unknown"),
+                e.response.status_code if e.response else "N/A",
+                url, body,
+            )
+            raise
+        except httpx.RequestError as e:
+            self.logger.error(
+                "LLM API (%s) 请求失败: url=%s error=%s",
+                provider.get("model", "unknown"), url, e,
+            )
+            raise
 
     def _extract_and_validate(self, raw: dict[str, Any]) -> dict[str, Any] | None:
         """从 LLM 响应中提取 JSON 并校验 schema。"""

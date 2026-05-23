@@ -161,7 +161,7 @@ class DecisionEngine:
                     weather_data=weather,
                 )
             elif self.consultation is not None:
-                # 多智能体会诊路径
+                # 多智能体会诊路径（三模型并行）
                 consultation_result = await self.consultation.consult(
                     pest_detections=pest_detections,
                     weather_data=weather,
@@ -180,6 +180,7 @@ class DecisionEngine:
                 rag_context["confidence"] = consultation_result.get("confidence", 0)
                 rag_context["agreement"] = consultation_result.get("agreement", "")
             else:
+                # 未配置多智能体会诊时回退到单 LLM 调用
                 decision = await self._request_qwen_decision(
                     structured_input_text=structured_input_text,
                     request_id=request_id,
@@ -187,6 +188,13 @@ class DecisionEngine:
                     pest_detections=pest_detections,
                     field_context=field_context,
                     weather_data=weather,
+                )
+                log_event(
+                    self.logger,
+                    logging.WARNING,
+                    "未配置多智能体会诊，回退到单 LLM 决策",
+                    request_id=request_id,
+                    client_ip=client_ip,
                 )
             if self.event_bus:
                 self.event_bus.publish(

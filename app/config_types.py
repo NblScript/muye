@@ -89,6 +89,16 @@ class MuyeConfig:
     multi_agent_enabled: bool = False
     multi_agent_timeout_seconds: float = 60.0
 
+    # DeepSeek 会诊模型配置
+    deepseek_api_url: str = "https://api.deepseek.com/v1"
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+
+    # 小米会诊模型配置
+    xiaomi_api_url: str = ""
+    xiaomi_api_key: str = ""
+    xiaomi_model: str = ""
+
     @classmethod
     def from_env(cls, drone_config: dict[str, Any] | None = None) -> "MuyeConfig":
         """从环境变量构建配置。
@@ -214,4 +224,12 @@ class MuyeConfig:
             # 多智能体会诊配置
             multi_agent_enabled=_parse_env_bool(os.getenv("MUYE_MULTI_AGENT_ENABLED"), False),
             multi_agent_timeout_seconds=float(os.getenv("MUYE_MULTI_AGENT_TIMEOUT_SECONDS", "60")),
+            # DeepSeek 会诊模型
+            deepseek_api_url=os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/v1"),
+            deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+            deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            # 小米会诊模型
+            xiaomi_api_url=os.getenv("XIAOMI_API_URL", ""),
+            xiaomi_api_key=os.getenv("XIAOMI_API_KEY", ""),
+            xiaomi_model=os.getenv("XIAOMI_MODEL", ""),
         )

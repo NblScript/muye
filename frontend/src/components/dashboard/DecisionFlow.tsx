@@ -202,6 +202,56 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
             点击查看完整决策链路 →
           </div>
         )}
+        {/* 多智能体会诊摘要卡片 */}
+        {rag?.consultation_detail && (() => {
+          const detail = rag.consultation_detail
+          const experts = detail.experts ?? {}
+          const confidence = rag.confidence ?? 0
+          const agreement = rag.agreement ?? ''
+          const activeCount = detail.active_count ?? Object.keys(experts).length
+          const agreementLabel: Record<string, string> = {
+            unanimous: '一致通过',
+            majority: '多数通过',
+            divided: '意见分歧',
+            single_expert: '单专家',
+            all_failed: '全部失败',
+          }
+          return (
+            <div style={{
+              marginTop: 10, padding: '8px 10px',
+              background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)',
+              borderLeft: '3px solid var(--accent-cyan)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                  多智能体会诊 · {activeCount} 位专家
+                </span>
+                <span style={{
+                  fontSize: 11, fontWeight: 600,
+                  color: agreement === 'unanimous' ? 'var(--accent-green)'
+                    : agreement === 'majority' ? 'var(--accent-amber)'
+                    : agreement === 'all_failed' ? 'var(--accent-red)'
+                    : 'var(--text-muted)',
+                }}>
+                  {agreementLabel[agreement] ?? agreement} · {(confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+              {Object.keys(experts).length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {Object.entries(experts).map(([role, info]) => (
+                    <span key={role} style={{
+                      fontSize: 10, padding: '2px 6px',
+                      background: 'var(--bg-elevated)', borderRadius: 4,
+                      color: 'var(--text-secondary)',
+                    }}>
+                      {info.name}: {info['农药名称']}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </Card>
 
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="AI 决策链路详情" width={460}>
