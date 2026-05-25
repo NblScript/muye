@@ -346,12 +346,14 @@ class ExpertConsultation:
         """从 LLM 响应中提取 JSON 并校验 schema。"""
         content = self._extract_content(raw)
         if content is None:
+            self.logger.debug("_extract_content 返回 None, raw keys=%s", list(raw.keys()) if isinstance(raw, dict) else type(raw))
             return None
 
         # 解析 JSON
         try:
             parsed = json.loads(content) if isinstance(content, str) else content
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            self.logger.debug("JSON 解析失败: %s, content[:200]=%s", e, str(content)[:200])
             return None
 
         # 清理和规范化
@@ -362,7 +364,11 @@ class ExpertConsultation:
         try:
             validate(instance=parsed, schema=EXPERT_OUTPUT_SCHEMA)
             return parsed
-        except ValidationError:
+        except ValidationError as e:
+            self.logger.debug(
+                "schema 校验失败: %s, parsed=%s",
+                e.message, json.dumps(parsed, ensure_ascii=False)[:300],
+            )
             return None
 
     @staticmethod
@@ -392,14 +398,47 @@ class ExpertConsultation:
 
     @staticmethod
     def _normalize(payload: dict[str, Any]) -> dict[str, Any]:
-        """确保必填字段存在。"""
-        med = payload.setdefault("用药", {})
+        """确保必填字段存在，处理 LLM 返回的各种变体。"""
+        # 用药为数组时取第一个元素
+        med = payload.get("用药")
+        if isinstance(med, list):
+            if med:
+                first = med[0] if isinstance(med[0], dict) else {}
+                payload["用药"] = first
+            else:
+                payload["用药"] = {}
+        if not isinstance(payload.get("用药"), dict):
+            payload["用药"] = {}
+
+        med = payload["用药"]
+
+        # 字段名映射（LLM 可能返回各种变体）
+        field_aliases: dict[str, list[str]] = {
+            "农药名称": ["药剂名称", "农药", "药品名称", "pesticide"],
+            "浓度": ["浓度", "含量", "concentration"],
+            "配比": ["配比", "稀释倍数", "稀释比例", "ratio"],
+            "总量": ["总量", "使用剂量", "用量", "总用量", "dosage"],
+            "安全提示": ["安全提示", "注意事项", "安全注意", "warnings"],
+        }
+        for canonical, aliases in field_aliases.items():
+            if canonical not in med or not med[canonical]:
+                for alias in aliases:
+                    if alias in med and med[alias]:
+                        med[canonical] = med[alias]
+                        break
+
+        # 确保必填字段存在
         for key in ("农药名称", "浓度", "配比", "总量", "安全提示"):
-            if key not in med:
+            if key not in med or not med[key]:
                 if key == "安全提示":
                     med[key] = ["请按说明书使用"]
                 else:
                     med[key] = "未知"
+
+        # 安全提示必须是数组
+        if isinstance(med.get("安全提示"), str):
+            med["安全提示"] = [med["安全提示"]]
+
         return payload
 
     @staticmethod
