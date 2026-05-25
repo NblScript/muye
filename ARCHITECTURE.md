@@ -66,6 +66,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 
 - **入口**：通过 `app/services/workflow_service.py` 调用
 - **核心**：`modules/decision/`
+  - `router.py` — DecisionRouter，路由层（`MUYE_ROUTER_ENABLED=true` 启用），评估熟悉度后选择专家路径或多智能体会诊
   - `ai_decision.py` — DecisionEngine，调用 Qwen API（支持单 LLM 和多智能体会诊两种模式）
   - `decision_context.py` — SqliteDecisionContextProvider
   - `rag/` — RAG 子系统
@@ -77,7 +78,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
     - `consultation.py` — ExpertConsultation 会诊编排（接收 `providers` 字典，并行调用 3 个不同 LLM + 降级）
     - `voting.py` — 加权投票 + 置信度计算 + 分歧检测
     - `knowledge_loader.py` — 知识加载器
-- **数据流**：害虫列表 + 天气 → RAG 检索 → Qwen API → 用药/农事建议 JSON
+- **数据流**：害虫列表 + 天气 → RAG 检索 → [路由评估] → 专家路径（单 Qwen）或多智能体会诊（3 模型） → 用药/农事建议 JSON
 
 ### 3. drone（无人机域）
 
@@ -118,9 +119,10 @@ YOLO 检测 (detection)
 RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
     │ 增强上下文
     ▼
-Qwen 决策 (decision/ai_decision)
-    │ 单 LLM 模式：直接输出（降级后备）
-    │ 多智能体模式：3 专家 × 3 模型并行 → 加权投票
+路由评估 (decision/router)  ←── MUYE_ROUTER_ENABLED=true
+    │ familiarity_score
+    ├─ ≥ 0.6 + 农药匹配 ≥ 2 → 专家路径（单 Qwen LLM 快速决策）
+    └─ 否则 → 多智能体会诊（3 专家 × 3 模型并行 → 加权投票）
     │ 用药建议 + 农事建议
     ▼
 任务规划 (drone/mission_planner)
@@ -158,3 +160,4 @@ Qwen 决策 (decision/ai_decision)
 | 独立 YOLO 服务 | 检测与主 API 解耦 | 内嵌推理（阻塞主流程） |
 | 多模型多智能体会诊 | 多视角投票提高决策质量，不同 LLM 增加多样性 | 单 LLM 决策（单一视角） |
 | 配置开关控制 | 渐进式启用新功能 | 硬切换（风险高） |
+| 决策路由层 | 熟悉场景走快速路径节省延迟，陌生场景走多模型保质量 | 固定路径（无法兼顾效率与质量） |

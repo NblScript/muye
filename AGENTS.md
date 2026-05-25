@@ -19,7 +19,7 @@
 |---|------|
 | 前端 | React 19 + TypeScript + Vite + Ant Design（暗色大屏） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
-| AI | YOLOv8（检测）+ Qwen/DeepSeek/Xiaomi（多模型决策）+ LangChain RAG + ChromaDB |
+| AI | YOLOv8（检测）+ Qwen/DeepSeek/Xiaomi（多模型决策）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
 | 无人机 | PX4 SITL + MAVSDK（仿真） |
 | 存储 | SQLite（结构化）+ JSONL（事件流）+ ChromaDB（向量） |
 
@@ -55,7 +55,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | 域 | 路径 | 职责 |
 |----|------|------|
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
-| decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 多智能体会诊 |
+| decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 |
 | drone | `modules/drone/` | 无人机控制 + 任务规划 + PX4 仿真 |
 | infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
 
@@ -104,6 +104,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | DashScope | RAG 文本向量化 | `DASHSCOPE_API_KEY` |
 | PX4 SITL | 无人机仿真 | 自动启动 |
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
+| DecisionRouter | 路由决策路径（专家/多智能体） | `MUYE_ROUTER_ENABLED`（bool，默认 false）· `MUYE_ROUTER_FAMILIARITY_THRESHOLD`（float，默认 0.6） |
 
 ## 遇到无法解决的问题
 
@@ -114,6 +115,24 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 4. 向用户发出明确的问题描述和建议
 
 ## 多智能体会诊
+
+### 路由层（Router）
+
+系统支持决策路由（默认关闭）。通过 `MUYE_ROUTER_ENABLED=true` 启用。
+
+路由层位于 RAG 检索与决策执行之间，通过 `DecisionRouter`（`modules/decision/router.py`）评估当前场景的熟悉度，决定走快速专家路径还是多智能体会诊。
+
+**评分公式**：40% 农药匹配 + 25% 历史案例 + 20% 相似度 + 15% 目录匹配
+
+**路由规则**：
+- 熟悉度 ≥ 0.6 且农药匹配 ≥ 2 → **专家路径**（expert）：单 Qwen LLM 快速决策
+- 否则 → **多智能体会诊**（multi_agent）：3 模型并行会诊
+
+**事件**：路由决策产生 `stage="router", status="routed"` 事件，包含 `path`、`familiarity_score`、`reason` 字段。
+
+**前端展示**：专家路径显示绿色"专家模型快速路径"徽章，多智能体路径显示现有的青色会诊卡片。
+
+### 多智能体会诊
 
 系统支持多智能体专家会诊模式（默认关闭）。通过 `MUYE_MULTI_AGENT_ENABLED=true` 启用。
 
