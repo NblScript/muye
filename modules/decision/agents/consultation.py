@@ -306,41 +306,58 @@ class ExpertConsultation:
         provider: dict[str, str],
         request_id: str,
         messages: list[dict[str, str]],
+        retries: int = 2,
     ) -> dict[str, Any]:
-        """调用 LLM API（Qwen 或 DeepSeek）。"""
+        """调用 LLM API（Qwen 或 DeepSeek），支持指数退避重试。"""
         url = self._resolve_chat_url(provider["api_url"])
-        try:
-            response = await self._client.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {provider['api_key']}",
-                    "Content-Type": "application/json",
-                    "X-Request-ID": request_id,
-                },
-                json={
-                    "model": provider["model"],
-                    "temperature": 0.1,
-                    "response_format": {"type": "json_object"},
-                    "messages": messages,
-                },
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            body = e.response.text[:500] if e.response else ""
-            self.logger.error(
-                "LLM API (%s) 返回 HTTP %s: url=%s body=%s",
-                provider.get("model", "unknown"),
-                e.response.status_code if e.response else "N/A",
-                url, body,
-            )
-            raise
-        except httpx.RequestError as e:
-            self.logger.error(
-                "LLM API (%s) 请求失败: url=%s error=%s",
-                provider.get("model", "unknown"), url, e,
-            )
-            raise
+        model = provider.get("model", "unknown")
+        last_exc: Exception | None = None
+        for attempt in range(1 + retries):
+            try:
+                response = await self._client.post(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {provider['api_key']}",
+                        "Content-Type": "application/json",
+                        "X-Request-ID": request_id,
+                    },
+                    json={
+                        "model": model,
+                        "temperature": 0.1,
+                        "response_format": {"type": "json_object"},
+                        "messages": messages,
+                    },
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                body = e.response.text[:500] if e.response else ""
+                status = e.response.status_code if e.response else 0
+                if status < 500 or attempt == retries:
+                    self.logger.error(
+                        "LLM API (%s) 返回 HTTP %s: url=%s body=%s",
+                        model, status, url, body,
+                    )
+                    raise
+                last_exc = e
+                self.logger.warning(
+                    "LLM API (%s) 返回 %d，重试 %d/%d",
+                    model, status, attempt + 1, retries,
+                )
+            except httpx.RequestError as e:
+                if attempt == retries:
+                    self.logger.error(
+                        "LLM API (%s) 请求失败: url=%s error=%s",
+                        model, url, e,
+                    )
+                    raise
+                last_exc = e
+                self.logger.warning(
+                    "LLM API (%s) 请求失败，重试 %d/%d: %s",
+                    model, attempt + 1, retries, e,
+                )
+            await asyncio.sleep(0.5 * (2 ** attempt))
+        raise last_exc  # type: ignore[misc]
 
     def _extract_and_validate(self, raw: dict[str, Any]) -> dict[str, Any] | None:
         """从 LLM 响应中提取 JSON 并校验 schema。"""

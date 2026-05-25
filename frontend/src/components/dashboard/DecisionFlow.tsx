@@ -52,9 +52,11 @@ function buildSteps(task: WorkflowTaskState | null): StepData[] {
   if (hasDecision) {
     const ragSource = decisionPath === 'expert'
       ? '专家模型（快速路径）'
-      : isMultiAgent
-        ? '多智能体会诊'
-        : hasRag ? 'RAG 知识检索 + 千问大模型' : '千问大模型'
+      : decisionPath === 'escalated'
+        ? '专家路径异常 → 多智能体升级'
+        : isMultiAgent
+          ? '多智能体会诊'
+          : hasRag ? 'RAG 知识检索 + 千问大模型' : '千问大模型'
     ragFields.push({ label: '决策模式', value: ragSource })
   }
   if (hasRag) {
@@ -224,6 +226,29 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
                 已知害虫+作物组合，单模型快速决策
+              </div>
+            </div>
+          )
+        })()}
+        {/* 专家路径升级摘要 */}
+        {rag?.decision_path === 'escalated' && (() => {
+          const famScore = rag.familiarity_score ?? 0
+          return (
+            <div style={{
+              marginTop: 10, padding: '8px 10px',
+              background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)',
+              borderLeft: '3px solid var(--accent-amber)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-amber)' }}>
+                  专家路径异常 → 多智能体升级
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  匹配度 {(famScore * 100).toFixed(0)}%
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                专家模型输出异常，已自动升级到多智能体会诊
               </div>
             </div>
           )

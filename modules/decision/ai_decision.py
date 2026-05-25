@@ -181,16 +181,53 @@ class DecisionEngine:
                         },
                     )
                 if routing.path == "expert":
-                    decision = await self._request_qwen_decision(
-                        structured_input_text=structured_input_text,
-                        request_id=request_id,
-                        client_ip=client_ip,
-                        pest_detections=pest_detections,
-                        field_context=field_context,
-                        weather_data=weather,
-                    )
-                    rag_context["decision_path"] = "expert"
-                    rag_context["familiarity_score"] = routing.familiarity_score
+                    try:
+                        decision = await self._request_qwen_decision(
+                            structured_input_text=structured_input_text,
+                            request_id=request_id,
+                            client_ip=client_ip,
+                            pest_detections=pest_detections,
+                            field_context=field_context,
+                            weather_data=weather,
+                        )
+                        rag_context["decision_path"] = "expert"
+                        rag_context["familiarity_score"] = routing.familiarity_score
+                    except (DecisionEngineError, httpx.HTTPStatusError, httpx.RequestError) as exc:
+                        if self.consultation is not None:
+                            self.logger.warning(
+                                "专家路径失败，升级到多智能体会诊: %s", exc,
+                            )
+                            if self.event_bus:
+                                self.event_bus.publish(
+                                    request_id=request_id,
+                                    stage="router",
+                                    status="escalated",
+                                    message=f"专家路径输出异常，升级到多智能体会诊: {exc}",
+                                    payload={
+                                        "from": "expert",
+                                        "to": "multi_agent",
+                                        "reason": str(exc),
+                                    },
+                                )
+                            consultation_result = await self.consultation.consult(
+                                pest_detections=pest_detections,
+                                weather_data=weather,
+                                field_context=field_context,
+                                decision_context=decision_context,
+                                rag_context_text=rag_context_text,
+                                request_id=request_id,
+                                client_ip=client_ip,
+                            )
+                            decision = {"用药": consultation_result["用药"]}
+                            if "农事建议" in consultation_result:
+                                decision["农事建议"] = consultation_result["农事建议"]
+                            rag_context["consultation_detail"] = consultation_result.get("detail", {})
+                            rag_context["confidence"] = consultation_result.get("confidence", 0)
+                            rag_context["agreement"] = consultation_result.get("agreement", "")
+                            rag_context["decision_path"] = "escalated"
+                            rag_context["familiarity_score"] = routing.familiarity_score
+                        else:
+                            raise
                 else:
                     consultation_result = await self.consultation.consult(
                         pest_detections=pest_detections,

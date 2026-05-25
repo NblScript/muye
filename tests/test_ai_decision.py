@@ -369,3 +369,116 @@ async def test_ai_decision_includes_optional_decision_context_when_provider_enab
     assert result["decision_context"]["source"] == "stub"
     assert "补充决策参考" in result["structured_input_text"]
     assert "吡虫啉" in result["structured_input_text"]
+
+
+class StubConsultation:
+    """Mock consultation that returns a valid decision."""
+
+    async def consult(self, **kwargs):
+        return {
+            "用药": {
+                "农药名称": "氯虫苯甲酰胺",
+                "浓度": "20%",
+                "配比": "1500倍液",
+                "总量": "40mL/亩",
+                "安全提示": ["低毒，施药时请佩戴防护装备"],
+            },
+            "农事建议": ["建议立即施药"],
+            "confidence": 1.0,
+            "agreement": "unanimous",
+            "detail": {
+                "experts": {},
+                "failed_roles": [],
+                "active_count": 3,
+                "vote_distribution": {"氯虫苯甲酰胺": 1.0},
+            },
+        }
+
+
+class StubRouter:
+    """Mock router that always routes to expert."""
+
+    def __init__(self, threshold=0.6):
+        self.familiarity_threshold = threshold
+
+    def route(self, signals):
+        from modules.decision.router import RoutingDecision
+        return RoutingDecision(
+            path="expert",
+            familiarity_score=0.9,
+            reason="test: always expert",
+        )
+
+
+@pytest.mark.asyncio
+async def test_expert_path_escalates_to_multi_agent_on_failure() -> None:
+    """When expert path fails (HTTP error), escalate to multi-agent consultation."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Return 500 to simulate API failure
+        return httpx.Response(500, text="Internal Server Error")
+
+    engine = DecisionEngine(
+        api_url="https://qwen.test/chat",
+        api_key="qwen-key",
+        model="qwen-max",
+        weather_client=StubWeatherClient(),
+        transport=httpx.MockTransport(handler),
+        consultation=StubConsultation(),
+        router=StubRouter(),
+    )
+    try:
+        result = await engine.generate_decision(
+            pest_detections=[
+                {"pest_type": "aphid", "confidence": 0.95, "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4}}
+            ],
+            field_context={
+                "name": "牧野示范田",
+                "area_mu": 10.0,
+                "weather_location": "郑州",
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
+                "geofence": [[113.6241, 34.7467], [113.6257, 34.7467], [113.6257, 34.7479]],
+            },
+            request_id="req-escalate",
+        )
+    finally:
+        await engine.close()
+
+    assert result["decision"]["用药"]["农药名称"] == "氯虫苯甲酰胺"
+    assert result["rag_context"]["decision_path"] == "escalated"
+    assert result["rag_context"]["familiarity_score"] == 0.9
+
+
+@pytest.mark.asyncio
+async def test_expert_path_raises_when_no_consultation() -> None:
+    """When expert path fails and no consultation module, re-raise the error."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="Internal Server Error")
+
+    engine = DecisionEngine(
+        api_url="https://qwen.test/chat",
+        api_key="qwen-key",
+        model="qwen-max",
+        weather_client=StubWeatherClient(),
+        transport=httpx.MockTransport(handler),
+        consultation=None,  # No consultation module
+        router=StubRouter(),
+    )
+    try:
+        with pytest.raises((DecisionEngineError, httpx.HTTPStatusError)):
+            await engine.generate_decision(
+                pest_detections=[
+                    {"pest_type": "aphid", "confidence": 0.95, "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4}}
+                ],
+                field_context={
+                    "name": "牧野示范田",
+                    "area_mu": 10.0,
+                    "weather_location": "郑州",
+                    "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
+                    "geofence": [[113.6241, 34.7467], [113.6257, 34.7467], [113.6257, 34.7479]],
+                },
+                request_id="req-no-consult",
+            )
+    finally:
+        await engine.close()

@@ -86,7 +86,7 @@ export interface RagContext {
   consultation_detail?: ConsultationDetail
   confidence?: number
   agreement?: string
-  decision_path?: 'expert' | 'multi_agent'
+  decision_path?: 'expert' | 'multi_agent' | 'escalated'
   familiarity_score?: number
 }
 
