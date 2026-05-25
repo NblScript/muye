@@ -89,6 +89,10 @@ class MuyeConfig:
     multi_agent_enabled: bool = False
     multi_agent_timeout_seconds: float = 60.0
 
+    # 路由层配置
+    router_enabled: bool = False
+    router_familiarity_threshold: float = 0.6
+
     # DeepSeek 会诊模型配置
     deepseek_api_url: str = "https://api.deepseek.com/v1"
     deepseek_api_key: str = ""
@@ -224,6 +228,9 @@ class MuyeConfig:
             # 多智能体会诊配置
             multi_agent_enabled=_parse_env_bool(os.getenv("MUYE_MULTI_AGENT_ENABLED"), False),
             multi_agent_timeout_seconds=float(os.getenv("MUYE_MULTI_AGENT_TIMEOUT_SECONDS", "60")),
+            # 路由层配置
+            router_enabled=_parse_env_bool(os.getenv("MUYE_ROUTER_ENABLED"), False),
+            router_familiarity_threshold=float(os.getenv("MUYE_ROUTER_FAMILIARITY_THRESHOLD", "0.6")),
             # DeepSeek 会诊模型
             deepseek_api_url=os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/v1"),
             deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),

@@ -12,9 +12,11 @@ from jsonschema import ValidationError, validate
 
 if TYPE_CHECKING:
     from modules.decision.agents.consultation import ExpertConsultation
+    from modules.decision.router import DecisionRouter
 
 from modules.infra.common import log_event, strip_code_fence
 from modules.decision.decision_context import DecisionContextProvider
+from modules.decision.router import DecisionRouter, RoutingSignals
 from modules.infra.event_bus import FileEventBus
 from modules.decision.rag.retriever import DecisionRAGRetriever
 from modules.infra.weather import WeatherClient
@@ -68,6 +70,7 @@ class DecisionEngine:
         rag_retriever: DecisionRAGRetriever | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         consultation: ExpertConsultation | None = None,
+        router: DecisionRouter | None = None,
     ) -> None:
         self.api_url = api_url
         self.api_key = api_key
@@ -79,6 +82,7 @@ class DecisionEngine:
         self.decision_context_provider = decision_context_provider
         self.rag_retriever = rag_retriever
         self.consultation = consultation
+        self.router = router
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
@@ -160,8 +164,52 @@ class DecisionEngine:
                     field_context=field_context,
                     weather_data=weather,
                 )
+            elif self.router is not None:
+                # 路由层决策
+                signals = self._collect_routing_signals(rag_context, decision_context)
+                routing = self.router.route(signals)
+                if self.event_bus:
+                    self.event_bus.publish(
+                        request_id=request_id,
+                        stage="router",
+                        status="routed",
+                        message=f"路由到{'专家模型' if routing.path == 'expert' else '多智能体会诊'}路径",
+                        payload={
+                            "path": routing.path,
+                            "familiarity_score": routing.familiarity_score,
+                            "reason": routing.reason,
+                        },
+                    )
+                if routing.path == "expert":
+                    decision = await self._request_qwen_decision(
+                        structured_input_text=structured_input_text,
+                        request_id=request_id,
+                        client_ip=client_ip,
+                        pest_detections=pest_detections,
+                        field_context=field_context,
+                        weather_data=weather,
+                    )
+                    rag_context["decision_path"] = "expert"
+                    rag_context["familiarity_score"] = routing.familiarity_score
+                else:
+                    consultation_result = await self.consultation.consult(
+                        pest_detections=pest_detections,
+                        weather_data=weather,
+                        field_context=field_context,
+                        decision_context=decision_context,
+                        rag_context_text=rag_context_text,
+                        request_id=request_id,
+                        client_ip=client_ip,
+                    )
+                    decision = {"用药": consultation_result["用药"]}
+                    if "农事建议" in consultation_result:
+                        decision["农事建议"] = consultation_result["农事建议"]
+                    rag_context["consultation_detail"] = consultation_result.get("detail", {})
+                    rag_context["confidence"] = consultation_result.get("confidence", 0)
+                    rag_context["agreement"] = consultation_result.get("agreement", "")
+                    rag_context["decision_path"] = "multi_agent"
+                    rag_context["familiarity_score"] = routing.familiarity_score
             elif self.consultation is not None:
-                # 多智能体会诊路径（三模型并行）
                 consultation_result = await self.consultation.consult(
                     pest_detections=pest_detections,
                     weather_data=weather,
@@ -171,16 +219,14 @@ class DecisionEngine:
                     request_id=request_id,
                     client_ip=client_ip,
                 )
-                decision = {
-                    "用药": consultation_result["用药"],
-                }
+                decision = {"用药": consultation_result["用药"]}
                 if "农事建议" in consultation_result:
                     decision["农事建议"] = consultation_result["农事建议"]
                 rag_context["consultation_detail"] = consultation_result.get("detail", {})
                 rag_context["confidence"] = consultation_result.get("confidence", 0)
                 rag_context["agreement"] = consultation_result.get("agreement", "")
+                rag_context["decision_path"] = "multi_agent"
             else:
-                # 未配置多智能体会诊时回退到单 LLM 调用
                 decision = await self._request_qwen_decision(
                     structured_input_text=structured_input_text,
                     request_id=request_id,
@@ -189,13 +235,7 @@ class DecisionEngine:
                     field_context=field_context,
                     weather_data=weather,
                 )
-                log_event(
-                    self.logger,
-                    logging.WARNING,
-                    "未配置多智能体会诊，回退到单 LLM 决策",
-                    request_id=request_id,
-                    client_ip=client_ip,
-                )
+                rag_context["decision_path"] = "expert"
             if self.event_bus:
                 self.event_bus.publish(
                     request_id=request_id,
@@ -387,6 +427,24 @@ class DecisionEngine:
                 crop_name=crop_name or "",
             )
             return "", {}
+
+    @staticmethod
+    def _collect_routing_signals(
+        rag_context: dict[str, Any],
+        decision_context: dict[str, Any],
+    ) -> RoutingSignals:
+        """从已计算的 RAG 和决策上下文中提取路由信号。"""
+        pesticides = rag_context.get("pesticides", [])
+        cases = rag_context.get("historical_cases", [])
+        best_score = max((p.get("score", 0) for p in pesticides), default=0.0)
+        candidates = decision_context.get("candidate_pesticides", [])
+
+        return RoutingSignals(
+            pesticide_match_count=len(pesticides),
+            historical_case_count=len(cases),
+            best_pesticide_score=best_score,
+            candidate_pesticide_count=len(candidates),
+        )
 
     def _build_decision_context(
         self,

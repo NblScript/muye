@@ -26,6 +26,7 @@ from fastapi import FastAPI
 
 from modules.decision.ai_decision import DecisionEngine
 from modules.decision.agents.consultation import ExpertConsultation
+from modules.decision.router import DecisionRouter
 from modules.infra.common import (
     CONFIG_DIR,
     DATA_DIR,
@@ -365,6 +366,12 @@ class MuyeApplication:
                 timeout_seconds=self.config.multi_agent_timeout_seconds,
             )
             self.logger.info("多智能体会诊模式已启用，providers: %s", list(providers.keys()))
+        router = None
+        if self.config.router_enabled and consultation is not None:
+            router = DecisionRouter(
+                familiarity_threshold=self.config.router_familiarity_threshold,
+            )
+            self.logger.info("决策路由层已启用，阈值: %.2f", self.config.router_familiarity_threshold)
         self.decision_engine = DecisionEngine(
             api_url=self.config.qwen_api_url,
             api_key=self.config.qwen_api_key,
@@ -377,6 +384,7 @@ class MuyeApplication:
             decision_context_provider=decision_context_provider,
             rag_retriever=self.rag_retriever,
             consultation=consultation,
+            router=router,
         )
         self.drone_controller = DroneController(
             drone_config=self.drone_config,

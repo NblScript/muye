@@ -86,6 +86,8 @@ export interface RagContext {
   consultation_detail?: ConsultationDetail
   confidence?: number
   agreement?: string
+  decision_path?: 'expert' | 'multi_agent'
+  familiarity_score?: number
 }
 
 export interface WorkflowTaskState {
