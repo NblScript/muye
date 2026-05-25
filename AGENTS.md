@@ -19,7 +19,7 @@
 |---|------|
 | 前端 | React 19 + TypeScript + Vite + Ant Design（暗色大屏） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
-| AI | YOLOv8（检测）+ Qwen（决策）+ LangChain RAG + ChromaDB |
+| AI | YOLOv8（检测）+ Qwen/DeepSeek/Xiaomi（多模型决策）+ LangChain RAG + ChromaDB |
 | 无人机 | PX4 SITL + MAVSDK（仿真） |
 | 存储 | SQLite（结构化）+ JSONL（事件流）+ ChromaDB（向量） |
 
@@ -98,7 +98,9 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | 服务 | 用途 | 配置项 |
 |------|------|--------|
 | 和风天气 | 实时气象数据 | `QWEATHER_API_KEY` |
-| 千问 API | AI 结构化决策 | `DASHSCOPE_API_KEY` |
+| 千问 API (Qwen) | AI 决策（昆虫学家）+ RAG 向量化 | `DASHSCOPE_API_KEY` / `QWEN_API_URL` / `QWEN_MODEL` |
+| DeepSeek | AI 决策（农学家） | `DEEPSEEK_API_KEY` / `DEEPSEEK_API_URL` / `DEEPSEEK_MODEL` |
+| 小米 MiMo | AI 决策（植保专家） | `XIAOMI_API_KEY` / `XIAOMI_API_URL` / `XIAOMI_MODEL` |
 | DashScope | RAG 文本向量化 | `DASHSCOPE_API_KEY` |
 | PX4 SITL | 无人机仿真 | 自动启动 |
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
@@ -115,9 +117,17 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 
 系统支持多智能体专家会诊模式（默认关闭）。通过 `MUYE_MULTI_AGENT_ENABLED=true` 启用。
 
-启用后，决策管线变为：3 个专家角色（昆虫学家/农学家/植保专家）并行调用 Qwen API，各自从 RAG 检索不同知识，加权投票汇总后输出决策。
+启用后，决策管线变为：3 个专家角色分别调用不同 LLM 提供商并行推理，各自从 RAG 检索不同知识，加权投票汇总后输出决策。
+
+| 专家角色 | LLM 提供商 | 模型 |
+|---------|-----------|------|
+| 昆虫学家 | Qwen（千问） | `qwen-max-latest` |
+| 农学家 | DeepSeek | `deepseek-chat` |
+| 植保专家 | Xiaomi Mimic | `mimo-v2.5-pro` |
+
+`ExpertConsultation` 通过 `providers` 字典接收各角色的 LLM 配置（api_url/api_key/model），每个专家角色通过 `llm_provider` 字段指定所用提供商。单 LLM 路径仍作为降级后备。
 
 代码位于 `modules/decision/agents/`：
-- `expert_roles.py` — 角色定义
-- `consultation.py` — 会诊编排
+- `expert_roles.py` — 角色定义（含 `llm_provider` 字段）
+- `consultation.py` — 会诊编排（接收 `providers` 字典）
 - `voting.py` — 投票机制

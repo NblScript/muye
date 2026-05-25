@@ -61,12 +61,16 @@ RAG 检索失败时不阻断主流程：
 
 启用后（`MUYE_MULTI_AGENT_ENABLED=true`），RAG 检索为每个专家角色提供不同角度的知识：
 
-| 专家角色 | RAG 检索重点 |
-|---------|-------------|
-| 昆虫学家 | 害虫生活习性、危害特征、繁殖规律 |
-| 农学家 | 作物状态、气象影响、综合防治策略 |
-| 植保专家 | 农药选择、用量计算、安全间隔期、禁忌 |
+| 专家角色 | LLM 提供商 | 模型 | 配置项 | RAG 检索重点 |
+|---------|-----------|------|--------|-------------|
+| 昆虫学家 | Qwen（千问） | `qwen-max-latest` | `QWEN_API_URL` / `QWEN_API_KEY` / `QWEN_MODEL` | 害虫生活习性、危害特征、繁殖规律 |
+| 农学家 | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_URL` / `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | 作物状态、气象影响、综合防治策略 |
+| 植保专家 | Xiaomi Mimic | `mimo-v2.5-pro` | `XIAOMI_API_URL` / `XIAOMI_API_KEY` / `XIAOMI_MODEL` | 农药选择、用量计算、安全间隔期、禁忌 |
+
+`ExpertConsultation` 接收 `providers` 字典（每个角色对应 api_url/api_key/model），通过 `llm_provider` 字段路由到对应 LLM。系统提示词包含明确的 JSON 格式示例以规范输出。`_invoke_llm` 方法（原 `_invoke_qwen`）统一处理各提供商调用，`_normalize` 方法处理字段名别名和数组转对象。
+
+单 LLM 路径（Qwen）仍作为降级后备。
 
 代码位于 `modules/decision/agents/`：
-- `consultation.py` — 为每个角色调用 RAG 检索，并行调用 3 个专家
-- `expert_roles.py` — 定义每个角色的检索模板（`retrieval_query_template`）
+- `consultation.py` — 为每个角色调用 RAG 检索，通过 `providers` 字典并行调用 3 个不同 LLM
+- `expert_roles.py` — 定义每个角色的检索模板（`retrieval_query_template`）和 `llm_provider` 字段
