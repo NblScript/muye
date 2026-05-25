@@ -66,7 +66,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 
 - **入口**：通过 `app/services/workflow_service.py` 调用
 - **核心**：`modules/decision/`
-  - `router.py` — DecisionRouter，路由层（`MUYE_ROUTER_ENABLED=true` 启用），评估熟悉度后选择专家路径或多智能体会诊
+  - `router.py` — DecisionRouter，路由层（`MUYE_ROUTER_ENABLED=true` 启用），评估熟悉度后选择专家路径或多智能体会诊。专家路径失败时自动升级到多智能体会诊（`decision_path="escalated"`）
   - `ai_decision.py` — DecisionEngine，调用 Qwen API（支持单 LLM 和多智能体会诊两种模式）
   - `decision_context.py` — SqliteDecisionContextProvider
   - `rag/` — RAG 子系统
@@ -75,10 +75,11 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
     - `retriever.py` — DecisionRAGRetriever（害虫感知过滤）
   - `agents/` — 多智能体会诊子系统（`MUYE_MULTI_AGENT_ENABLED=true` 启用）
     - `expert_roles.py` — 3 个专家角色定义（昆虫学家/农学家/植保专家），各角色通过 `llm_provider` 字段指定 LLM 提供商
-    - `consultation.py` — ExpertConsultation 会诊编排（接收 `providers` 字典，并行调用 3 个不同 LLM + 降级）
+    - `consultation.py` — ExpertConsultation 会诊编排（接收 `providers` 字典，并行调用 3 个不同 LLM + 降级 + 指数退避重试）
     - `voting.py` — 加权投票 + 置信度计算 + 分歧检测
     - `knowledge_loader.py` — 知识加载器
 - **数据流**：害虫列表 + 天气 → RAG 检索 → [路由评估] → 专家路径（单 Qwen）或多智能体会诊（3 模型） → 用药/农事建议 JSON
+- **知识库规模**：农药目录 30 条、作物目录 5 种、害虫同义词 27 组、历史决策 200+ 条
 
 ### 3. drone（无人机域）
 
@@ -122,7 +123,8 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 路由评估 (decision/router)  ←── MUYE_ROUTER_ENABLED=true
     │ familiarity_score
     ├─ ≥ 0.6 + 农药匹配 ≥ 2 → 专家路径（单 Qwen LLM 快速决策）
-    └─ 否则 → 多智能体会诊（3 专家 × 3 模型并行 → 加权投票）
+    │   └─ 失败时自动升级 → 多智能体会诊（decision_path="escalated"）
+    └─ 否则 → 多智能体会诊（3 专家 × 3 模型并行 → 加权投票，LLM 调用支持指数退避重试）
     │ 用药建议 + 农事建议
     ▼
 任务规划 (drone/mission_planner)
@@ -161,3 +163,5 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 | 多模型多智能体会诊 | 多视角投票提高决策质量，不同 LLM 增加多样性 | 单 LLM 决策（单一视角） |
 | 配置开关控制 | 渐进式启用新功能 | 硬切换（风险高） |
 | 决策路由层 | 熟悉场景走快速路径节省延迟，陌生场景走多模型保质量 | 固定路径（无法兼顾效率与质量） |
+| 专家路径自动升级 | 专家路径失败时降级到多智能体会诊，保证决策总能产出 | 直接报错（决策中断） |
+| LLM 调用指数退避重试 | 瞬态网络/5xx 错误自动恢复，减少单次失败导致专家退出投票 | 单次调用失败即放弃 |

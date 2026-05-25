@@ -128,9 +128,16 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 - 熟悉度 ≥ 0.6 且农药匹配 ≥ 2 → **专家路径**（expert）：单 Qwen LLM 快速决策
 - 否则 → **多智能体会诊**（multi_agent）：3 模型并行会诊
 
-**事件**：路由决策产生 `stage="router", status="routed"` 事件，包含 `path`、`familiarity_score`、`reason` 字段。
+**专家路径自动升级**：当专家路径失败（JSON 解析错误、HTTP 5xx、网络超时等）且存在 `consultation` 模块时，自动升级到多智能体会诊路径。`decision_path` 设为 `"escalated"`。无 `consultation` 模块时保持原抛异常行为。
 
-**前端展示**：专家路径显示绿色"专家模型快速路径"徽章，多智能体路径显示现有的青色会诊卡片。
+**事件**：
+- 路由决策产生 `stage="router", status="routed"` 事件，包含 `path`、`familiarity_score`、`reason` 字段
+- 升级时产生 `stage="router", status="escalated"` 事件，包含 `from`、`to`、`reason` 字段
+
+**前端展示**：
+- 专家路径：绿色"专家模型快速路径"徽章
+- 多智能体路径：青色会诊卡片
+- 升级路径：橙色"专家路径异常 → 多智能体升级"徽章
 
 ### 多智能体会诊
 
@@ -145,6 +152,8 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | 植保专家 | Xiaomi Mimic | `mimo-v2.5-pro` |
 
 `ExpertConsultation` 通过 `providers` 字典接收各角色的 LLM 配置（api_url/api_key/model），每个专家角色通过 `llm_provider` 字段指定所用提供商。单 LLM 路径仍作为降级后备。
+
+**LLM 调用重试**：`_invoke_llm()` 支持指数退避重试（最多 2 次，共 3 次尝试）。仅重试 5xx 和网络错误，4xx 不重试。退避间隔 0.5s → 1s。
 
 代码位于 `modules/decision/agents/`：
 - `expert_roles.py` — 角色定义（含 `llm_provider` 字段）

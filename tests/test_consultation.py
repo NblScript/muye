@@ -213,3 +213,153 @@ async def test_expert_uses_correct_provider():
 
     # entomologist→qwen, agronomist→deepseek, pesticide_specialist→xiaomi
     assert captured_providers == ["qwen-max", "deepseek-chat", "xiaomi-model"]
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_retries_on_server_error(consultation):
+    """_invoke_llm 在 5xx 错误时重试。"""
+    import httpx
+
+    call_count = 0
+    _req = httpx.Request("POST", "https://test.example.com/v1/chat/completions")
+
+    async def mock_post(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 2:  # 前两次返回 500
+            resp = httpx.Response(500, text="Internal Server Error")
+            resp._request = _req
+            return resp
+        resp = httpx.Response(200, json=_make_llm_response())
+        resp._request = _req
+        return resp
+
+    consultation._client = MagicMock()
+    consultation._client.post = mock_post
+
+    provider = _make_providers()["qwen"]
+    result = await consultation._invoke_llm(provider, "test-req", [{"role": "user", "content": "test"}])
+    assert call_count == 3  # 2 次失败 + 1 次成功
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_no_retry_on_client_error(consultation):
+    """_invoke_llm 在 4xx 错误时不重试。"""
+    import httpx
+
+    call_count = 0
+    _req = httpx.Request("POST", "https://test.example.com/v1/chat/completions")
+
+    async def mock_post(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        resp = httpx.Response(429, text="Rate limited")
+        resp._request = _req
+        return resp
+
+    consultation._client = MagicMock()
+    consultation._client.post = mock_post
+
+    provider = _make_providers()["qwen"]
+    with pytest.raises(httpx.HTTPStatusError):
+        await consultation._invoke_llm(provider, "test-req", [{"role": "user", "content": "test"}])
+    assert call_count == 1  # 只调用一次，不重试
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_retries_on_network_error(consultation):
+    """_invoke_llm 在网络错误时重试。"""
+    import httpx
+
+    call_count = 0
+    _req = httpx.Request("POST", "https://test.example.com/v1/chat/completions")
+
+    async def mock_post(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 1:  # 第一次网络错误
+            raise httpx.ConnectError("Connection refused")
+        resp = httpx.Response(200, json=_make_llm_response())
+        resp._request = _req
+        return resp
+
+    consultation._client = MagicMock()
+    consultation._client.post = mock_post
+
+    provider = _make_providers()["qwen"]
+    result = await consultation._invoke_llm(provider, "test-req", [{"role": "user", "content": "test"}])
+    assert call_count == 2  # 1 次失败 + 1 次成功
+
+
+@pytest.mark.asyncio
+async def test_invoke_llm_exhausts_retries(consultation):
+    """_invoke_llm 重试耗尽后抛出异常。"""
+    import httpx
+
+    call_count = 0
+    _req = httpx.Request("POST", "https://test.example.com/v1/chat/completions")
+
+    async def mock_post(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        resp = httpx.Response(500, text="Internal Server Error")
+        resp._request = _req
+        return resp
+
+    consultation._client = MagicMock()
+    consultation._client.post = mock_post
+
+    provider = _make_providers()["qwen"]
+    with pytest.raises(httpx.HTTPStatusError):
+        await consultation._invoke_llm(provider, "test-req", [{"role": "user", "content": "test"}])
+    assert call_count == 3  # 1 次初始 + 2 次重试
+
+
+@pytest.mark.asyncio
+async def test_consult_two_experts_fail_one_succeeds(consultation):
+    """两个专家失败，一个成功。"""
+    call_count = 0
+
+    async def mock_invoke(provider, request_id, messages):
+        nonlocal call_count
+        call_count += 1
+        if call_count in [1, 3]:  # 第1和第3个专家失败
+            raise RuntimeError("API timeout")
+        return _make_llm_response()
+
+    with patch.object(consultation, "_invoke_llm", side_effect=mock_invoke):
+        result = await consultation.consult(
+            pest_detections=[_make_pest_detection()],
+            weather_data=_make_weather(),
+            field_context=_make_field_context(),
+            request_id="test-req-007",
+        )
+
+    assert "用药" in result
+    assert result["detail"]["active_count"] == 1
+    assert result["agreement"] == "single_expert"
+
+
+@pytest.mark.asyncio
+async def test_consult_with_http_500_error(consultation):
+    """HTTP 500 错误被正确处理。"""
+    import httpx
+
+    async def mock_invoke(provider, request_id, messages):
+        raise httpx.HTTPStatusError(
+            "Server Error",
+            request=httpx.Request("POST", "https://test.com"),
+            response=httpx.Response(500),
+        )
+
+    with patch.object(consultation, "_invoke_llm", side_effect=mock_invoke):
+        result = await consultation.consult(
+            pest_detections=[_make_pest_detection()],
+            weather_data=_make_weather(),
+            field_context=_make_field_context(),
+            request_id="test-req-008",
+        )
+
+    assert "用药" in result
+    assert result["confidence"] == 0.0
+    assert result["agreement"] == "all_failed"
