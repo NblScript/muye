@@ -16,14 +16,32 @@ from modules.decision.rag.vectorstore import (
 
 
 PEST_SYNONYMS: dict[str, tuple[str, ...]] = {
-    "aphid": ("aphid", "aphids", "蚜虫"),
+    # 害虫
+    "aphid": ("aphid", "aphids", "蚜虫", "小麦蚜虫", "玉米蚜虫"),
     "rice-planthopper": ("rice-planthopper", "planthopper", "brown planthopper", "稻飞虱", "飞虱"),
     "armyworm": ("armyworm", "army worm", "粘虫"),
     "corn-borer": ("corn-borer", "corn borer", "玉米螟"),
     "rice-leaf-roller": ("rice-leaf-roller", "rice leaf roller", "稻纵卷叶螟", "卷叶螟"),
-    "red-spider": ("red-spider", "red spider", "spider mite", "红蜘蛛"),
+    "red-spider": ("red-spider", "red spider", "spider mite", "红蜘蛛", "麦蜘蛛"),
     "whitefly": ("whitefly", "white fly", "白粉虱"),
-    "grub": ("grub", "蛴螬"),
+    "grub": ("grub", "蛴螬", "蝼蛄", "金针虫"),
+    "cotton-bollworm": ("cotton-bollworm", "bollworm", "棉铃虫"),
+    "fall-armyworm": ("fall-armyworm", "fall armyworm", "草地贪夜蛾"),
+    "rice-stem-borer": ("rice-stem-borer", "stem borer", "二化螟"),
+    "beet-armyworm": ("beet-armyworm", "beet armyworm", "甜菜夜蛾"),
+    "soybean-pod-borer": ("soybean-pod-borer", "pod borer", "大豆食心虫"),
+    "mole-cricket": ("mole-cricket", "mole cricket", "蝼蛄"),
+    "wireworm": ("wireworm", "金针虫"),
+    # 病害
+    "wheat-stripe-rust": ("wheat-stripe-rust", "stripe rust", "小麦条锈病", "条锈病"),
+    "wheat-powdery-mildew": ("wheat-powdery-mildew", "powdery mildew", "小麦白粉病", "白粉病"),
+    "wheat-scab": ("wheat-scab", "scab", "小麦赤霉病", "赤霉病"),
+    "rice-blast": ("rice-blast", "rice blast", "稻瘟病"),
+    "rice-sheath-blight": ("rice-sheath-blight", "sheath blight", "纹枯病"),
+    "corn-northern-leaf-blight": ("corn-northern-leaf-blight", "northern leaf blight", "玉米大斑病", "大斑病"),
+    "cotton-wilt": ("cotton-wilt", "cotton wilt", "棉花枯萎病", "枯萎病"),
+    "rice-false-smut": ("rice-false-smut", "false smut", "稻曲病"),
+    "corn-stalk-rot": ("corn-stalk-rot", "stalk rot", "玉米茎腐病", "茎腐病"),
 }
 
 

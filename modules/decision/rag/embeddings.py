@@ -38,40 +38,48 @@ class QwenEmbeddings(BaseModel, Embeddings):
             "Content-Type": "application/json",
         }
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of documents."""
+    def embed_documents(self, texts: list[str], batch_size: int = 10) -> list[list[float]]:
+        """Embed a list of documents, batching to respect API limits."""
         if not texts:
             return []
 
-        response = httpx.post(
-            f"{self.api_url}/embeddings",
-            headers=self._headers(),
-            json=self._request_payload(texts),
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return [item["embedding"] for item in data["data"]]
+        all_embeddings: list[list[float]] = []
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            response = httpx.post(
+                f"{self.api_url}/embeddings",
+                headers=self._headers(),
+                json=self._request_payload(batch),
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_embeddings.extend(item["embedding"] for item in data["data"])
+        return all_embeddings
 
     def embed_query(self, text: str) -> list[float]:
         """Embed a single query."""
         result = self.embed_documents([text])
         return result[0] if result else []
 
-    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Async embed a list of documents."""
+    async def aembed_documents(self, texts: list[str], batch_size: int = 10) -> list[list[float]]:
+        """Async embed a list of documents, batching to respect API limits."""
         if not texts:
             return []
 
+        all_embeddings: list[list[float]] = []
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.api_url}/embeddings",
-                headers=self._headers(),
-                json=self._request_payload(texts),
-            )
-        response.raise_for_status()
-        data = response.json()
-        return [item["embedding"] for item in data["data"]]
+            for start in range(0, len(texts), batch_size):
+                batch = texts[start : start + batch_size]
+                response = await client.post(
+                    f"{self.api_url}/embeddings",
+                    headers=self._headers(),
+                    json=self._request_payload(batch),
+                )
+                response.raise_for_status()
+                data = response.json()
+                all_embeddings.extend(item["embedding"] for item in data["data"])
+        return all_embeddings
 
     async def aembed_query(self, text: str) -> list[float]:
         """Async embed a single query."""

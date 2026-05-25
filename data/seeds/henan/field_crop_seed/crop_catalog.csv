@@ -1,3 +1,6 @@
 crop_code,crop_name,category,variety,growth_cycle_days,water_demand_coefficient,typical_planting_month,typical_harvest_month,source,notes
 winter_wheat,冬小麦,grain,河南主栽品系,240,1.0,10,06,generated_seed,河南主粮作物，通常 10 月播种，次年 6 月收获。
 summer_corn,夏玉米,grain,河南夏播品系,110,0.86,06,09,generated_seed,河南夏播作物，通常 6 月播种，9 月至 10 月收获。
+rice,水稻,grain,河南粳稻品系,150,1.2,05,10,generated_seed,河南南部（信阳等）种植，5 月插秧，10 月收获。
+cotton,棉花,fiber,河南主栽棉种,180,0.9,04,10,generated_seed,河南传统经济作物，4 月播种，10 月收获。
+soybean,大豆,oilseed,河南夏大豆,100,0.7,06,09,generated_seed,河南夏播大豆，6 月播种，9 月收获，常与小麦轮作。
