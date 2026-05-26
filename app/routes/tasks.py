@@ -141,23 +141,41 @@ async def get_task_report(request_id: str) -> PlainTextResponse:
             lines.append(f"- 风速: {wind}m/s")
         lines.append("")
 
-    # 合规审核
+    # 合规推理链
     compliance = task.get("compliance") or {}
     if compliance:
-        lines.append("## 合规审核")
+        lines.append("## 农药安全合规推理链")
         lines.append("")
+        summary = compliance.get("summary")
+        if summary:
+            lines.append(f"> {summary}")
+            lines.append("")
         lines.append(f"- **审核结果**: {compliance.get('status', '--')}")
-        lines.append(f"- **合规分数**: {compliance.get('score', '--')}分")
+        lines.append(f"- **安全分数**: {compliance.get('score', '--')}/100")
+        policy = compliance.get("execution_policy") or {}
+        if policy:
+            mode_label = {"auto": "自动执行", "manual": "需人工确认", "blocked": "已拦截"}
+            lines.append(f"- **执行策略**: {mode_label.get(policy.get('takeoff_mode'), policy.get('takeoff_mode', '--'))}")
+        checks = compliance.get("checks") or []
+        if checks:
+            lines.append("")
+            lines.append("| 检查项 | 状态 | 结果 |")
+            lines.append("|--------|------|------|")
+            for check in checks:
+                status_icon = {"passed": "PASS", "warning": "WARN", "blocked": "BLOCK"}.get(check.get("status", ""), "--")
+                lines.append(f"| {check.get('name', check.get('rule', '--'))} | {status_icon} | {check.get('message', '')} |")
         reasons = compliance.get("blocking_reasons") or []
         if reasons:
-            lines.append("- **拦截原因**:")
+            lines.append("")
+            lines.append("**拦截原因**:")
             for r in reasons:
-                lines.append(f"  - {r}")
+                lines.append(f"- {r}")
         warnings = compliance.get("warnings") or []
         if warnings:
-            lines.append("- **风险提示**:")
+            lines.append("")
+            lines.append("**风险提示**:")
             for w in warnings:
-                lines.append(f"  - {w}")
+                lines.append(f"- {w}")
         lines.append("")
 
     # AI 决策

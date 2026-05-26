@@ -153,12 +153,15 @@ describe('DecisionExplainPanel', () => {
       compliance: {
         status: 'warning',
         score: 76,
+        summary: '风险提示：吡虫啉存在风险——当前风速6.1m/s偏高，注意药液漂移风险',
         checks: [
-          { rule: 'source_match', status: 'passed', message: '吡虫啉来自 RAG 农药候选' },
-          { rule: 'weather_risk', status: 'warning', message: '当前风速6.1m/s偏高，注意药液漂移风险' },
+          { rule: 'source_match', name: '来源验证', status: 'passed', message: '吡虫啉来自 RAG 农药候选', evidence: [] },
+          { rule: 'weather_risk', name: '天气约束', status: 'warning', message: '当前风速6.1m/s偏高，注意药液漂移风险', evidence: [{ source: 'weather_api', title: '实时气象', matched_fields: ['wind_speed'] }] },
         ],
         blocking_reasons: [],
         warnings: ['当前风速6.1m/s偏高，注意药液漂移风险'],
+        execution_policy: { takeoff_mode: 'manual', reason: '需人工确认' },
+        alternatives: [],
       },
       drone: {},
       drone_timeline: [],
@@ -167,9 +170,9 @@ describe('DecisionExplainPanel', () => {
 
     render(<DecisionExplainPanel task={task} />)
 
-    expect(screen.getByText('合规审核')).toBeInTheDocument()
+    expect(screen.getByText('农药安全合规推理链')).toBeInTheDocument()
     expect(screen.getByText('风险提示')).toBeInTheDocument()
-    expect(screen.getByText('76分')).toBeInTheDocument()
+    expect(screen.getByText('76/100')).toBeInTheDocument()
     expect(screen.getByText('当前风速6.1m/s偏高，注意药液漂移风险')).toBeInTheDocument()
   })
 })

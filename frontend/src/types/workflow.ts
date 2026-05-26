@@ -90,18 +90,34 @@ export interface RagContext {
   familiarity_score?: number
 }
 
+export interface ComplianceEvidence {
+  source: string
+  title: string
+  matched_fields: string[]
+}
+
 export interface ComplianceCheck {
   rule: string
+  name: string
   status: 'passed' | 'warning' | 'blocked'
   message: string
+  evidence: ComplianceEvidence[]
+}
+
+export interface ExecutionPolicy {
+  takeoff_mode: 'auto' | 'manual' | 'blocked'
+  reason: string
 }
 
 export interface ComplianceResult {
   status: 'passed' | 'warning' | 'blocked'
   score: number
+  summary: string
   checks: ComplianceCheck[]
   blocking_reasons: string[]
   warnings: string[]
+  execution_policy: ExecutionPolicy
+  alternatives: unknown[]
 }
 
 export interface WorkflowTaskState {

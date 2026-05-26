@@ -769,7 +769,10 @@ class MuyeApplication:
                 lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
             )
 
-            if isinstance(compliance, dict) and compliance.get("status") == "blocked":
+            execution_policy = (compliance.get("execution_policy") or {}) if isinstance(compliance, dict) else {}
+            policy_takeoff = str(execution_policy.get("takeoff_mode", "auto")).strip().lower()
+
+            if policy_takeoff == "blocked":
                 reasons = compliance.get("blocking_reasons") or []
                 message = "农药合规审核未通过，已阻止无人机执行"
                 self._sqlite_write(
@@ -799,11 +802,17 @@ class MuyeApplication:
                     blocking_reasons=reasons,
                 )
                 return
-            if isinstance(compliance, dict) and compliance.get("status") == "warning":
+            takeoff_mode = str(
+                self.drone_config.get("execution", {}).get("takeoff_mode", "auto")
+            ).strip().lower()
+            if policy_takeoff == "manual":
                 warnings = compliance.get("warnings") or []
-                self.logger.warning(
+                log_event(
+                    self.logger,
+                    logging.WARNING,
                     "合规审核有风险提示，强制进入人工确认流程",
                     request_id=request_id,
+                    client_ip=self.client_ip,
                     warnings=warnings,
                 )
                 takeoff_mode = "manual"
@@ -819,9 +828,6 @@ class MuyeApplication:
             )
 
             # 手动模式：决策完成后暂停，等待人工确认起飞
-            takeoff_mode = str(
-                self.drone_config.get("execution", {}).get("takeoff_mode", "auto")
-            ).strip().lower()
             if takeoff_mode == "manual":
                 self._takeoff_request_id = request_id
                 self._takeoff_confirmed.clear()

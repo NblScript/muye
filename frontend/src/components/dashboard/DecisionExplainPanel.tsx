@@ -44,9 +44,6 @@ export default function DecisionExplainPanel({ task }: Props) {
   const suit = weatherSuitability(weather)
   const safetyTips = Array.isArray(medication['安全提示']) ? (medication['安全提示'] as string[]) : []
   const complianceDisplay = complianceStatus(compliance?.status)
-  const complianceMessages = compliance?.blocking_reasons.length
-    ? compliance.blocking_reasons
-    : compliance?.warnings ?? []
 
   return (
     <Card className="dashboard-card">
@@ -93,31 +90,48 @@ export default function DecisionExplainPanel({ task }: Props) {
           </div>
         )}
 
-        {/* 合规审核 */}
+        {/* 合规推理链 */}
         {compliance && (
           <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>合规审核</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>农药安全合规推理链</div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <Tag color={complianceDisplay.color}>{complianceDisplay.label}</Tag>
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {compliance.score}分
+                  {compliance.score}/100
                 </span>
               </div>
             </div>
-            {complianceMessages.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {complianceMessages.slice(0, 3).map((message, i) => (
-                  <div key={i} style={{ fontSize: 12, color: 'var(--text-primary)', paddingLeft: 8, borderLeft: '2px solid var(--accent-amber)' }}>
-                    {message}
+
+            {/* Five-check chain */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
+              {(compliance.checks ?? []).map((check, i) => {
+                const checkColor = check.status === 'passed' ? 'var(--accent-green)' : check.status === 'blocked' ? 'var(--accent-red)' : 'var(--accent-amber)'
+                const dot = check.status === 'passed' ? '●' : check.status === 'blocked' ? '✕' : '▲'
+                return (
+                  <div key={check.rule} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12 }}>
+                    <span style={{ color: checkColor, fontWeight: 700, width: 14, textAlign: 'center' }}>{dot}</span>
+                    <span style={{ fontWeight: 600, minWidth: 72 }}>{check.name ?? check.rule}</span>
+                    <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{check.message}</span>
+                    {check.evidence && check.evidence.length > 0 && (
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                        {check.evidence.map((e) => e.title).join(', ')}
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: 'var(--accent-green)' }}>
-                作物、防治对象、毒性与天气规则均通过
-              </div>
-            )}
+                )
+              })}
+            </div>
+
+            {/* Summary + Execution policy */}
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{compliance.summary ?? ''}</span>
+              {compliance.execution_policy && (
+                <Tag color={compliance.execution_policy.takeoff_mode === 'auto' ? 'green' : compliance.execution_policy.takeoff_mode === 'blocked' ? 'red' : 'amber'}>
+                  {compliance.execution_policy.takeoff_mode === 'auto' ? '自动执行' : compliance.execution_policy.takeoff_mode === 'blocked' ? '已拦截' : '需人工确认'}
+                </Tag>
+              )}
+            </div>
           </div>
         )}
 
