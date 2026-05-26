@@ -111,11 +111,14 @@ curl http://localhost:18000/slo
 ### 健康检查
 
 ```bash
-# API 健康检查
+# API 健康检查（含 7 项子检查）
 curl http://localhost:18000/health
 
 # YOLO 服务健康检查
 curl http://localhost:8010/health
+
+# 烟雾测试（不依赖 PX4/Gazebo，验证 API + mock 链路）
+./scripts/demo_smoke.sh
 ```
 
 ### 日志监控
@@ -135,9 +138,10 @@ tail -f data/logs/demo_events.jsonl | jq .
 
 - [ ] 运行 `./scripts/precheck.sh` 检查环境
 - [ ] 运行 `./scripts/prepare.sh` 准备数据
+- [ ] 运行 `./scripts/demo_smoke.sh` 验证 API + mock 链路
 - [ ] 确认 API 端口（18000, 8010）未被占用
 - [ ] 确认 PX4 SITL 可启动（如使用 px4 模式）
 - [ ] 确认网络连接（如需实时天气）
 - [ ] 确认演示图片已准备（`data/samples/`）
 - [ ] 运行 `./scripts/demo.sh --takeoff manual` 启动系统
-- [ ] 访问 http://localhost:5173 确认前端正常
+- [ ] 访问 http://localhost:5173 → 设置页确认系统预检全绿

@@ -6,15 +6,31 @@
 
 ### GET /health
 
-系统健康状态检查。
+系统健康状态检查（含 7 项子检查）。任一子项 `error` 时整体返回 503。
 
 **响应**：
 ```json
 {
-  "status": "healthy",
-  "timestamp": "2026-05-18T10:00:00Z"
+  "status": "ok",
+  "checks": {
+    "sqlite": {"status": "ok"},
+    "data_dir": {"status": "ok"},
+    "embedded_yolo": {"status": "ok", "detect_url": "http://127.0.0.1:8010/detect"},
+    "yolo_model": {"status": "ok", "active_model": "yolov8n", "model_exists": true, "device": "auto"},
+    "ai_config": {"status": "ok", "qwen_mode": "real", "providers": {"qwen": true, "deepseek": true, "xiaomi": true}},
+    "weather_config": {"status": "ok", "mode": "real"},
+    "event_bus": {"status": "ok", "path": "data/logs/demo_events.jsonl"},
+    "rag_config": {"status": "ok", "enabled": true},
+    "px4_runtime": {"status": "skipped", "running": false, "ready": false},
+    "runtime_config": {"status": "ok", "takeoff_mode": "manual", "drone_backend": "px4"}
+  },
+  "failures": []
 }
 ```
+
+### GET /slo
+
+获取 SLO 指标快照（API 成功率、管线完成率、WebSocket 稳定性、系统可用性）。
 
 ## 检测模型管理
 
