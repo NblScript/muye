@@ -34,6 +34,8 @@ class LocalYoloSettings:
     allowed_ips: list[str]
     rate_limit_per_minute: int
     max_batch_size: int
+    model_name: str = ""
+    available_models: dict[str, dict[str, Any]] | None = None
 
 
 class PredictorProtocol(Protocol):
@@ -208,6 +210,40 @@ class LocalYoloApiService:
         with self.predict_lock:
             return self.predictor.predict(image_paths, confidence_threshold)
 
+    def reload_model(self, model_name: str) -> dict[str, Any]:
+        """切换到指定模型（需要在配置中预定义）。"""
+        available = self.settings.available_models
+        if not available or model_name not in available:
+            raise HTTPException(
+                status_code=400,
+                detail=f"模型 '{model_name}' 不存在。可用模型: {list(available.keys()) if available else '无'}",
+            )
+
+        profile = available[model_name]
+        model_path = Path(profile["path"])
+        if not model_path.is_absolute():
+            model_path = PROJECT_ROOT / model_path
+
+        if not model_path.exists():
+            raise HTTPException(status_code=400, detail=f"模型文件不存在: {model_path}")
+
+        device = str(profile.get("device", "auto"))
+
+        with self.predict_lock:
+            new_predictor = UltralyticsPredictor(model_path=model_path, device=device)
+            self.predictor = new_predictor
+            self.settings.model_name = model_name
+            self.settings.model_path = model_path
+            self.settings.device = device
+
+        self.logger.info("模型已切换: %s -> %s", model_name, model_path)
+        return {
+            "model_name": model_name,
+            "model_path": str(model_path),
+            "device": device,
+            "description": profile.get("description", ""),
+        }
+
     def ensure_authorized(self, authorization: str | None, x_api_key: str | None) -> None:
         if not self.settings.api_key:
             return
@@ -236,15 +272,44 @@ class LocalYoloApiService:
         raise HTTPException(status_code=403, detail=f"客户端 IP {client_ip} 不在白名单中")
 
 
+def _resolve_model_from_config(config: dict[str, Any]) -> tuple[Path, str, str, dict[str, dict[str, Any]]]:
+    """从配置解析模型路径、设备、模型名和可用模型列表。
+
+    优先级：环境变量 > models[active_model] > local_api.model_path（向后兼容）
+    """
+    local_api = config.get("local_api", {})
+    models_section = config.get("models", {})
+    active_model = config.get("active_model", "")
+
+    # 环境变量优先
+    env_model_path = os.getenv("YOLO_LOCAL_MODEL_PATH")
+    env_device = os.getenv("YOLO_LOCAL_DEVICE")
+
+    if models_section and active_model and active_model in models_section:
+        # 多模型模式
+        profile = models_section[active_model]
+        model_path_raw = env_model_path or profile.get("path", "models/best.pt")
+        device = env_device or str(profile.get("device", "auto"))
+        model_name = active_model
+    else:
+        # 向后兼容：单模型模式
+        model_path_raw = env_model_path or local_api.get("model_path") or "models/best.pt"
+        device = env_device or str(local_api.get("device", "auto"))
+        model_name = ""
+
+    model_path = Path(model_path_raw)
+    if not model_path.is_absolute():
+        model_path = PROJECT_ROOT / model_path
+
+    return model_path, device, model_name, models_section
+
+
 def load_local_yolo_settings() -> LocalYoloSettings:
     load_environment()
     config = load_yaml(CONFIG_DIR / "yolo_config.yaml")
     local_api = config.get("local_api", {})
 
-    model_path_raw = os.getenv("YOLO_LOCAL_MODEL_PATH") or local_api.get("model_path") or "models/best.pt"
-    model_path = Path(model_path_raw)
-    if not model_path.is_absolute():
-        model_path = PROJECT_ROOT / model_path
+    model_path, device, model_name, available_models = _resolve_model_from_config(config)
 
     allowed_ips_env = os.getenv("YOLO_ALLOWED_IPS", "")
     if allowed_ips_env.strip():
@@ -256,11 +321,13 @@ def load_local_yolo_settings() -> LocalYoloSettings:
         host=os.getenv("YOLO_LOCAL_HOST", str(local_api.get("host", "127.0.0.1"))),
         port=int(os.getenv("YOLO_LOCAL_PORT", str(local_api.get("port", 8010)))),
         model_path=model_path,
-        device=os.getenv("YOLO_LOCAL_DEVICE", str(local_api.get("device", "auto"))),
+        device=device,
         api_key=os.getenv("YOLO_API_KEY", ""),
         allowed_ips=allowed_ips,
         rate_limit_per_minute=int(os.getenv("YOLO_RATE_LIMIT_PER_MINUTE", "120")),
         max_batch_size=int(local_api.get("max_batch_size", config.get("batch_size", 4))),
+        model_name=model_name,
+        available_models=available_models or None,
     )
 
 
@@ -304,5 +371,34 @@ def create_app(
         service.ensure_ip_allowed(client_ip)
         service.rate_limiter.check(client_ip)
         return await service.detect(images, confidence_threshold, request_id, client_ip)
+
+    @app.get("/models")
+    async def list_models() -> dict[str, Any]:
+        available = service.settings.available_models or {}
+        models_info: list[dict[str, Any]] = []
+        for name, profile in available.items():
+            model_path = Path(profile["path"])
+            if not model_path.is_absolute():
+                model_path = PROJECT_ROOT / model_path
+            models_info.append({
+                "name": name,
+                "path": profile["path"],
+                "device": profile.get("device", "auto"),
+                "description": profile.get("description", ""),
+                "available": model_path.exists(),
+                "active": name == service.settings.model_name,
+            })
+        return {
+            "active_model": service.settings.model_name,
+            "models": models_info,
+        }
+
+    @app.post("/models/switch")
+    async def switch_model(request: Request) -> dict[str, Any]:
+        body = await request.json()
+        model_name = body.get("model_name", "")
+        if not model_name:
+            raise HTTPException(status_code=400, detail="缺少 model_name 参数")
+        return service.reload_model(model_name)
 
     return app

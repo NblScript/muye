@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # 专家角色输出必须符合此 schema，与 DecisionEngine.DECISION_SCHEMA 一致
 EXPERT_OUTPUT_SCHEMA: dict[str, Any] = {
@@ -84,3 +88,36 @@ def get_role_names() -> list[str]:
 
 def get_total_weight() -> float:
     return sum(cfg["weight"] for cfg in EXPERT_ROLES.values())
+
+
+def load_provider_mapping(config_path: Path | None = None) -> dict[str, str]:
+    """从 model_config.yaml 加载 expert→provider 映射。"""
+    if config_path is None:
+        config_path = Path(__file__).resolve().parent.parent.parent.parent / "config" / "model_config.yaml"
+
+    if not config_path.exists():
+        logger.debug("model_config.yaml 不存在，使用默认 provider 映射")
+        return {}
+
+    try:
+        from modules.infra.common import load_yaml
+        config = load_yaml(config_path)
+        mapping = config.get("expert_providers", {})
+        if not isinstance(mapping, dict):
+            logger.warning("expert_providers 格式错误，应为字典")
+            return {}
+        return {str(k): str(v) for k, v in mapping.items()}
+    except Exception as exc:
+        logger.warning("加载 model_config.yaml 失败: %s", exc)
+        return {}
+
+
+def apply_provider_mapping(mapping: dict[str, str]) -> None:
+    """覆盖 EXPERT_ROLES 中的 llm_provider 字段。"""
+    for role_name, provider in mapping.items():
+        if role_name in EXPERT_ROLES:
+            old = EXPERT_ROLES[role_name]["llm_provider"]
+            EXPERT_ROLES[role_name]["llm_provider"] = provider
+            logger.info("角色 %s provider: %s → %s", role_name, old, provider)
+        else:
+            logger.warning("未知角色名: %s，跳过", role_name)

@@ -4,6 +4,16 @@ batch_size: 4
 tensorrt_enabled: false
 request_headers:
   X-Source-System: muye
+
+# 多模型配置（可选）
+# 切换模型：POST /models/switch {"model_name": "yolov8s"}
+models:
+  yolov8n:
+    path: models/best.pt
+    device: auto
+    description: "YOLOv8 默认模型"
+active_model: yolov8n
+
 local_api:
   host: 127.0.0.1
   port: 8010

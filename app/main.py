@@ -344,6 +344,13 @@ class MuyeApplication:
         if self.config.enable_sqlite_decision_context:
             decision_context_provider = SqliteDecisionContextProvider(self.sqlite_store)
         self.rag_retriever = self._initialize_rag()
+
+        # 加载决策模型 provider 映射（model_config.yaml）
+        from modules.decision.agents.expert_roles import apply_provider_mapping, load_provider_mapping
+        provider_mapping = load_provider_mapping()
+        if provider_mapping:
+            apply_provider_mapping(provider_mapping)
+
         consultation = None
         if self.config.multi_agent_enabled:
             providers: dict[str, dict[str, str]] = {}

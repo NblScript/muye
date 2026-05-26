@@ -171,6 +171,8 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 | 决策路由层 | 熟悉场景走快速路径节省延迟，陌生场景走多模型保质量 | 固定路径（无法兼顾效率与质量） |
 | 专家路径自动升级 | 专家路径失败时降级到多智能体会诊，保证决策总能产出 | 直接报错（决策中断） |
 | LLM 调用指数退避重试 | 瞬态网络/5xx 错误自动恢复，减少单次失败导致专家退出投票 | 单次调用失败即放弃 |
+| 检测模型热切换 | yolo_config.yaml 定义模型 profile，/models/switch 运行时切换 | 硬编码单一模型（需重启） |
+| 决策 provider 配置化 | model_config.yaml 映射角色→provider，启动时加载覆盖 | 硬编码在 expert_roles.py（改代码才能换） |
 | 无人机后端抽象层 | DroneBackend ABC + 注册表，PX4/DJI OSDK 可切换 | 硬编码单一后端（无法扩展） |
 | DJI OSDK 仿真模式 | 无硬件时 GPS 插值模拟飞行，接口与真机一致 | 仅真机可用（开发受阻） |
 | SLO 指标采集 | 进程内 WindowCounter 滑动窗口，零外部依赖 | Prometheus/外部监控（竞赛环境过重） |

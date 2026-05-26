@@ -112,6 +112,9 @@ class MuyeConfig:
     xiaomi_api_key: str = ""
     xiaomi_model: str = ""
 
+    # 模型配置文件路径
+    model_config_path: str = "config/model_config.yaml"
+
     @classmethod
     def from_env(cls, drone_config: dict[str, Any] | None = None) -> "MuyeConfig":
         """从环境变量构建配置。

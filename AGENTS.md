@@ -19,7 +19,7 @@
 |---|------|
 | 前端 | React 19 + TypeScript + Vite + Ant Design（暗色大屏） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
-| AI | YOLOv8（检测）+ Qwen/DeepSeek/Xiaomi（多模型决策）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
+| AI | YOLOv8（检测，可切换模型）+ Qwen/DeepSeek/Xiaomi（多模型决策，provider 可配置）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
 | 无人机 | PX4 SITL + MAVSDK（仿真）/ DJI OSDK（行业级无人机） |
 | 存储 | SQLite（结构化）+ JSONL（事件流）+ ChromaDB（向量） |
 
@@ -106,6 +106,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | DJI OSDK | 行业级无人机对接（Matrice/M300/M350） | `config/drone_config.json` → `dji_osdk` 节 |
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
 | DecisionRouter | 路由决策路径（专家/多智能体） | `MUYE_ROUTER_ENABLED`（bool，默认 false）· `MUYE_ROUTER_FAMILIARITY_THRESHOLD`（float，默认 0.6） |
+| 模型切换 | 检测模型热切换 + 决策 provider 映射 | `config/yolo_config.yaml` → `models` + `active_model`；`config/model_config.yaml` → `expert_providers` |
 
 ## 遇到无法解决的问题
 

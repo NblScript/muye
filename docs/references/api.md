@@ -16,6 +16,52 @@
 }
 ```
 
+## 检测模型管理
+
+> 以下端点在 YOLO API 服务上（端口 8010）
+
+### GET /models
+
+列出可用检测模型及当前激活模型。
+
+**响应**：
+```json
+{
+  "active_model": "yolov8n",
+  "models": [
+    {
+      "name": "yolov8n",
+      "path": "models/best.pt",
+      "device": "auto",
+      "description": "YOLOv8 默认模型",
+      "available": true,
+      "active": true
+    }
+  ]
+}
+```
+
+### POST /models/switch
+
+切换检测模型（运行时热切换，无需重启）。
+
+**请求**：
+```json
+{
+  "model_name": "yolov8s"
+}
+```
+
+**响应**：
+```json
+{
+  "model_name": "yolov8s",
+  "model_path": "/path/to/yolov8s.pt",
+  "device": "auto",
+  "description": "YOLOv8 小模型"
+}
+```
+
 ## 工作流
 
 ### GET /workflow/state
