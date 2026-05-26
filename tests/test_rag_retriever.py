@@ -99,8 +99,12 @@ def test_decision_rag_retriever_calls_vector_store_similarity_search_with_score(
     assert len(result.historical_cases) == 1
     assert len(result.knowledge_chunks) == 1
     assert vector_store.calls == [
-        (COLLECTION_PESTICIDES, "小麦 aphid aphids 蚜虫 防治农药", 2),
-        (COLLECTION_KNOWLEDGE, "小麦 aphid aphids 蚜虫 病虫害防治 用药 安全 注意事项", 3),
+        (COLLECTION_PESTICIDES, "小麦 aphid aphids 蚜虫 小麦蚜虫 玉米蚜虫 防治农药", 2),
+        (
+            COLLECTION_KNOWLEDGE,
+            "小麦 aphid aphids 蚜虫 小麦蚜虫 玉米蚜虫 病虫害防治 用药 安全 注意事项",
+            3,
+        ),
         (COLLECTION_DECISIONS, "aphid", 1),
     ]
 
@@ -148,12 +152,12 @@ def test_decision_rag_retriever_uses_crop_name_from_field_context_when_missing_a
 
     assert vector_store.calls[0] == (
         COLLECTION_PESTICIDES,
-        "玉米 aphid aphids 蚜虫 armyworm army worm 粘虫 防治农药",
+        "玉米 aphid aphids 蚜虫 小麦蚜虫 玉米蚜虫 armyworm army worm 粘虫 防治农药",
         2,
     )
     assert vector_store.calls[1] == (
         COLLECTION_KNOWLEDGE,
-        "玉米 aphid aphids 蚜虫 armyworm army worm 粘虫 病虫害防治 用药 安全 注意事项",
+        "玉米 aphid aphids 蚜虫 小麦蚜虫 玉米蚜虫 armyworm army worm 粘虫 病虫害防治 用药 安全 注意事项",
         3,
     )
     assert vector_store.calls[2] == (

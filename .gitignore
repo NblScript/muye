@@ -38,3 +38,4 @@ CLAUDE.md
 
 # Node
 node_modules/
+.vite/

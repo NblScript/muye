@@ -124,7 +124,7 @@ class DataCollectorService:
                 pass
         if self._observer:
             self._observer.stop()
-            await asyncio.to_thread(self._observer.join, 5)
+            self._observer.join(5)
             self._observer = None
         await self._client.aclose()
 
@@ -138,7 +138,7 @@ class DataCollectorService:
         try:
             if self.simulate_capture or not self.capture_endpoint:
                 # 无真实无人机时生成一张最小 JPEG，便于联调整个链路。
-                await asyncio.to_thread(target.write_bytes, MINIMAL_JPEG)
+                target.write_bytes(MINIMAL_JPEG)
             else:
                 if self.capture_method == "POST":
                     response = await self._client.post(self.capture_endpoint)
@@ -148,7 +148,7 @@ class DataCollectorService:
                 content = response.content
                 if not content:
                     raise CollectorError("无人机接口返回空图像内容")
-                await asyncio.to_thread(target.write_bytes, content)
+                target.write_bytes(content)
 
             log_event(
                 self.logger,

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.middleware import RateLimitMiddleware
 
@@ -20,44 +20,44 @@ def _make_app(limit: int = 5) -> FastAPI:
     return app
 
 
-def test_allows_requests_under_limit():
+@pytest.mark.asyncio
+async def test_allows_requests_under_limit():
     app = _make_app(limit=5)
-    client = TestClient(app)
-    for _ in range(5):
-        resp = client.get("/test")
-        assert resp.status_code == 200
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for _ in range(5):
+            resp = await client.get("/test")
+            assert resp.status_code == 200
 
 
-def test_blocks_requests_over_limit():
+@pytest.mark.asyncio
+async def test_blocks_requests_over_limit():
     app = _make_app(limit=3)
-    client = TestClient(app)
-    for _ in range(3):
-        assert client.get("/test").status_code == 200
-    resp = client.get("/test")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for _ in range(3):
+            assert (await client.get("/test")).status_code == 200
+        resp = await client.get("/test")
     assert resp.status_code == 429
     assert "Retry-After" in resp.headers
 
 
-def test_429_response_body():
+@pytest.mark.asyncio
+async def test_429_response_body():
     app = _make_app(limit=1)
-    client = TestClient(app)
-    client.get("/test")
-    resp = client.get("/test")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.get("/test")
+        resp = await client.get("/test")
     assert resp.status_code == 429
     assert resp.json()["detail"] == "请求过于频繁，请稍后再试"
 
 
-def test_websocket_skips_rate_limit():
+@pytest.mark.asyncio
+async def test_websocket_skips_rate_limit():
     """WebSocket upgrades should bypass rate limiting."""
     app = _make_app(limit=1)
-    # Just verify the middleware doesn't crash on WS upgrade headers
-    # (actual WS testing requires a running server)
-    from starlette.testclient import TestClient as StarletteClient
-    client = StarletteClient(app)
-    # First request uses up the limit
-    assert client.get("/test").status_code == 200
-    # WS upgrade header should bypass rate limiting
-    resp = client.get("/test", headers={"upgrade": "websocket"})
-    # This is still a GET (TestClient doesn't do real WS), but the middleware
-    # should let it through since the upgrade header is present
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # First request uses up the limit.
+        assert (await client.get("/test")).status_code == 200
+        # This is still a GET, but the middleware should bypass rate limiting
+        # because the upgrade header is present.
+        resp = await client.get("/test", headers={"upgrade": "websocket"})
     assert resp.status_code == 200
