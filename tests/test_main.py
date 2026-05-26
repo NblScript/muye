@@ -554,6 +554,13 @@ def test_health_status_collects_check_results(monkeypatch) -> None:
     monkeypatch.setattr(health_routes, "check_sqlite_health", lambda: {"status": "ok"})
     monkeypatch.setattr(health_routes, "check_data_dir_health", lambda: {"status": "ok"})
     monkeypatch.setattr(health_routes, "check_embedded_yolo_health", lambda: {"status": "skipped"})
+    monkeypatch.setattr(health_routes, "check_yolo_model_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_ai_config_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_weather_config_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_event_bus_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_rag_config_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_px4_runtime_health", lambda: {"status": "skipped"})
+    monkeypatch.setattr(health_routes, "check_runtime_config_health", lambda: {"status": "ok"})
 
     payload, healthy = collect_health_status()
 

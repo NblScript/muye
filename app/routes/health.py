@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from modules.infra.common import DATA_DIR, ensure_runtime_dirs
+from modules.infra.common import CONFIG_DIR, DATA_DIR, LOGS_DIR, ensure_runtime_dirs, load_yaml
 from modules.infra.sqlite_store import SqliteStore
 
 
@@ -68,6 +69,160 @@ def check_embedded_yolo_health(runner: Any = None) -> dict[str, Any]:
     }
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _has_configured_secret(name: str) -> bool:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return False
+    placeholders = ("your-", "replace-with", "在此填入")
+    return not any(item in value for item in placeholders)
+
+
+def check_yolo_model_health() -> dict[str, Any]:
+    """Check configured local YOLO model availability without loading it."""
+    config = load_yaml(CONFIG_DIR / "yolo_config.yaml")
+    models = config.get("models") or {}
+    active_model = str(config.get("active_model") or "")
+    local_api = config.get("local_api") or {}
+
+    if isinstance(models, dict) and active_model in models:
+        profile = models[active_model] or {}
+        raw_path = os.getenv("YOLO_LOCAL_MODEL_PATH") or profile.get("path")
+        device = os.getenv("YOLO_LOCAL_DEVICE") or str(profile.get("device", "auto"))
+    else:
+        raw_path = os.getenv("YOLO_LOCAL_MODEL_PATH") or local_api.get("model_path") or "models/best.pt"
+        device = os.getenv("YOLO_LOCAL_DEVICE") or str(local_api.get("device", "auto"))
+        active_model = active_model or "default"
+
+    model_path = Path(str(raw_path))
+    if not model_path.is_absolute():
+        model_path = CONFIG_DIR.parent / model_path
+
+    return {
+        "status": "ok" if model_path.exists() else "error",
+        "active_model": active_model,
+        "model_path": str(model_path),
+        "model_exists": model_path.exists(),
+        "device": device,
+        "available_models": sorted(models.keys()) if isinstance(models, dict) else [],
+    }
+
+
+def check_ai_config_health() -> dict[str, Any]:
+    """Report AI provider readiness from local configuration only."""
+    qwen_mock = _env_bool("QWEN_USE_MOCK", False)
+    multi_agent_enabled = _env_bool("MUYE_MULTI_AGENT_ENABLED", False)
+    providers = {
+        "qwen": qwen_mock or _has_configured_secret("QWEN_API_KEY"),
+        "deepseek": _has_configured_secret("DEEPSEEK_API_KEY"),
+        "xiaomi": _has_configured_secret("XIAOMI_API_KEY"),
+    }
+    required_ready = providers["qwen"]
+    if multi_agent_enabled:
+        required_ready = all(providers.values())
+
+    return {
+        "status": "ok" if required_ready else "error",
+        "qwen_mode": "mock" if qwen_mock else "real",
+        "multi_agent_enabled": multi_agent_enabled,
+        "providers": providers,
+    }
+
+
+def check_weather_config_health() -> dict[str, Any]:
+    """Report weather provider readiness from local configuration only."""
+    use_mock = _env_bool("QWEATHER_USE_MOCK", False)
+    configured = _has_configured_secret("QWEATHER_API_KEY")
+    return {
+        "status": "ok" if use_mock or configured else "error",
+        "mode": "mock" if use_mock else "real",
+        "api_key_configured": configured,
+    }
+
+
+def check_event_bus_health() -> dict[str, Any]:
+    """Check event log path writability without mutating the event stream."""
+    ensure_runtime_dirs()
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    probe_fd, probe_path = tempfile.mkstemp(prefix=".event-health-", dir=str(LOGS_DIR))
+    try:
+        with os.fdopen(probe_fd, "w", encoding="utf-8") as handle:
+            handle.write("ok")
+        Path(probe_path).unlink(missing_ok=True)
+        event_path = LOGS_DIR / "demo_events.jsonl"
+        return {
+            "status": "ok",
+            "path": str(event_path),
+            "exists": event_path.exists(),
+        }
+    except Exception:
+        Path(probe_path).unlink(missing_ok=True)
+        raise
+
+
+def check_rag_config_health() -> dict[str, Any]:
+    """Report RAG mode and local vector-store path state."""
+    enabled = _env_bool("RAG_ENABLED", True)
+    chroma_path = DATA_DIR / "chroma_db"
+    return {
+        "status": "ok" if (not enabled or _has_configured_secret("QWEN_API_KEY")) else "error",
+        "enabled": enabled,
+        "chroma_path": str(chroma_path),
+        "chroma_exists": chroma_path.exists(),
+    }
+
+
+def check_px4_runtime_health() -> dict[str, Any]:
+    """Check PX4 runtime state without starting or stopping PX4."""
+    try:
+        from app.routes import drone as drone_routes
+
+        info = drone_routes._read_pid_file()
+        if info is None:
+            return {"status": "skipped", "running": False, "ready": False}
+
+        pid = int(info["pid"])
+        running = drone_routes._is_process_alive(pid)
+        ready = running and drone_routes._is_port_open(drone_routes.PX4_MAVLINK_PORT)
+        return {
+            "status": "ok" if ready else "skipped",
+            "running": running,
+            "ready": ready,
+            "pid": pid,
+            "world": info.get("world"),
+            "source": info.get("source"),
+        }
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}
+
+
+def check_runtime_config_health() -> dict[str, Any]:
+    """Expose effective demo-critical runtime switches."""
+    config_path = CONFIG_DIR / "drone_config.json"
+    try:
+        raw_config = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        raw_config = {}
+    execution = raw_config.get("execution") or {}
+    px4 = raw_config.get("px4") or {}
+    return {
+        "status": "ok",
+        "takeoff_mode": os.getenv("MUYE_TAKEOFF_MODE") or os.getenv("DRONE_TAKEOFF_MODE") or execution.get("takeoff_mode", "auto"),
+        "drone_backend": os.getenv("DRONE_BACKEND") or execution.get("backend", "px4"),
+        "px4_execution_mode": os.getenv("PX4_EXECUTION_MODE") or px4.get("execution_mode", "animated_demo"),
+        "px4_auto_start_on_spray": _env_bool(
+            "PX4_AUTO_START_ON_SPRAY",
+            bool(px4.get("auto_start_on_spray", True)),
+        ),
+    }
+
+
 def collect_health_status(embedded_yolo_runner: Any = None) -> tuple[dict[str, Any], bool]:
     """Collect all health check statuses."""
     # If no runner provided, try to get from deps
@@ -105,6 +260,13 @@ def collect_health_status(embedded_yolo_runner: Any = None) -> tuple[dict[str, A
         ("sqlite", sqlite_checker),
         ("data_dir", data_dir_checker),
         ("embedded_yolo", yolo_call),
+        ("yolo_model", health_module.check_yolo_model_health),
+        ("ai_config", health_module.check_ai_config_health),
+        ("weather_config", health_module.check_weather_config_health),
+        ("event_bus", health_module.check_event_bus_health),
+        ("rag_config", health_module.check_rag_config_health),
+        ("px4_runtime", health_module.check_px4_runtime_health),
+        ("runtime_config", health_module.check_runtime_config_health),
     ):
         try:
             result = checker()

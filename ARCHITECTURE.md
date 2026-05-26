@@ -39,12 +39,13 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 - `modules/` 不得 import `app/` 中的任何模块
 - `models/` 不得 import `modules/` 或 `app/`
 - `config/` 不得 import 任何业务代码
-- `modules/` 子域之间不得直接 import（必须通过 EventBus）
+- `modules/` 业务子域之间不得直接调用彼此的业务能力；跨业务域协作必须通过 EventBus 或应用层编排
+- `modules/infra/` 是公共基础设施层，允许被 `detection`、`decision`、`drone` 等业务域依赖
 
 **跨域通信**：
 - 唯一通道：`modules/infra/event_bus.py` 中的 `EventBus`
 - 事件格式：JSON，写入 `data/logs/demo_events.jsonl`
-- 禁止跨域直接函数调用
+- 禁止业务域之间直接函数调用；应用层可编排多个业务域，基础设施工具可被业务域直接使用
 
 **横切关注点**（日志、配置、存储）：
 - 通过 `modules/infra/common.py` 提供统一接口

@@ -34,7 +34,7 @@
 ## 关键指导原则
 
 1. **演示优先**：稳定性 > 功能丰富度。任何改动必须通过 `./scripts/demo.sh` 验证。
-2. **事件驱动**：域间通信必须通过 `EventBus`（`modules/infra/event_bus.py`），禁止直接函数调用跨域。
+2. **事件驱动**：业务域之间的协作必须通过 `EventBus`（`modules/infra/event_bus.py`）或应用层编排；`modules/infra/` 作为公共基础设施层可被业务域直接依赖。
 3. **渐进降级**：RAG 检索失败时发出警告事件，不阻断主流程。
 4. **结构化输出**：LLM 返回必须用 jsonschema 校验，不依赖纯 prompt 约束。
 5. **SQLite 优先**：单文件零运维，适合竞赛场景。不引入 PostgreSQL。
@@ -48,7 +48,7 @@
 frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/ (数据模型) → config/ + data/
 ```
 
-**依赖流向**：UI → Runtime → Service → Repo → Config → Types（不可反向）
+**依赖流向**：UI → Runtime → Service → Domain → Infra/Repo → Config → Types（不可反向）。业务域之间不直接调用，基础设施层允许被业务域依赖。
 
 ## 领域模块
 

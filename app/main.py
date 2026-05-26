@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import concurrent.futures
 import logging
 import os
 import time
@@ -488,6 +489,7 @@ class MuyeApplication:
 
         execution["backend"] = "px4"
         execution["simulate_only"] = False
+        execution["takeoff_mode"] = self.config.takeoff_mode.strip().lower()
 
         if self.config.px4_system_address:
             px4_config["system_address"] = self.config.px4_system_address
@@ -502,9 +504,23 @@ class MuyeApplication:
         px4_config["arm_retries"] = self.config.px4_arm_retries
         px4_config["arm_retry_delay_seconds"] = self.config.px4_arm_retry_delay_seconds
         px4_config["allow_force_arm"] = self.config.px4_allow_force_arm
-        px4_config["prefer_demo_field"] = True
+        px4_config["prefer_demo_field"] = (
+            True if self.config.drone_backend == "px4" else self.config.px4_prefer_demo_field
+        )
         px4_config["acceptance_radius_m"] = self.config.px4_acceptance_radius_m
-        px4_config["execution_mode"] = "native_mission"
+        px4_config["execution_mode"] = self.config.px4_execution_mode
+        px4_config["use_existing_mission"] = self.config.px4_use_existing_mission
+        px4_config["require_existing_mission"] = self.config.px4_require_existing_mission
+        px4_config["existing_mission_total_waypoints"] = self.config.px4_existing_mission_total_waypoints
+        px4_config["mission_takeoff_altitude_m"] = self.config.px4_mission_takeoff_altitude_m
+        px4_config["mission_takeoff_before_start"] = self.config.px4_mission_takeoff_before_start
+        px4_config["mission_takeoff_timeout_seconds"] = self.config.px4_mission_takeoff_timeout_seconds
+        px4_config["mission_takeoff_altitude_tolerance_m"] = (
+            self.config.px4_mission_takeoff_altitude_tolerance_m
+        )
+        px4_config["mission_emergency_max_altitude_m"] = (
+            self.config.px4_mission_emergency_max_altitude_m
+        )
 
     def configure_embedded_yolo_api(self, detect_url: str) -> None:
         self.yolo_api_url = detect_url
@@ -994,11 +1010,14 @@ class MuyeApplication:
             return
 
         try:
-            await asyncio.to_thread(
-                self.rag_vector_store.add_documents,
-                COLLECTION_DECISIONS,
-                [document],
-            )
+            loop = asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                await loop.run_in_executor(
+                    executor,
+                    self.rag_vector_store.add_documents,
+                    COLLECTION_DECISIONS,
+                    [document],
+                )
             log_event(
                 self.logger,
                 logging.INFO,

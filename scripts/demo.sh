@@ -9,6 +9,7 @@ SAMPLES_DIR="${ROOT_DIR}/data/samples"
 IMAGES_DIR="${ROOT_DIR}/data/images"
 CONFIG_FILE="${ROOT_DIR}/config/drone_config.json"
 API_KEYS_FILE="${ROOT_DIR}/config/api_keys.env"
+DEMO_ENV_FILE="${ROOT_DIR}/.env.demo"
 SYSTEM_LOG_PATH="${ROOT_DIR}/data/logs/system.log"
 
 # 颜色定义
@@ -51,21 +52,31 @@ SKIP_PRECHECK="false"
 SKIP_INJECT="false"
 SELECTED_IMAGE=""
 
-load_demo_environment() {
-    if [[ -f "$API_KEYS_FILE" ]]; then
+load_env_file() {
+    local file="$1"
+    local override="${2:-false}"
+    if [[ -f "$file" ]]; then
         while IFS= read -r line || [[ -n "$line" ]]; do
             [[ "$line" =~ ^[[:space:]]*$ || "$line" =~ ^[[:space:]]*# ]] && continue
             [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
             local key="${BASH_REMATCH[1]}"
             local value="${BASH_REMATCH[2]}"
-            if [[ -z "${!key+x}" ]]; then
+            if [[ "$override" == "true" || -z "${!key+x}" ]]; then
                 value="${value%\"}"
                 value="${value#\"}"
                 value="${value%\'}"
                 value="${value#\'}"
                 export "$key=$value"
             fi
-        done < "$API_KEYS_FILE"
+        done < "$file"
+    fi
+}
+
+load_demo_environment() {
+    load_env_file "$API_KEYS_FILE" false
+    if [[ -f "$DEMO_ENV_FILE" ]]; then
+        load_env_file "$DEMO_ENV_FILE" true
+        print_info "已加载演示环境: .env.demo"
     fi
 }
 
@@ -81,14 +92,25 @@ configure_demo_fallbacks() {
 
     if [[ "${QWEN_USE_MOCK:-false}" != "true" ]] && is_placeholder_secret "${QWEN_API_KEY:-}"; then
         export QWEN_USE_MOCK="true"
+        export RAG_ENABLED="${RAG_ENABLED:-false}"
         print_warn "未检测到有效 QWEN_API_KEY，本次启动自动使用本地 AI 决策"
     fi
 
     export DRONE_BACKEND="px4"
+    export MUYE_TAKEOFF_MODE="${MUYE_TAKEOFF_MODE:-$TAKEOFF_MODE}"
     export PX4_AUTO_START_ON_SPRAY="${PX4_AUTO_START_ON_SPRAY:-true}"
     export PX4_RETURN_TO_LAUNCH_AFTER_MISSION="false"
     export PX4_REQUIRE_GLOBAL_POSITION="${PX4_REQUIRE_GLOBAL_POSITION:-false}"
     export PX4_ALLOW_FORCE_ARM="${PX4_ALLOW_FORCE_ARM:-true}"
+    export PX4_EXECUTION_MODE="${PX4_EXECUTION_MODE:-animated_demo}"
+    export PX4_USE_EXISTING_MISSION="${PX4_USE_EXISTING_MISSION:-false}"
+    export PX4_REQUIRE_EXISTING_MISSION="${PX4_REQUIRE_EXISTING_MISSION:-false}"
+    export PX4_EXISTING_MISSION_TOTAL_WAYPOINTS="${PX4_EXISTING_MISSION_TOTAL_WAYPOINTS:-0}"
+    export PX4_MISSION_TAKEOFF_ALTITUDE_M="${PX4_MISSION_TAKEOFF_ALTITUDE_M:-2.0}"
+    export PX4_MISSION_TAKEOFF_BEFORE_START="${PX4_MISSION_TAKEOFF_BEFORE_START:-false}"
+    export PX4_MISSION_TAKEOFF_TIMEOUT_SECONDS="${PX4_MISSION_TAKEOFF_TIMEOUT_SECONDS:-20.0}"
+    export PX4_MISSION_TAKEOFF_ALTITUDE_TOLERANCE_M="${PX4_MISSION_TAKEOFF_ALTITUDE_TOLERANCE_M:-0.35}"
+    export PX4_MISSION_EMERGENCY_MAX_ALTITUDE_M="${PX4_MISSION_EMERGENCY_MAX_ALTITUDE_M:-3.0}"
     print_info "PX4 航线模式：人工确认后启动固定航线动画演示"
 }
 
@@ -262,37 +284,7 @@ fi
 # ── 2. 更新配置 ──
 print_stage "2/4" "更新运行配置"
 
-if [[ -f "$CONFIG_FILE" ]]; then
-    "$PYTHON_BIN" -c "
-import json
-import os
-with open('$CONFIG_FILE', 'r') as f:
-    cfg = json.load(f)
-cfg.setdefault('execution', {})['takeoff_mode'] = '$TAKEOFF_MODE'
-cfg['execution']['backend'] = 'px4'
-cfg['execution']['simulate_only'] = False
-px4 = cfg.setdefault('px4', {})
-px4['auto_start_on_spray'] = True
-px4['return_to_launch_after_mission'] = False
-px4['execution_mode'] = 'animated_demo'
-px4['use_existing_mission'] = False
-px4['require_existing_mission'] = False
-px4['existing_mission_total_waypoints'] = 0
-px4['mission_takeoff_altitude_m'] = 2.0
-px4['mission_takeoff_before_start'] = False
-px4['mission_takeoff_timeout_seconds'] = 20.0
-px4['mission_takeoff_altitude_tolerance_m'] = 0.35
-px4['mission_emergency_max_altitude_m'] = 3.0
-px4['require_global_position'] = False
-px4['allow_force_arm'] = True
-px4.pop('offboard_setpoint_interval_s', None)
-px4.pop('offboard_takeoff_hold_seconds', None)
-px4.pop('local_route', None)
-with open('$CONFIG_FILE', 'w') as f:
-    json.dump(cfg, f, indent=2, ensure_ascii=False)
-"
-    print_success "drone_config.json 已更新"
-fi
+print_success "演示配置已通过环境变量注入，不修改 drone_config.json"
 
 # ── 3. 启动服务 ──
 print_stage "3/4" "启动服务"

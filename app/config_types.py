@@ -61,6 +61,7 @@ class MuyeConfig:
 
     # 无人机配置
     drone_backend: str | None = None
+    takeoff_mode: str = "auto"
 
     # PX4 配置
     px4_system_address: str | None = None
@@ -75,8 +76,17 @@ class MuyeConfig:
     px4_arm_retries: int = 3
     px4_arm_retry_delay_seconds: float = 1.0
     px4_allow_force_arm: bool = False
-    px4_prefer_demo_field: bool = True
+    px4_prefer_demo_field: bool = False
     px4_acceptance_radius_m: float = 2.0
+    px4_execution_mode: str = "animated_demo"
+    px4_use_existing_mission: bool = False
+    px4_require_existing_mission: bool = False
+    px4_existing_mission_total_waypoints: int = 0
+    px4_mission_takeoff_altitude_m: float = 2.0
+    px4_mission_takeoff_before_start: bool = False
+    px4_mission_takeoff_timeout_seconds: float = 20.0
+    px4_mission_takeoff_altitude_tolerance_m: float = 0.35
+    px4_mission_emergency_max_altitude_m: float = 3.0
 
     # RAG 配置
     rag_enabled: bool = True
@@ -177,6 +187,13 @@ class MuyeConfig:
             qwen_use_mock=_parse_env_bool(os.getenv("QWEN_USE_MOCK"), False),
             # 无人机配置
             drone_backend="px4",
+            takeoff_mode=os.getenv(
+                "MUYE_TAKEOFF_MODE",
+                os.getenv(
+                    "DRONE_TAKEOFF_MODE",
+                    str(execution_config.get("takeoff_mode", "auto")),
+                ),
+            ),
             # PX4 配置
             px4_system_address=os.getenv("PX4_SYSTEM_ADDRESS") or px4_config.get("system_address"),
             px4_connect_timeout_seconds=float(
@@ -227,6 +244,52 @@ class MuyeConfig:
             ),
             px4_acceptance_radius_m=float(
                 os.getenv("PX4_ACCEPTANCE_RADIUS_M", str(px4_config.get("acceptance_radius_m", 2.0)))
+            ),
+            px4_execution_mode=os.getenv(
+                "PX4_EXECUTION_MODE",
+                str(px4_config.get("execution_mode", "animated_demo")),
+            ),
+            px4_use_existing_mission=_parse_env_bool(
+                os.getenv("PX4_USE_EXISTING_MISSION"),
+                bool(px4_config.get("use_existing_mission", False)),
+            ),
+            px4_require_existing_mission=_parse_env_bool(
+                os.getenv("PX4_REQUIRE_EXISTING_MISSION"),
+                bool(px4_config.get("require_existing_mission", False)),
+            ),
+            px4_existing_mission_total_waypoints=int(
+                os.getenv(
+                    "PX4_EXISTING_MISSION_TOTAL_WAYPOINTS",
+                    str(px4_config.get("existing_mission_total_waypoints", 0)),
+                )
+            ),
+            px4_mission_takeoff_altitude_m=float(
+                os.getenv(
+                    "PX4_MISSION_TAKEOFF_ALTITUDE_M",
+                    str(px4_config.get("mission_takeoff_altitude_m", 2.0)),
+                )
+            ),
+            px4_mission_takeoff_before_start=_parse_env_bool(
+                os.getenv("PX4_MISSION_TAKEOFF_BEFORE_START"),
+                bool(px4_config.get("mission_takeoff_before_start", False)),
+            ),
+            px4_mission_takeoff_timeout_seconds=float(
+                os.getenv(
+                    "PX4_MISSION_TAKEOFF_TIMEOUT_SECONDS",
+                    str(px4_config.get("mission_takeoff_timeout_seconds", 20.0)),
+                )
+            ),
+            px4_mission_takeoff_altitude_tolerance_m=float(
+                os.getenv(
+                    "PX4_MISSION_TAKEOFF_ALTITUDE_TOLERANCE_M",
+                    str(px4_config.get("mission_takeoff_altitude_tolerance_m", 0.35)),
+                )
+            ),
+            px4_mission_emergency_max_altitude_m=float(
+                os.getenv(
+                    "PX4_MISSION_EMERGENCY_MAX_ALTITUDE_M",
+                    str(px4_config.get("mission_emergency_max_altitude_m", 3.0)),
+                )
             ),
             # RAG 配置
             rag_enabled=_parse_env_bool(os.getenv("RAG_ENABLED"), True),

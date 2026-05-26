@@ -7,6 +7,8 @@ __pycache__/
 
 # Local secrets
 /config/api_keys.env
+.env.demo
+.env.dev
 
 # Local model artifacts
 /models/*.pt
@@ -22,6 +24,7 @@ __pycache__/
 /data/*.db-wal
 /data/*.db-shm
 /data/chroma_db/
+/data/runtime/smoke/
 
 # Streamlit / editor noise
 .streamlit/

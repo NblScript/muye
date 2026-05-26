@@ -10,18 +10,24 @@
 - [x] SQLite v1.1.1 迁移
 - [x] 演示脚本统一（prepare.sh + demo.sh）
 
-## 待处理
-
-详见 [技术债务追踪器](docs/exec-plans/tech-debt-tracker.md)
+## 进行中
 
 | 优先级 | 项目 | 状态 |
 |--------|------|------|
-| 中 | 前端测试覆盖率提升 | 待处理 |
-| 低 | API 速率限制 | 待处理 |
+| 中 | DJI Cloud API 消费级无人机对接（Phase 3） | 待处理 |
+
+## 已完成（近期）
+
+- [x] 前端测试覆盖率提升（51 个测试，Vitest + React Testing Library）
+- [x] API 速率限制（滑动窗口 per-IP 限流，默认 120 次/分钟）
+- [x] SLO 监控（进程内指标采集，4 项 SLO 追踪）
+- [x] DJI OSDK 行业级无人机对接 Phase 1 + Phase 2（后端抽象层 + 仿真模式）
+
+详见 [技术债务追踪器](docs/exec-plans/tech-debt-tracker.md)
 
 ## 长期愿景
 
 - 多农田支持（当前仅单个演示农田）
-- 真实无人机硬件对接（当前仅 PX4 SITL 仿真）
+- ~~真实无人机硬件对接~~ — Phase 1+2 已完成（DJI OSDK），Phase 3（Cloud API 消费级）待处理
 - 实时视频流检测（当前为静态图片上传）
 - 多模型支持（切换不同检测/决策模型）

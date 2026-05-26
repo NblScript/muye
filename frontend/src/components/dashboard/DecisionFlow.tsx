@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Card, Drawer } from '../ui'
 import type { RagContext, RagDocument, WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
-import type { ConsultationDetail, ExpertSummary } from '../../types/workflow'
 
 interface StepData {
   key: string
