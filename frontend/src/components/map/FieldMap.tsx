@@ -7,6 +7,8 @@ import { computeCommandPoint } from './commandPoint'
 
 type FieldMapProps = {
   droneStatus?: string
+  detections?: WorkflowDetectionEntry[]
+  spraySchedule?: number[]
 }
 
 function fieldStatusStyle(status: FieldStatus) {
@@ -287,7 +289,7 @@ function buildDetectionMarkerData(
   })
 }
 
-export default function FieldMap({ droneStatus }: FieldMapProps) {
+export default function FieldMap({ droneStatus, detections = [], spraySchedule }: FieldMapProps) {
   const fallbackFieldPlot = buildDemoFallbackField()
   const primaryFieldPlot = fallbackFieldPlot
   const displayFieldPlots = [primaryFieldPlot]
@@ -319,15 +321,58 @@ export default function FieldMap({ droneStatus }: FieldMapProps) {
   const displayedSprayTrailPoints = finalRoutePoints
   const isDemoFallback = true
   const detectionMarkers = useMemo(
-    () => buildDetectionMarkerData([], primaryFieldPlot.center),
-    [],
+    () => buildDetectionMarkerData(detections, primaryFieldPlot.center),
+    [detections, primaryFieldPlot.center],
   )
+
+  // Density heatmap from detection positions
+  const densityGrid = useMemo(() => {
+    if (detectionMarkers.length === 0) return null
+    const boundary = primaryFieldPlot.boundary
+    const lats = boundary.map((p: LatLngTuple) => p[0])
+    const lngs = boundary.map((p: LatLngTuple) => p[1])
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
+    const rows = 6, cols = 8
+    const grid: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0))
+    let maxVal = 0
+    for (const m of detectionMarkers) {
+      const lat = m.point[0], lng = m.point[1]
+      const r = Math.min(Math.floor(((lat - minLat) / (maxLat - minLat)) * rows), rows - 1)
+      const c = Math.min(Math.floor(((lng - minLng) / (maxLng - minLng)) * cols), cols - 1)
+      if (r >= 0 && c >= 0) {
+        grid[r][c] += m.confidence
+        maxVal = Math.max(maxVal, grid[r][c])
+      }
+    }
+    if (maxVal <= 0) return null
+    const cellW = (maxLng - minLng) / cols
+    const cellH = (maxLat - minLat) / rows
+    const cells = []
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const d = grid[r][c] / maxVal
+        if (d > 0.05) {
+          cells.push({ x: minLng + c * cellW, y: minLat + r * cellH, w: cellW, h: cellH, density: d })
+        }
+      }
+    }
+    return cells
+  }, [detectionMarkers, primaryFieldPlot.boundary])
   const telemetry = {
     altitude: 5,
     speed: 4.5,
     battery: activeDrones[0]?.battery ?? null,
   }
+  const [showHeatmap, setShowHeatmap] = useState(true)
   const viewBox = '0 0 160 100'
+
+  const densityColor = (d: number) => {
+    if (d >= 0.8) return 'rgba(192, 96, 90, 0.35)'
+    if (d >= 0.6) return 'rgba(196, 138, 42, 0.30)'
+    if (d >= 0.3) return 'rgba(90, 138, 106, 0.25)'
+    return 'rgba(90, 138, 106, 0.12)'
+  }
 
   return (
     <div className="field-map-shell">
@@ -395,6 +440,22 @@ export default function FieldMap({ droneStatus }: FieldMapProps) {
             </g>
           )
         })}
+
+        {showHeatmap && densityGrid && densityGrid.length > 0 && (
+          <g opacity="0.85">
+            {densityGrid.map((cell, i) => (
+              <rect
+                key={`density-${i}`}
+                x={cell.x}
+                y={cell.y}
+                width={cell.w}
+                height={cell.h}
+                fill={densityColor(cell.density)}
+                rx="0.5"
+              />
+            ))}
+          </g>
+        )}
 
         {coveragePoints.length >= 3 ? (
           <polygon
@@ -601,6 +662,12 @@ export default function FieldMap({ droneStatus }: FieldMapProps) {
               <div className="map-legend-item">
                 <span className="map-legend-dot" style={{ background: 'var(--accent-red)' }} />
                 <span>检测点 ({detectionMarkers.length})</span>
+              </div>
+            )}
+            {densityGrid && densityGrid.length > 0 && (
+              <div className="map-legend-item" style={{ cursor: 'pointer' }} onClick={() => setShowHeatmap(!showHeatmap)}>
+                <span className="map-legend-swatch" style={{ background: showHeatmap ? 'var(--accent-amber)' : 'var(--text-muted)', opacity: 0.5 }} />
+                <span>{showHeatmap ? '隐藏热力图' : '显示热力图'}</span>
               </div>
             )}
           </div>

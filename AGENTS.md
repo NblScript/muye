@@ -56,7 +56,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 |----|------|------|
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
 | decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 + 合规推理链 |
-| drone | `modules/drone/` | 无人机控制 + 任务规划 + 后端抽象（PX4/DJI OSDK） |
+| drone | `modules/drone/` | 无人机控制 + 任务规划 + 变量喷洒（DensityMap）+ 后端抽象（PX4/DJI OSDK） |
 | infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
 
 ## 演示脚本

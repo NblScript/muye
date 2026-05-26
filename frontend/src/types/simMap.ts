@@ -92,3 +92,18 @@ export interface WsCombinedState {
   sim_map: SimMapStateResponse | null
   workflow_state: WorkflowStateResponse | null
 }
+
+export interface DensityCell {
+  row: number
+  col: number
+  density: number
+  bounds: [number, number][]
+}
+
+export interface DensityMapData {
+  request_id: string
+  grid_rows: number
+  grid_cols: number
+  cells: DensityCell[]
+  spray_schedule: number[]
+}

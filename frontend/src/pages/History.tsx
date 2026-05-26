@@ -63,6 +63,31 @@ export default function History() {
     window.open(`${API_BASE}/api/tasks/${requestId}/report`, '_blank')
   }, [])
 
+  // Daily trend data
+  const trend = useMemo(() => {
+    if (!data || data.items.length === 0) return null
+    const byDay: Record<string, { total: number; completed: number }> = {}
+    for (const item of data.items) {
+      const ts = item.updated_at ?? item.started_at
+      if (!ts) continue
+      const day = new Date(ts).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+      if (!byDay[day]) byDay[day] = { total: 0, completed: 0 }
+      byDay[day].total++
+      if (item.status === 'completed') byDay[day].completed++
+    }
+    const entries = Object.entries(byDay).slice(-14)
+    if (entries.length < 2) return null
+    const maxTotal = Math.max(...entries.map(([, v]) => v.total), 1)
+    return { entries, maxTotal }
+  }, [data])
+
+  const chartW = 480
+  const chartH = 120
+  const padX = 32
+  const padY = 16
+  const innerW = chartW - padX * 2
+  const innerH = chartH - padY * 2
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <h2 style={{ marginBottom: 24, fontWeight: 600 }}>喷洒历史报表</h2>
@@ -83,6 +108,60 @@ export default function History() {
           </div>
         </Card>
       </div>
+
+      {trend && (
+        <Card title="任务趋势" style={{ marginBottom: 24 }}>
+          <svg width={chartW} height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
+            {/* Y-axis line */}
+            <line x1={padX} y1={padY} x2={padX} y2={chartH - padY} stroke="var(--border-default)" strokeWidth="0.5" />
+            <line x1={padX} y1={chartH - padY} x2={chartW - padX} y2={chartH - padY} stroke="var(--border-default)" strokeWidth="0.5" />
+
+            {/* Total tasks polyline */}
+            <polyline
+              fill="none"
+              stroke="var(--accent-amber)"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              points={trend.entries.map(([, v], i) => {
+                const x = padX + (i / Math.max(trend.entries.length - 1, 1)) * innerW
+                const y = chartH - padY - (v.total / trend.maxTotal) * innerH
+                return `${x},${y}`
+              }).join(' ')}
+            />
+
+            {/* Completed tasks polyline */}
+            <polyline
+              fill="none"
+              stroke="var(--accent-green)"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              strokeDasharray="3 2"
+              points={trend.entries.map(([, v], i) => {
+                const x = padX + (i / Math.max(trend.entries.length - 1, 1)) * innerW
+                const y = chartH - padY - (v.completed / trend.maxTotal) * innerH
+                return `${x},${y}`
+              }).join(' ')}
+            />
+
+            {/* X labels */}
+            {trend.entries.map(([day], i) => {
+              if (i % Math.ceil(trend.entries.length / 7) !== 0 && i !== trend.entries.length - 1) return null
+              const x = padX + (i / Math.max(trend.entries.length - 1, 1)) * innerW
+              return (
+                <text key={day} x={x} y={chartH - 2} textAnchor="middle" fontSize="8" fill="var(--text-muted)">
+                  {day}
+                </text>
+              )
+            })}
+
+            {/* Legend */}
+            <line x1={padX + 4} y1={padY + 4} x2={padX + 20} y2={padY + 4} stroke="var(--accent-amber)" strokeWidth="1.5" />
+            <text x={padX + 24} y={padY + 7} fontSize="8" fill="var(--text-secondary)">总任务</text>
+            <line x1={padX + 60} y1={padY + 4} x2={padX + 76} y2={padY + 4} stroke="var(--accent-green)" strokeWidth="1.5" strokeDasharray="3 2" />
+            <text x={padX + 80} y={padY + 7} fontSize="8" fill="var(--text-secondary)">已完成</text>
+          </svg>
+        </Card>
+      )}
 
       <Card
         title="任务列表"

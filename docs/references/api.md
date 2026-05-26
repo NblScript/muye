@@ -307,6 +307,32 @@
 }
 ```
 
+### GET /drone/density-map?request_id={request_id}
+
+获取指定任务的害虫密度热力图数据（变量喷洒路径优化）。
+
+**查询参数**：
+- `request_id` (str): 任务请求 ID
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "grid_rows": 8,
+  "grid_cols": 10,
+  "cells": [
+    {"row": 0, "col": 0, "density": 0.0, "bounds": [[lon1, lat1], [lon2, lat2]]},
+    {"row": 0, "col": 1, "density": 0.35, "bounds": [[lon1, lat1], [lon2, lat2]]}
+  ],
+  "spray_schedule": [0.5, 1.0, 1.5, 1.5, 1.0, 0.5, 0.5, 1.0]
+}
+```
+
+**密度等级与喷洒速率**：
+- `density >= 0.6` → `base_rate × 1.5`（高密度区加量喷洒）
+- `density 0.3-0.6` → `base_rate × 1.0`（标准喷洒）
+- `density < 0.3` → `base_rate × 0.5`（低密度区减量喷洒）
+
 ## SLO 监控
 
 ### GET /slo

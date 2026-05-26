@@ -4,6 +4,8 @@ import logging
 import math
 from typing import Any
 
+from modules.drone.density_map import DensityMap
+
 
 class MissionPlannerError(RuntimeError):
     """系统规划阶段错误。"""
@@ -17,6 +19,45 @@ class MissionPlanner:
     ) -> None:
         self.flight_constraints = flight_constraints
         self.logger = logger or logging.getLogger("muye.planner")
+
+    def plan_variable_rate_mission(
+        self,
+        *,
+        field_context: dict[str, Any],
+        current_weather: dict[str, Any],
+        density_map: DensityMap,
+    ) -> dict[str, Any]:
+        result = self.plan_spray_mission(
+            field_context=field_context,
+            current_weather=current_weather,
+        )
+
+        geofence = self._normalize_geofence(field_context.get("geofence", []))
+        presentation_profile = field_context.get("presentation_profile") or {}
+        crop_cycle = field_context.get("crop_cycle") or {}
+        crop_name = str(crop_cycle.get("crop_name") or "")
+
+        lane_spacing_m = self._resolve_lane_spacing(
+            crop_name=crop_name,
+            presentation_profile=presentation_profile,
+        )
+        lat_span = (max(p[1] for p in geofence) - min(p[1] for p in geofence)) if geofence else 0
+        lat_span_m = lat_span * 111_000
+        lane_count = max(2, int(math.ceil(lat_span_m / lane_spacing_m)) + 1) if lat_span_m > 0 else 2
+
+        spray_rate_range = self.flight_constraints.get("spray_rate_range_lpm", [0.3, 3.0])
+        base_rate = result.get("喷洒速率", 1.0)
+
+        spray_schedule = density_map.suggest_spray_rates(
+            base_rate=base_rate,
+            rate_range=spray_rate_range,
+            lane_count=lane_count,
+        )
+
+        result["spray_schedule"] = spray_schedule
+        result["density_grid"] = density_map.to_geo_grid()
+        result["source"] = "system_planner_variable_rate"
+        return result
 
     def plan_spray_mission(
         self,

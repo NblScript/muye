@@ -828,9 +828,10 @@ class MuyeApplication:
                     warnings=warnings,
                 )
                 takeoff_mode = "manual"
-            execution_plan = self.drone_controller.plan_spray_mission(
+            execution_plan = self._plan_spray_mission(
                 field_context=field_context,
                 current_weather=bundle["weather"],
+                detections=detections,
             )
             self._schedule_incremental_rag_index(
                 request_id=request_id,
@@ -950,6 +951,44 @@ class MuyeApplication:
                 worker_id=worker_id,
                 error=str(exc),
             )
+
+    def _plan_spray_mission(
+        self,
+        *,
+        field_context: dict[str, Any],
+        current_weather: dict[str, Any],
+        detections: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        has_bbox = any(
+            isinstance(d.get("position") or d.get("bbox"), dict)
+            for d in detections
+        )
+        if has_bbox:
+            try:
+                from modules.drone.density_map import DensityMap
+
+                geofence = field_context.get("geofence", [])
+                if geofence and len(geofence) >= 3:
+                    dm = DensityMap(geofence)
+                    dm.add_detections(detections)
+                    plan = self.drone_controller.planner.plan_variable_rate_mission(
+                        field_context=field_context,
+                        current_weather=current_weather,
+                        density_map=dm,
+                    )
+                    self.logger.info(
+                        "变量喷洒规划完成: %d lanes, %d density cells",
+                        len(plan.get("spray_schedule", [])),
+                        len(plan.get("density_grid", [])),
+                    )
+                    return plan
+            except Exception:
+                self.logger.warning("变量喷洒规划失败，降级为均匀路径", exc_info=True)
+
+        return self.drone_controller.plan_spray_mission(
+            field_context=field_context,
+            current_weather=current_weather,
+        )
 
     def _sqlite_write(
         self,

@@ -91,6 +91,8 @@ export default function Settings() {
 
   useEffect(() => {
     void loadHealth()
+    const timer = setInterval(() => void loadHealth(), 10000)
+    return () => clearInterval(timer)
   }, [])
 
   const handleSave = () => {

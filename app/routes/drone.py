@@ -507,6 +507,41 @@ async def disconnect_dji() -> Any:
     return {"status": "disconnected"}
 
 
+async def get_density_map(request_id: str) -> Any:
+    from modules.infra.sqlite_store import SqliteStore
+
+    db_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
+    store = SqliteStore(db_path)
+    try:
+        row = store.fetch_one(
+            "SELECT drone_instruction FROM tasks WHERE request_id = ?",
+            (request_id,),
+        )
+    finally:
+        store.close()
+
+    if not row or not row.get("drone_instruction"):
+        raise HTTPException(status_code=404, detail="任务不存在或无无人机指令")
+
+    instruction = row["drone_instruction"]
+    if isinstance(instruction, str):
+        instruction = json.loads(instruction)
+
+    density_grid = instruction.get("density_grid") or []
+    spray_schedule = instruction.get("spray_schedule") or []
+
+    if not density_grid:
+        raise HTTPException(status_code=404, detail="该任务无密度图数据")
+
+    return {
+        "request_id": request_id,
+        "grid_rows": max(c["row"] for c in density_grid) + 1 if density_grid else 0,
+        "grid_cols": max(c["col"] for c in density_grid) + 1 if density_grid else 0,
+        "cells": density_grid,
+        "spray_schedule": spray_schedule,
+    }
+
+
 def register_drone_routes(app: FastAPI) -> None:
     """Register drone routes."""
     app.post("/drone/confirm-takeoff")(confirm_drone_takeoff)
@@ -527,3 +562,7 @@ def register_drone_routes(app: FastAPI) -> None:
     app.post("/api/drone/dji/connect", include_in_schema=False)(connect_dji)
     app.post("/drone/dji/disconnect")(disconnect_dji)
     app.post("/api/drone/dji/disconnect", include_in_schema=False)(disconnect_dji)
+
+    # 密度图端点
+    app.get("/drone/density-map")(get_density_map)
+    app.get("/api/drone/density-map", include_in_schema=False)(get_density_map)

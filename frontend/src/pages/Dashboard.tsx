@@ -14,6 +14,7 @@ import {
 } from '../api/workflow'
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import DecisionFlow from '../components/dashboard/DecisionFlow'
+import DemoScenarioCards from '../components/dashboard/DemoScenarioCards'
 import DecisionExplainPanel from '../components/dashboard/DecisionExplainPanel'
 import ExpertPanel from '../components/dashboard/ExpertPanel'
 import PipelineStepper, { deriveStages } from '../components/dashboard/PipelineStepper'
@@ -519,6 +520,14 @@ export default function Dashboard() {
       </section>
 
       {demoMode && (
+        <DemoScenarioCards
+          onStarted={(id) => {
+            toast.success(`场景 ${id} 已启动`)
+          }}
+        />
+      )}
+
+      {demoMode && (
         <section className="narrative-banner">
           <div className="narrative-step">
             <span className={`narrative-dot ${detections.length > 0 ? 'done' : ''}`} />
@@ -623,7 +632,10 @@ export default function Dashboard() {
                 <span className="panel-label">无人机作业态势主视图</span>
                 <span className="map-header-note">演示动画 / 地块边界 / 航线规划 / 检测点位</span>
               </div>
-              <FieldMap droneStatus={latestTask?.drone?.status} />
+              <FieldMap
+                droneStatus={latestTask?.drone?.status}
+                detections={latestTask?.detections}
+              />
             </div>
           </Card>
         </main>
