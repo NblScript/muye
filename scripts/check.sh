@@ -36,9 +36,8 @@ echo "========================================"
 run_step "后端测试" \
   env PYTHONPATH="${ROOT_DIR}" "${PYTHON_BIN}" -m pytest \
     "${ROOT_DIR}/tests/" \
-    -v -x \
+    -x \
     -k "not px4_simulator" \
-    --timeout=60 \
     --ignore="${ROOT_DIR}/tests/test_script_imports.py" \
     -q
 

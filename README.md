@@ -905,13 +905,13 @@ PYTHONPATH=. .venv/bin/pytest -q
 这样做的效果是：
 
 - 业务主包只保留当前页面和业务逻辑，首屏主业务 chunk 显著变小。
-- 地图库和 UI 组件库被拆成独立 vendor chunk，更适合浏览器缓存复用。
-- 当只修改业务代码时，只要相关 vendor 依赖内容没有变化，浏览器通常不需要重新下载 `vendor-map`、`vendor-ui` 等大包。
+- 地图库被拆成独立 vendor chunk，更适合浏览器缓存复用。
+- 当只修改业务代码时，只要相关 vendor 依赖内容没有变化，浏览器通常不需要重新下载 `vendor-map` 等大包。
 
 当前仓库构建结果中，文件名已经带内容哈希，例如：
 
 - `vendor-map-*.js`
-- `vendor-ui-*.js`
+- `vendor-react-*.js`
 - `index-*.js`
 
 这意味着缓存策略已经具备“按内容变更失效”的前提条件：
