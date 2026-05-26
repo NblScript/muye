@@ -25,6 +25,9 @@ __pycache__/
 /data/*.db-shm
 /data/chroma_db/
 /data/runtime/smoke/
+/data/runtime/px4.pid
+/data/runtime/pipeline-worker.log
+/data/runtime/takeoff/
 
 # Streamlit / editor noise
 .streamlit/

@@ -601,7 +601,7 @@ SERVICE_CLIENT_IP="127.0.0.1"
 - `drone_config.json` 中的 `field.weather_location` 或 `field.location.city` 只作为业务天气查询回退，不作为 PX4 飞控航点来源。
 - 本地 YOLO API 默认读取 `YOLO_LOCAL_MODEL_PATH`，主流程默认调用 `YOLO_API_URL`。
 - `YOLO_API_KEY` 同时用于主项目访问本地 YOLO API 的 Bearer Token。
-- `MUYE_SQLITE_PATH` 默认是 `data/muye.db`，主处理链会把任务、检测、天气和决策摘要同步写入该库。
+- `MUYE_SQLITE_PATH` 默认是 `~/.muye/data/muye.db`，主处理链会把任务、检测、天气和决策摘要同步写入该库。
 - `MUYE_ACTIVE_FIELD_ID` 可指定当前作业链路优先使用的数据库地块 ID。
 - `drone_config.json` 中 `simulate_capture=true` 时，系统会自动生成一张最小 JPEG 作为采图结果，便于本地联调。
 - `DRONE_BACKEND=px4` 是当前唯一对外运行链路，项目会走 PX4 SITL / MAVSDK 执行。
@@ -862,7 +862,7 @@ MUYE_API_TARGET=http://127.0.0.1:18100 npm run dev -- --host 127.0.0.1 --port 51
 - 无人机图片存放在 `data/images/`
 - 系统日志存放在 `data/logs/system.log`
 - 实时事件总线存放在 `data/logs/demo_events.jsonl`
-- 结构化业务数据默认写入 `data/muye.db`
+- 结构化业务数据默认写入 `~/.muye/data/muye.db`
 - 日志会记录 `request_id`、`client_ip`、`duration_ms` 等字段
 
 ## 测试
@@ -896,10 +896,6 @@ PYTHONPATH=. .venv/bin/pytest -q
 - `vendor-react`
   - `react`
   - `react-dom`
-- `vendor-ui`
-  - `antd`
-  - `@ant-design/*`
-  - `rc-*`
 - `vendor-map`
   - `leaflet`
   - `react-leaflet`
