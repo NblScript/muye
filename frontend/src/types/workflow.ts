@@ -109,6 +109,12 @@ export interface ExecutionPolicy {
   reason: string
 }
 
+export interface ComplianceAlternative {
+  pesticide: string
+  reason: string
+  score: number
+}
+
 export interface ComplianceResult {
   status: 'passed' | 'warning' | 'blocked'
   score: number
@@ -117,7 +123,7 @@ export interface ComplianceResult {
   blocking_reasons: string[]
   warnings: string[]
   execution_policy: ExecutionPolicy
-  alternatives: unknown[]
+  alternatives: ComplianceAlternative[]
 }
 
 export interface WorkflowTaskState {

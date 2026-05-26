@@ -132,6 +132,23 @@ export default function DecisionExplainPanel({ task }: Props) {
                 </Tag>
               )}
             </div>
+
+            {/* Alternatives */}
+            {compliance.alternatives && compliance.alternatives.length > 0 && (
+              <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border-subtle)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>替代方案推荐</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {compliance.alternatives.map((alt, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12 }}>
+                      <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>{i + 1}.</span>
+                      <span style={{ fontWeight: 600 }}>{alt.pesticide}</span>
+                      <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{alt.reason}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{alt.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

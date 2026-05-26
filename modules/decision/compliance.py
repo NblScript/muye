@@ -71,6 +71,12 @@ class PesticideComplianceChecker:
         else:
             takeoff_mode = "auto"
 
+        alternatives = (
+            self._find_alternatives(pesticide_name, rag_context or {}, crop_name, pest_terms, weather)
+            if status in ("blocked", "warning")
+            else []
+        )
+
         return {
             "status": status,
             "score": score,
@@ -82,7 +88,7 @@ class PesticideComplianceChecker:
                 "takeoff_mode": takeoff_mode,
                 "reason": summary,
             },
-            "alternatives": [],
+            "alternatives": alternatives,
         }
 
     # ── Check implementations ──
@@ -258,6 +264,80 @@ class PesticideComplianceChecker:
             "message": "当前天气条件未触发施药风险",
             "evidence": evidence,
         }
+
+    # ── Alternatives finder ──
+
+    def _find_alternatives(
+        self,
+        chosen_name: str,
+        rag_context: dict[str, Any],
+        crop_name: str,
+        pest_terms: list[str],
+        weather: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        candidates = rag_context.get("pesticides") or []
+        if not candidates:
+            return []
+
+        chosen_candidate = self._find_candidate(chosen_name, rag_context)
+
+        scored: list[tuple[float, dict[str, Any], str, list[str]]] = []
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if candidate is chosen_candidate:
+                continue
+
+            name = self._candidate_text(candidate, "product_name", "农药名称")
+            if not name:
+                continue
+
+            toxicity = self._candidate_text(candidate, "toxicity", "毒性")
+            if "剧毒" in toxicity or "高毒" in toxicity:
+                continue
+
+            crops = self._candidate_terms(candidate, "target_crops", "适用作物")
+            target_pests = self._candidate_terms(candidate, "target_pests", "防治对象")
+
+            crop_ok = any(self._soft_match(crop_name, c) for c in crops) if crop_name and crops else False
+            pest_ok = any(
+                self._soft_match(pest, t) for pest in pest_terms for t in target_pests
+            ) if pest_terms and target_pests else False
+
+            score = 0.0
+            reasons: list[str] = []
+            if crop_ok:
+                score += 50
+                reasons.append(f"适用于{crop_name}")
+            if pest_ok:
+                score += 40
+                reasons.append("防治对象匹配")
+            if "低毒" in toxicity:
+                score += 10
+                reasons.append("低毒安全")
+            if "中等毒" in toxicity:
+                score += 5
+
+            rag_score = 0.0
+            metadata = candidate.get("metadata")
+            if isinstance(metadata, dict):
+                rag_score = float(metadata.get("score") or 0)
+            if rag_score > 0:
+                score = score * (1 + rag_score)
+
+            if score > 0:
+                scored.append((score, candidate, name, reasons))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        results: list[dict[str, Any]] = []
+        for sc, _cand, name, reasons in scored[:3]:
+            results.append({
+                "pesticide": name,
+                "reason": "；".join(reasons),
+                "score": round(sc, 1),
+            })
+        return results
 
     # ── Summary builder ──
 

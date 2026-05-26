@@ -128,7 +128,9 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 - `warning` → 强制人工确认（即使配置为 auto）
 - `blocked` → 禁止启动无人机
 
-每项检查携带 `evidence`（来源 + 匹配字段），顶层返回 `summary`（规则拼接）、`execution_policy`、`alternatives`（MVP 空列表，Phase 2）。
+每项检查携带 `evidence`（来源 + 匹配字段），顶层返回 `summary`（规则拼接）、`execution_policy`、`alternatives`（blocked/warning 时从 RAG 候选中推荐替代农药，最多 3 条，排除高毒/剧毒品种）。
+
+**知识库规模**：80 条农药（5 级毒性）· 7 种作物 · 238 个 RAG 知识文档块
 
 **代码**：`modules/decision/compliance.py`
 **设计文档**：`docs/superpowers/specs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`

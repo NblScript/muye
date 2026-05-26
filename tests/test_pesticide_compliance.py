@@ -181,7 +181,7 @@ def test_compliance_includes_evidence_per_check() -> None:
     assert weather_check["evidence"][0]["source"] == "weather_api"
 
 
-def test_compliance_returns_empty_alternatives() -> None:
+def test_compliance_returns_empty_alternatives_when_passed() -> None:
     checker = PesticideComplianceChecker()
 
     result = checker.check(
@@ -192,4 +192,115 @@ def test_compliance_returns_empty_alternatives() -> None:
         weather={"wind_speed": 3.0, "humidity": 60},
     )
 
+    assert result["status"] == "passed"
     assert result["alternatives"] == []
+
+
+def test_compliance_returns_alternatives_when_blocked() -> None:
+    checker = PesticideComplianceChecker()
+    rag_context = {
+        "pesticides": [
+            {
+                "content": "农药名称：甲拌磷\n适用作物：冬小麦\n防治对象：蚜虫\n毒性：高毒",
+                "metadata": {
+                    "product_name": "甲拌磷",
+                    "target_crops": ["冬小麦"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "高毒",
+                },
+            },
+            {
+                "content": "农药名称：吡虫啉\n适用作物：冬小麦\n防治对象：蚜虫\n毒性：低毒",
+                "metadata": {
+                    "product_name": "吡虫啉",
+                    "target_crops": ["冬小麦"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "低毒",
+                },
+            },
+            {
+                "content": "农药名称：啶虫脒\n适用作物：冬小麦\n防治对象：蚜虫\n毒性：低毒",
+                "metadata": {
+                    "product_name": "啶虫脒",
+                    "target_crops": ["冬小麦"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "低毒",
+                },
+            },
+            {
+                "content": "农药名称：氧乐果\n适用作物：冬小麦\n防治对象：蚜虫\n毒性：高毒",
+                "metadata": {
+                    "product_name": "氧乐果",
+                    "target_crops": ["冬小麦"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "高毒",
+                },
+            },
+        ],
+    }
+
+    result = checker.check(
+        decision={"用药": {"农药名称": "甲拌磷"}},
+        rag_context=rag_context,
+        field_context={"crop_cycle": {"crop_name": "冬小麦"}},
+        pest_detections=[{"pest_type": "aphid", "confidence": 0.9}],
+        weather={"wind_speed": 2.0, "humidity": 60},
+    )
+
+    assert result["status"] == "blocked"
+    assert len(result["alternatives"]) > 0
+    for alt in result["alternatives"]:
+        assert "pesticide" in alt
+        assert "reason" in alt
+        assert "score" in alt
+        assert alt["pesticide"] != "甲拌磷"
+        assert "氧乐果" not in alt["pesticide"]
+
+
+def test_compliance_alternatives_exclude_high_toxicity() -> None:
+    checker = PesticideComplianceChecker()
+    rag_context = {
+        "pesticides": [
+            {
+                "content": "农药名称：氧乐果\n适用作物：冬小麦\n防治对象：蚜虫\n毒性：高毒",
+                "metadata": {
+                    "product_name": "氧乐果",
+                    "target_crops": ["冬小麦"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "高毒",
+                },
+            },
+            {
+                "content": "农药名称：涕灭威\n适用作物：棉花\n防治对象：蚜虫\n毒性：剧毒",
+                "metadata": {
+                    "product_name": "涕灭威",
+                    "target_crops": ["棉花"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "剧毒",
+                },
+            },
+            {
+                "content": "农药名称：吡虫啉\n适用作物：冬小麦\n防治对象：蚜虫\n毒性：低毒",
+                "metadata": {
+                    "product_name": "吡虫啉",
+                    "target_crops": ["冬小麦"],
+                    "target_pests": ["蚜虫"],
+                    "toxicity": "低毒",
+                },
+            },
+        ],
+    }
+
+    result = checker.check(
+        decision={"用药": {"农药名称": "氧乐果"}},
+        rag_context=rag_context,
+        field_context={"crop_cycle": {"crop_name": "冬小麦"}},
+        pest_detections=[{"pest_type": "aphid", "confidence": 0.9}],
+        weather={"wind_speed": 2.0, "humidity": 60},
+    )
+
+    assert result["status"] == "blocked"
+    alt_names = [a["pesticide"] for a in result["alternatives"]]
+    assert "氧乐果" not in alt_names
+    assert "涕灭威" not in alt_names
+    assert "吡虫啉" in alt_names
