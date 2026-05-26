@@ -190,6 +190,12 @@
 
 获取 YOLO 标注后的图片。
 
+### GET /tasks/{request_id}/report
+
+生成任务 Markdown 报告。包含地块信息、虫害检测、气象数据、合规审核、AI 决策方案、会诊过程、无人机执行记录。
+
+**响应**：`text/markdown; charset=utf-8`
+
 ## 仿真
 
 ### GET /sim/map-state

@@ -67,6 +67,7 @@ function isWorkflowStateResponse(value: unknown): value is WorkflowStateResponse
 
 export default function Dashboard() {
   const toast = useToast()
+  const [demoMode, setDemoMode] = useState(false)
   const [workflowLoading, setWorkflowLoading] = useState(true)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [context, setContext] = useState<DashboardContextResponse | null>(null)
@@ -198,6 +199,9 @@ export default function Dashboard() {
     : latestTask?.status === 'completed'
       ? '任务完成'
       : '等待输入'
+  const windSpeed = Number(weather.wind_speed ?? weather.windSpeed ?? 0)
+  const humidity = Number(weather.humidity ?? 0)
+  const weatherOk = windSpeed <= 5 && humidity >= 40
   const heroTitle = uploading || activeStageKey === 'upload' || activeStageKey === 'detection'
     ? `▶ 正在识别虫情（已处理 ${processedImageCount} 张图像）`
     : !hasCurrentTask
@@ -356,7 +360,7 @@ export default function Dashboard() {
   const showTakeoffBanner = String(latestTask?.drone?.status ?? '').toLowerCase() === 'pending_confirmation'
 
   return (
-    <div className="dashboard-shell">
+    <div className={`dashboard-shell${demoMode ? ' demo-mode' : ''}`}>
       <section className="dashboard-command-strip">
         <Card className="dashboard-card command-card">
           <div className="command-strip-topline">
@@ -368,7 +372,15 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="command-strip-right">
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className={`demo-mode-toggle${demoMode ? ' is-active' : ''}`}
+                  onClick={() => { setDemoMode((v) => !v) }}
+                  title={demoMode ? '退出演示模式' : '进入演示模式（隐藏技术细节）'}
+                >
+                  {demoMode ? '退出演示' : '演示模式'}
+                </button>
                 <Tag color={modeColor(context?.modes.yolo)}>YOLO {context?.modes.yolo ?? '--'}</Tag>
                 <Tag color={modeColor(context?.modes.weather)}>天气 {context?.modes.weather ?? '--'}</Tag>
                 <Tag color={modeColor(context?.modes.qwen)}>千问 {context?.modes.qwen ?? '--'}</Tag>
@@ -503,6 +515,30 @@ export default function Dashboard() {
           <PipelineStepper task={latestTask} />
         </Card>
       </section>
+
+      {demoMode && hasCurrentTask && (
+        <section className="narrative-banner">
+          <div className="narrative-step">
+            <span className="narrative-dot done" />
+            <span>识别到 <strong>{primaryPest}</strong>，置信度 {(detections[0]?.confidence ?? 0) >= 0 ? `${(detections[0]?.confidence * 100).toFixed(0)}%` : '--'}</span>
+          </div>
+          <span className="narrative-arrow">→</span>
+          <div className="narrative-step">
+            <span className={`narrative-dot ${Object.keys(weather).length > 0 ? 'done' : ''}`} />
+            <span>天气 {weatherOk ? '适宜施药' : '需注意风险'}</span>
+          </div>
+          <span className="narrative-arrow">→</span>
+          <div className="narrative-step">
+            <span className={`narrative-dot ${medication['农药名称'] ? 'done' : ''}`} />
+            <span>推荐 <strong>{safeMetric(medication['农药名称'])}</strong></span>
+          </div>
+          <span className="narrative-arrow">→</span>
+          <div className="narrative-step">
+            <span className={`narrative-dot ${latestTask?.status === 'completed' ? 'done' : ''}`} />
+            <span>{latestTask?.status === 'completed' ? '喷洒完成' : '执行中'}</span>
+          </div>
+        </section>
+      )}
 
       {showTakeoffBanner ? (
         <Alert

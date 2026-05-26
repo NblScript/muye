@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { fetchWorkflowHistory } from '../api/workflow'
 import { Card, Empty, Select, Tag } from '../components/ui'
 import type { WorkflowHistoryEntry, WorkflowHistoryResponse } from '../types/workflow'
 
+const API_BASE = import.meta.env.VITE_API_URL || ''
+
 const statusColorMap: Record<string, 'green' | 'red' | 'amber' | 'default'> = {
   completed: 'green',
+  blocked: 'red',
   error: 'red',
   running: 'amber',
   pending: 'default',
@@ -56,6 +59,10 @@ export default function History() {
     return { total, totalArea, successRate }
   }, [data])
 
+  const openReport = useCallback((requestId: string) => {
+    window.open(`${API_BASE}/api/tasks/${requestId}/report`, '_blank')
+  }, [])
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       <h2 style={{ marginBottom: 24, fontWeight: 600 }}>喷洒历史报表</h2>
@@ -87,6 +94,7 @@ export default function History() {
               { label: '全部状态', value: 'all' },
               { label: '运行中', value: 'running' },
               { label: '已完成', value: 'completed' },
+              { label: '已拦截', value: 'blocked' },
               { label: '异常', value: 'error' },
             ]}
           />
@@ -106,6 +114,7 @@ export default function History() {
                   <th>状态</th>
                   <th>喷洒面积(亩)</th>
                   <th>更新时间</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,6 +130,15 @@ export default function History() {
                       </td>
                       <td className="mono">{typeof area === 'number' ? area.toFixed(2) : '--'}</td>
                       <td>{item.updated_at ? new Date(item.updated_at).toLocaleString('zh-CN') : '--'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-report"
+                          onClick={() => { openReport(item.request_id) }}
+                        >
+                          报告
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
