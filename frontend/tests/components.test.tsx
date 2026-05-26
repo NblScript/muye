@@ -168,7 +168,7 @@ describe('DecisionExplainPanel', () => {
     render(<DecisionExplainPanel task={task} />)
 
     expect(screen.getByText('合规审核')).toBeInTheDocument()
-    expect(screen.getByText('需人工确认')).toBeInTheDocument()
+    expect(screen.getByText('风险提示')).toBeInTheDocument()
     expect(screen.getByText('76分')).toBeInTheDocument()
     expect(screen.getByText('当前风速6.1m/s偏高，注意药液漂移风险')).toBeInTheDocument()
   })

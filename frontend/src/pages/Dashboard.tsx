@@ -361,6 +361,16 @@ export default function Dashboard() {
 
   return (
     <div className={`dashboard-shell${demoMode ? ' demo-mode' : ''}`}>
+      <div className="demo-mode-bar">
+        <button
+          type="button"
+          className={`demo-mode-toggle${demoMode ? ' is-active' : ''}`}
+          onClick={() => { setDemoMode((v) => !v) }}
+        >
+          {demoMode ? '✕ 退出演示模式' : '▶ 进入演示模式'}
+        </button>
+        {demoMode && <span className="demo-mode-hint">已隐藏技术细节，展示决策叙事</span>}
+      </div>
       <section className="dashboard-command-strip">
         <Card className="dashboard-card command-card">
           <div className="command-strip-topline">
@@ -372,15 +382,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="command-strip-right">
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  className={`demo-mode-toggle${demoMode ? ' is-active' : ''}`}
-                  onClick={() => { setDemoMode((v) => !v) }}
-                  title={demoMode ? '退出演示模式' : '进入演示模式（隐藏技术细节）'}
-                >
-                  {demoMode ? '退出演示' : '演示模式'}
-                </button>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <Tag color={modeColor(context?.modes.yolo)}>YOLO {context?.modes.yolo ?? '--'}</Tag>
                 <Tag color={modeColor(context?.modes.weather)}>天气 {context?.modes.weather ?? '--'}</Tag>
                 <Tag color={modeColor(context?.modes.qwen)}>千问 {context?.modes.qwen ?? '--'}</Tag>
@@ -516,26 +518,26 @@ export default function Dashboard() {
         </Card>
       </section>
 
-      {demoMode && hasCurrentTask && (
+      {demoMode && (
         <section className="narrative-banner">
           <div className="narrative-step">
-            <span className="narrative-dot done" />
-            <span>识别到 <strong>{primaryPest}</strong>，置信度 {(detections[0]?.confidence ?? 0) >= 0 ? `${(detections[0]?.confidence * 100).toFixed(0)}%` : '--'}</span>
+            <span className={`narrative-dot ${detections.length > 0 ? 'done' : ''}`} />
+            <span>{detections.length > 0 ? <>识别到 <strong>{primaryPest}</strong>，置信度 {(detections[0]?.confidence * 100).toFixed(0)}%</> : '等待虫情识别'}</span>
           </div>
           <span className="narrative-arrow">→</span>
           <div className="narrative-step">
             <span className={`narrative-dot ${Object.keys(weather).length > 0 ? 'done' : ''}`} />
-            <span>天气 {weatherOk ? '适宜施药' : '需注意风险'}</span>
+            <span>{Object.keys(weather).length > 0 ? (weatherOk ? '天气适宜施药' : '天气需注意风险') : '等待气象数据'}</span>
           </div>
           <span className="narrative-arrow">→</span>
           <div className="narrative-step">
             <span className={`narrative-dot ${medication['农药名称'] ? 'done' : ''}`} />
-            <span>推荐 <strong>{safeMetric(medication['农药名称'])}</strong></span>
+            <span>{medication['农药名称'] ? <>推荐 <strong>{String(medication['农药名称'])}</strong></> : '等待 AI 决策'}</span>
           </div>
           <span className="narrative-arrow">→</span>
           <div className="narrative-step">
             <span className={`narrative-dot ${latestTask?.status === 'completed' ? 'done' : ''}`} />
-            <span>{latestTask?.status === 'completed' ? '喷洒完成' : '执行中'}</span>
+            <span>{latestTask?.status === 'completed' ? '喷洒完成' : hasCurrentTask ? '执行中' : '等待任务'}</span>
           </div>
         </section>
       )}

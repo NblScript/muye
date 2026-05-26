@@ -20,7 +20,7 @@ function weatherSuitability(weather: Record<string, unknown>): { text: string; o
 function complianceStatus(status?: string): { label: string; color: 'green' | 'amber' | 'red' | 'default' } {
   if (status === 'passed') return { label: '已通过', color: 'green' }
   if (status === 'blocked') return { label: '已拦截', color: 'red' }
-  if (status === 'warning') return { label: '需人工确认', color: 'amber' }
+  if (status === 'warning') return { label: '风险提示', color: 'amber' }
   return { label: '待审核', color: 'default' }
 }
 

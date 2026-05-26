@@ -755,6 +755,20 @@ class MuyeApplication:
                 client_ip=self.client_ip,
             )
             compliance = bundle.get("compliance") or {}
+
+            # Write weather/decision to SQLite before compliance checks
+            # so blocked tasks still have full data for reports.
+            self._sqlite_write(
+                request_id,
+                "add_weather_snapshot",
+                lambda: self.sqlite_store.add_weather_snapshot(request_id, bundle["weather"]),
+            )
+            self._sqlite_write(
+                request_id,
+                "add_decision",
+                lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
+            )
+
             if isinstance(compliance, dict) and compliance.get("status") == "blocked":
                 reasons = compliance.get("blocking_reasons") or []
                 message = "农药合规审核未通过，已阻止无人机执行"
@@ -763,6 +777,8 @@ class MuyeApplication:
                     "mark_task_finished_compliance_blocked",
                     lambda: self.sqlite_store.mark_task_finished(request_id, "blocked"),
                 )
+                from app.slo import get_slo_metrics
+                get_slo_metrics().record_pipeline_error()
                 self.event_bus.publish(
                     request_id=request_id,
                     stage="compliance",
@@ -783,19 +799,17 @@ class MuyeApplication:
                     blocking_reasons=reasons,
                 )
                 return
+            if isinstance(compliance, dict) and compliance.get("status") == "warning":
+                warnings = compliance.get("warnings") or []
+                self.logger.warning(
+                    "合规审核有风险提示，强制进入人工确认流程",
+                    request_id=request_id,
+                    warnings=warnings,
+                )
+                takeoff_mode = "manual"
             execution_plan = self.drone_controller.plan_spray_mission(
                 field_context=field_context,
                 current_weather=bundle["weather"],
-            )
-            self._sqlite_write(
-                request_id,
-                "add_weather_snapshot",
-                lambda: self.sqlite_store.add_weather_snapshot(request_id, bundle["weather"]),
-            )
-            self._sqlite_write(
-                request_id,
-                "add_decision",
-                lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
             )
             self._schedule_incremental_rag_index(
                 request_id=request_id,

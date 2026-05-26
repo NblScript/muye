@@ -5,10 +5,21 @@
 }
 
 /* ── Demo Mode Toggle ── */
+.demo-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
 .demo-mode-toggle {
-  padding: 4px 12px;
-  font-size: 12px;
-  border: 1px solid var(--accent-purple);
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px solid var(--accent-purple);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--accent-purple);
@@ -21,6 +32,11 @@
 .demo-mode-toggle.is-active {
   background: var(--accent-purple);
   color: #fff;
+}
+
+.demo-mode-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* ── Narrative Banner (demo mode) ── */

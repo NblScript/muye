@@ -98,11 +98,19 @@ if [[ ! -f "$IMAGE" ]]; then
   exit 1
 fi
 
+# If --run flag passed, directly invoke demo.sh with all env vars in this process
+if [[ "${2:-}" == "--run" ]]; then
+  echo -e "${GREEN}直接启动 demo.sh...${NC}"
+  exec "$ROOT_DIR/scripts/demo.sh" --takeoff "${MUYE_TAKEOFF_MODE:-manual}"
+fi
+
 echo ""
-echo -e "环境变量已设置。现在可以："
+echo -e "用法（二选一）："
 echo ""
-echo -e "  1. 启动系统:  ${CYAN}./scripts/demo.sh --takeoff manual${NC}"
-echo -e "  2. 上传图片:  ${CYAN}curl -F 'file=@${IMAGE}' ${API_URL}/demo/upload-image${NC}"
-echo -e "  3. 或直接在浏览器上传图片"
+echo -e "  ${CYAN}source scripts/demo_scenario.sh ${SCENARIO}${NC}"
+echo -e "  然后运行 ${CYAN}./scripts/demo.sh --takeoff manual${NC}"
 echo ""
-echo -e "提示: 场景参数已 export 到当前 shell，demo.sh 会自动使用。"
+echo -e "  ${CYAN}bash scripts/demo_scenario.sh ${SCENARIO} --run${NC}"
+echo -e "  自动启动 demo.sh（场景变量通过 exec 传递）"
+echo ""
+echo -e "样例图片: ${IMAGE}"
