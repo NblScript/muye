@@ -4,6 +4,8 @@ import StatCard from '../src/components/dashboard/StatCard'
 import WeatherCard from '../src/components/dashboard/WeatherCard'
 import TaskList from '../src/components/dashboard/TaskList'
 import ExpertPanel from '../src/components/dashboard/ExpertPanel'
+import DecisionExplainPanel from '../src/components/dashboard/DecisionExplainPanel'
+import type { WorkflowTaskState } from '../src/types/workflow'
 
 describe('StatCard', () => {
   it('renders label, value, and unit', () => {
@@ -128,5 +130,46 @@ describe('ExpertPanel', () => {
     }
     render(<ExpertPanel ragContext={ragContext} />)
     expect(screen.getByText('调用失败，已降级处理')).toBeInTheDocument()
+  })
+})
+
+describe('DecisionExplainPanel', () => {
+  it('renders pesticide compliance review result', () => {
+    const task: WorkflowTaskState = {
+      request_id: 'req-compliance',
+      current_stage: 'decision',
+      status: 'running',
+      message: '千问决策生成完成',
+      field: {},
+      detections: [{ pest_type: 'aphid', confidence: 0.92 }],
+      weather: { wind_speed: 6.1, humidity: 88 },
+      spray_summary: {},
+      decision: {
+        用药: {
+          农药名称: '吡虫啉',
+          安全提示: ['佩戴防护装备'],
+        },
+      },
+      compliance: {
+        status: 'warning',
+        score: 76,
+        checks: [
+          { rule: 'source_match', status: 'passed', message: '吡虫啉来自 RAG 农药候选' },
+          { rule: 'weather_risk', status: 'warning', message: '当前风速6.1m/s偏高，注意药液漂移风险' },
+        ],
+        blocking_reasons: [],
+        warnings: ['当前风速6.1m/s偏高，注意药液漂移风险'],
+      },
+      drone: {},
+      drone_timeline: [],
+      recent_events: [],
+    }
+
+    render(<DecisionExplainPanel task={task} />)
+
+    expect(screen.getByText('合规审核')).toBeInTheDocument()
+    expect(screen.getByText('需人工确认')).toBeInTheDocument()
+    expect(screen.getByText('76分')).toBeInTheDocument()
+    expect(screen.getByText('当前风速6.1m/s偏高，注意药液漂移风险')).toBeInTheDocument()
   })
 })

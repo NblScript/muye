@@ -64,6 +64,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 ```bash
 ./scripts/prepare.sh   # 环境准备（依赖检查、演示图片、RAG 知识库）
 ./scripts/demo.sh      # 一键演示主入口（通过 env var 注入配置，不修改 config 文件）
+./scripts/demo_scenario.sh <场景名> # 预设演示场景（aphid_normal|planthopper_humid|wind_high|rag_down|px4_down）
 ./scripts/demo_smoke.sh # 烟雾测试（验证 API + mock 链路，不依赖 PX4）
 ./scripts/precheck.sh  # 可 source 的环境检查工具库
 ```

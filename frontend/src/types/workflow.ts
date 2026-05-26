@@ -90,6 +90,20 @@ export interface RagContext {
   familiarity_score?: number
 }
 
+export interface ComplianceCheck {
+  rule: string
+  status: 'passed' | 'warning' | 'blocked'
+  message: string
+}
+
+export interface ComplianceResult {
+  status: 'passed' | 'warning' | 'blocked'
+  score: number
+  checks: ComplianceCheck[]
+  blocking_reasons: string[]
+  warnings: string[]
+}
+
 export interface WorkflowTaskState {
   request_id: string
   current_stage: string
@@ -102,6 +116,7 @@ export interface WorkflowTaskState {
   weather: Record<string, unknown>
   spray_summary: Record<string, unknown>
   decision: Record<string, unknown>
+  compliance?: ComplianceResult
   rag_context?: RagContext
   drone: WorkflowDroneState
   drone_timeline: WorkflowTimelineEntry[]

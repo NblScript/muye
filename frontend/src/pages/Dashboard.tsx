@@ -14,6 +14,7 @@ import {
 } from '../api/workflow'
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import DecisionFlow from '../components/dashboard/DecisionFlow'
+import DecisionExplainPanel from '../components/dashboard/DecisionExplainPanel'
 import ExpertPanel from '../components/dashboard/ExpertPanel'
 import PipelineStepper, { deriveStages } from '../components/dashboard/PipelineStepper'
 import FieldMap from '../components/map/FieldMap'
@@ -569,6 +570,7 @@ export default function Dashboard() {
       <section className="dashboard-grid">
         <aside className="dashboard-column dashboard-column-left">
           <DecisionFlow task={latestTask} />
+          <DecisionExplainPanel task={latestTask} />
           {latestTask?.rag_context?.consultation_detail && (
             <Card className="dashboard-card">
               <ExpertPanel ragContext={latestTask.rag_context} />

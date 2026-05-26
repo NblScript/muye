@@ -45,6 +45,16 @@
 - `--frontend-port 5173`
 - `--interval 5`（图片注入间隔秒数）
 
+**预设场景**：`./scripts/demo_scenario.sh <场景名>` 可预设环境变量和样例图片：
+
+| 场景 | 说明 |
+|------|------|
+| `aphid_normal` | 小麦蚜虫，正常天气 |
+| `planthopper_humid` | 水稻稻飞虱，高温高湿 |
+| `wind_high` | 风速过高，AI 建议暂缓 |
+| `rag_down` | RAG 不可用，降级处理 |
+| `px4_down` | PX4 不可用，动画演示 |
+
 ### 阶段 3：图片上传与检测
 
 **触发**：用户通过前端上传图片，或 demo.sh 自动注入

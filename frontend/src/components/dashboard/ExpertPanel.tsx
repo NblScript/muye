@@ -64,11 +64,19 @@ export default function ExpertPanel({ ragContext }: ExpertPanelProps) {
   const expertEntries = Object.entries(experts)
   if (expertEntries.length === 0) return null
 
+  const decisionPath = ragContext?.decision_path ?? 'multi_agent'
+  const pathLabel: Record<string, { text: string; cls: string }> = {
+    expert: { text: '专家快速路径', cls: 'expert' },
+    escalated: { text: '专家异常 → 多智能体升级', cls: 'escalated' },
+    multi_agent: { text: `${activeCount} 位专家参与`, cls: 'multi_agent' },
+  }
+  const pathInfo = pathLabel[decisionPath] ?? pathLabel.multi_agent
+
   return (
     <div className="expert-panel-wrapper">
       <div className="panel-header">
         <span className="panel-title">多智能体专家会诊</span>
-        <span className="path-badge multi_agent">{activeCount} 位专家参与</span>
+        <span className={`path-badge ${pathInfo.cls}`}>{pathInfo.text}</span>
       </div>
       <div className="panel-body">
         {/* Expert Cards */}
@@ -146,6 +154,25 @@ export default function ExpertPanel({ ragContext }: ExpertPanelProps) {
             })}
           </div>
         )}
+
+        {/* Final Recommendation */}
+        {expertEntries.length > 0 && (() => {
+          const winner = Object.entries(voteDist).sort(([, a], [, b]) => b - a)[0]
+          const winnerExpert = expertEntries.find(([, info]) => info.name === winner?.[0])
+          return winnerExpert ? (
+            <div className="consultation-final">
+              <span className="consultation-label">最终方案</span>
+              <div className="consultation-final-result">
+                <span style={{ fontWeight: 700, fontSize: 14 }}>{winnerExpert[1]['农药名称']}</span>
+                {winnerExpert[1]['总量'] && (
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>
+                    {winnerExpert[1]['总量']}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : null
+        })()}
       </div>
     </div>
   )

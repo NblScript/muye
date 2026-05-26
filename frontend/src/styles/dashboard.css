@@ -1702,6 +1702,23 @@
   border: 1px solid rgba(196, 138, 42, 0.15);
 }
 
+.consultation-final {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.consultation-final-result {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: rgba(90, 138, 106, 0.08);
+  border-radius: var(--radius-sm);
+  color: var(--accent-green);
+}
+
 /* ── Workflow Panel ── */
 .workflow-loading {
   display: grid;
