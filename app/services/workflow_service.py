@@ -167,6 +167,7 @@ def merge_sqlite_tasks_with_events(
             merged_task["detections"] = sqlite_task.get("detections") or event_task.get("detections", [])
             merged_task["weather"] = sqlite_task.get("weather") or event_task.get("weather", {})
             merged_task["decision"] = sqlite_task.get("decision") or event_task.get("decision", {})
+            merged_task["compliance"] = event_task.get("compliance") or sqlite_task.get("compliance") or {}
             merged_task["rag_context"] = event_task.get("rag_context") or sqlite_task.get("rag_context") or {}
             merged_task["drone"] = {
                 **(sqlite_task.get("drone") or {}),
@@ -313,6 +314,7 @@ def build_fallback_workflow_state() -> WorkflowStateResponse:
         weather={},
         spray_summary={},
         decision={},
+        compliance={},
         drone={
             "task_id": "px4-demo-flow",
             "status": "spraying",
@@ -433,6 +435,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
                 "weather": latest_structured.get("weather", {}) or {},
                 "spray_summary": latest_structured.get("spray_summary", {}) or {},
                 "decision": latest_structured.get("decision", {}) or {},
+                "compliance": latest_structured.get("compliance", {}) or {},
                 "error": latest_structured.get("error"),
             }
         )
@@ -472,6 +475,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
         weather=latest.get("weather", {}) or {},
         spray_summary=latest.get("spray_summary", {}) or {},
         decision=latest.get("decision", {}) or {},
+        compliance=latest.get("compliance", {}) or {},
         rag_context=latest.get("rag_context", {}) or {},
         drone=latest.get("drone", {}) or {},
         drone_timeline=timeline,

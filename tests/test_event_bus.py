@@ -102,6 +102,40 @@ def test_build_task_views_compacts_drone_timeline() -> None:
     assert tasks[0]["drone_timeline"][2]["current_waypoint_index"] == 3
 
 
+def test_build_task_views_preserves_decision_compliance() -> None:
+    events = [
+        {
+            "timestamp": "2026-04-16T01:00:00+00:00",
+            "request_id": "req-compliance",
+            "stage": "decision",
+            "status": "completed",
+            "message": "千问决策生成完成",
+            "payload": {
+                "decision": {"用药": {"农药名称": "吡虫啉"}},
+                "rag_context": {"pesticides": []},
+                "compliance": {
+                    "status": "warning",
+                    "score": 76,
+                    "checks": [
+                        {
+                            "rule": "weather_risk",
+                            "status": "warning",
+                            "message": "当前风速偏高",
+                        }
+                    ],
+                    "blocking_reasons": [],
+                    "warnings": ["当前风速偏高"],
+                },
+            },
+        }
+    ]
+
+    tasks = build_task_views(events)
+
+    assert tasks[0]["compliance"]["status"] == "warning"
+    assert tasks[0]["compliance"]["warnings"] == ["当前风速偏高"]
+
+
 # ---------------------------------------------------------------------------
 # Log rotation tests
 # ---------------------------------------------------------------------------

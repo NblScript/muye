@@ -151,6 +151,7 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "detections": [],
                 "weather": {},
                 "decision": {},
+                "compliance": {},
                 "drone": {},
                 "drone_timeline": [],
                 "events": [],
@@ -181,6 +182,8 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
             task["decision"] = payload["decision"]
             if "rag_context" in payload:
                 task["rag_context"] = payload["rag_context"]
+            if "compliance" in payload:
+                task["compliance"] = payload["compliance"]
 
         if event.get("stage") == "drone":
             task["drone"] = {

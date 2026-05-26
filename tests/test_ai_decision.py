@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from langchain_core.documents import Document
 
 from modules.decision.ai_decision import DecisionEngine, DecisionEngineError
+from modules.decision.rag.retriever import RetrievedContext
 
 
 class StubWeatherClient:
@@ -31,6 +33,36 @@ class StubDecisionContextProvider:
             "latest_soil_record": {"ph": 6.8, "moisture_percent": 24.0},
             "candidate_pesticides": [{"product_name": "吡虫啉", "dilution_guidance": "1:1200"}],
         }
+
+
+class StubEventBus:
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    def publish(self, **event):
+        self.events.append(event)
+        return event
+
+
+class StubRagRetriever:
+    def retrieve(self, pest_types, crop_name=None, field_context=None):
+        doc = Document(
+            page_content="农药名称：示范药剂-aphid\n适用作物：小麦\n防治对象：蚜虫\n毒性：低毒",
+            metadata={
+                "product_name": "示范药剂-aphid",
+                "target_crops": ["小麦"],
+                "target_pests": ["蚜虫"],
+                "toxicity": "低毒",
+            },
+        )
+        return RetrievedContext(
+            pesticides=[doc],
+            historical_cases=[],
+            knowledge_chunks=[],
+            pesticide_scores=[0.91],
+            decision_scores=[],
+            knowledge_scores=[],
+        )
 
 
 def test_ai_decision_resolves_dashscope_base_url() -> None:
@@ -84,6 +116,52 @@ def test_ai_decision_builds_mock_decision() -> None:
     assert decision["用药"]["农药名称"] == "示范药剂-aphid"
     assert decision["用药"]["总量"] == "1.35L"
     assert "优先针对aphid高发区域安排喷洒作业" in decision["农事建议"][0]
+
+
+@pytest.mark.asyncio
+async def test_ai_decision_attaches_compliance_result_to_bundle_and_event() -> None:
+    event_bus = StubEventBus()
+    engine = DecisionEngine(
+        api_url="https://qwen.test/chat",
+        api_key="qwen-key",
+        model="qwen-max",
+        weather_client=StubWeatherClient(),
+        use_mock=True,
+        event_bus=event_bus,
+        rag_retriever=StubRagRetriever(),
+    )
+    try:
+        result = await engine.generate_decision(
+            pest_detections=[
+                {
+                    "pest_type": "aphid",
+                    "confidence": 0.95,
+                    "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+                }
+            ],
+            field_context={
+                "name": "牧野示范田",
+                "weather_location": "郑州",
+                "area_mu": 10.0,
+                "crop_cycle": {"crop_name": "小麦"},
+                "location": {"city": "郑州", "latitude": 34.7473, "longitude": 113.6249},
+                "geofence": [
+                    [113.6241, 34.7467],
+                    [113.6257, 34.7467],
+                    [113.6257, 34.7479],
+                ],
+            },
+            request_id="req-ai-compliance",
+        )
+    finally:
+        await engine.close()
+
+    assert result["compliance"]["status"] == "passed"
+    decision_events = [
+        event for event in event_bus.events
+        if event["stage"] == "decision" and event["status"] == "completed"
+    ]
+    assert decision_events[-1]["payload"]["compliance"]["status"] == "passed"
 
 
 @pytest.mark.asyncio

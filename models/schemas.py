@@ -68,6 +68,7 @@ class WorkflowTaskState(BaseModel):
     weather: dict[str, Any]
     spray_summary: dict[str, Any]
     decision: dict[str, Any]
+    compliance: dict[str, Any] = {}
     rag_context: dict[str, Any] = {}
     drone: dict[str, Any]
     drone_timeline: list[WorkflowTimelineEntry]

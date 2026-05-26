@@ -49,10 +49,10 @@ class BaseMixin:
             ).fetchone()
             table_sql = sql_row[0] if sql_row and sql_row[0] else ""
             has_check = "CHECK" in table_sql and "status" in table_sql and "queued" in table_sql
-            if has_check:
+            if has_check and "blocked" in table_sql:
                 return
 
-            self.logger.info("Applying v1.1 migration: add CHECK constraint to tasks.status")
+            self.logger.info("Applying v1.1 migration: update CHECK constraint on tasks.status")
 
             try:
                 backup_path = self.db_path.with_suffix(self.db_path.suffix + ".bak")
@@ -66,7 +66,7 @@ class BaseMixin:
                 """
                 UPDATE tasks
                 SET status = CASE
-                  WHEN status IN ('queued','running','completed','error') THEN status
+                  WHEN status IN ('queued','running','completed','blocked','error') THEN status
                   ELSE 'error'
                 END
                 WHERE status IS NOT NULL
@@ -76,27 +76,52 @@ class BaseMixin:
 
             cur.execute("PRAGMA foreign_keys = OFF")
             self._connection.execute("BEGIN IMMEDIATE")
+            columns = [item[1] for item in cur.execute("PRAGMA table_info(tasks)").fetchall()]
+            has_field_id = "field_id" in columns
             cur.execute("DROP TABLE IF EXISTS tasks_new")
-            cur.execute(
-                """
-                CREATE TABLE tasks_new (
-                  request_id TEXT PRIMARY KEY,
-                  image_path TEXT,
-                  start_time DATETIME,
-                  end_time DATETIME,
-                  status TEXT CHECK(status IN ('queued', 'running', 'completed', 'error'))
+            if has_field_id:
+                cur.execute(
+                    """
+                    CREATE TABLE tasks_new (
+                      request_id TEXT PRIMARY KEY,
+                      field_id TEXT,
+                      image_path TEXT,
+                      start_time DATETIME,
+                      end_time DATETIME,
+                      status TEXT CHECK(status IN ('queued', 'running', 'completed', 'blocked', 'error'))
+                    )
+                    """
                 )
-                """
-            )
-            cur.execute(
-                """
-                INSERT INTO tasks_new (request_id, image_path, start_time, end_time, status)
-                SELECT request_id, image_path, start_time, end_time,
-                       CASE WHEN status IN ('queued','running','completed','error') OR status IS NULL
-                            THEN status ELSE 'error' END
-                FROM tasks
-                """
-            )
+                cur.execute(
+                    """
+                    INSERT INTO tasks_new (request_id, field_id, image_path, start_time, end_time, status)
+                    SELECT request_id, field_id, image_path, start_time, end_time,
+                           CASE WHEN status IN ('queued','running','completed','blocked','error') OR status IS NULL
+                                THEN status ELSE 'error' END
+                    FROM tasks
+                    """
+                )
+            else:
+                cur.execute(
+                    """
+                    CREATE TABLE tasks_new (
+                      request_id TEXT PRIMARY KEY,
+                      image_path TEXT,
+                      start_time DATETIME,
+                      end_time DATETIME,
+                      status TEXT CHECK(status IN ('queued', 'running', 'completed', 'blocked', 'error'))
+                    )
+                    """
+                )
+                cur.execute(
+                    """
+                    INSERT INTO tasks_new (request_id, image_path, start_time, end_time, status)
+                    SELECT request_id, image_path, start_time, end_time,
+                           CASE WHEN status IN ('queued','running','completed','blocked','error') OR status IS NULL
+                                THEN status ELSE 'error' END
+                    FROM tasks
+                    """
+                )
             cur.execute("DROP TABLE tasks")
             cur.execute("ALTER TABLE tasks_new RENAME TO tasks")
             self._connection.commit()
@@ -114,7 +139,7 @@ class BaseMixin:
                   image_path TEXT,
                   start_time DATETIME,
                   end_time DATETIME,
-                  status TEXT CHECK(status IN ('queued', 'running', 'completed', 'error'))
+                  status TEXT CHECK(status IN ('queued', 'running', 'completed', 'blocked', 'error'))
                 );
 
                 CREATE TABLE IF NOT EXISTS detections (

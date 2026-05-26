@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from modules.decision.router import DecisionRouter
 
 from modules.infra.common import log_event, strip_code_fence
+from modules.decision.compliance import PesticideComplianceChecker
 from modules.decision.decision_context import DecisionContextProvider
 from modules.decision.router import DecisionRouter, RoutingSignals
 from modules.infra.event_bus import FileEventBus
@@ -83,6 +84,7 @@ class DecisionEngine:
         self.rag_retriever = rag_retriever
         self.consultation = consultation
         self.router = router
+        self.compliance_checker = PesticideComplianceChecker()
         self._client = httpx.AsyncClient(timeout=timeout_seconds, transport=transport)
 
     async def close(self) -> None:
@@ -273,13 +275,24 @@ class DecisionEngine:
                     weather_data=weather,
                 )
                 rag_context["decision_path"] = "expert"
+            compliance = self.compliance_checker.check(
+                decision=decision,
+                rag_context=rag_context,
+                field_context=field_context,
+                pest_detections=pest_detections,
+                weather=weather,
+            )
             if self.event_bus:
                 self.event_bus.publish(
                     request_id=request_id,
                     stage="decision",
                     status="completed",
                     message="千问决策生成完成",
-                    payload={"decision": decision, "rag_context": rag_context},
+                    payload={
+                        "decision": decision,
+                        "rag_context": rag_context,
+                        "compliance": compliance,
+                    },
                 )
             log_event(
                 self.logger,
@@ -296,6 +309,7 @@ class DecisionEngine:
                 "structured_input_text": structured_input_text,
                 "decision_context": decision_context,
                 "rag_context": rag_context,
+                "compliance": compliance,
             }
         except Exception as exc:
             if self.event_bus:

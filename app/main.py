@@ -754,6 +754,35 @@ class MuyeApplication:
                 request_id=request_id,
                 client_ip=self.client_ip,
             )
+            compliance = bundle.get("compliance") or {}
+            if isinstance(compliance, dict) and compliance.get("status") == "blocked":
+                reasons = compliance.get("blocking_reasons") or []
+                message = "农药合规审核未通过，已阻止无人机执行"
+                self._sqlite_write(
+                    request_id,
+                    "mark_task_finished_compliance_blocked",
+                    lambda: self.sqlite_store.mark_task_finished(request_id, "blocked"),
+                )
+                self.event_bus.publish(
+                    request_id=request_id,
+                    stage="compliance",
+                    status="blocked",
+                    message=message,
+                    payload={
+                        "compliance": compliance,
+                        "blocking_reasons": reasons,
+                    },
+                )
+                log_event(
+                    self.logger,
+                    logging.WARNING,
+                    message,
+                    request_id=request_id,
+                    client_ip=self.client_ip,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    blocking_reasons=reasons,
+                )
+                return
             execution_plan = self.drone_controller.plan_spray_mission(
                 field_context=field_context,
                 current_weather=bundle["weather"],
