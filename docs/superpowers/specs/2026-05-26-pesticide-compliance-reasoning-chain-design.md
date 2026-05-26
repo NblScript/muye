@@ -50,19 +50,19 @@ The compliance layer should return a structured reasoning result with these fiel
 ```python
 {
     "status": "passed | warning | blocked",
-    "summary": "Human-readable audit conclusion",
-    "risk_score": 0,
+    "score": 100,
+    "summary": "Human-readable audit conclusion derived from checks",
     "checks": [
         {
-            "id": "crop_target_match",
-            "name": "Crop and target pest match",
+            "rule": "crop_match",
+            "name": "Crop applicability",
             "status": "passed | warning | blocked",
-            "reason": "The pesticide applies to the crop and detected pest.",
+            "message": "The pesticide applies to the current crop.",
             "evidence": [
                 {
                     "source": "pesticide_catalog",
                     "title": "Catalog entry name",
-                    "matched_fields": ["crop", "target_pest"]
+                    "matched_fields": ["target_crops"]
                 }
             ]
         }
@@ -71,27 +71,44 @@ The compliance layer should return a structured reasoning result with these fiel
         "takeoff_mode": "auto | manual | blocked",
         "reason": "warning requires human confirmation"
     },
-    "alternatives": [
-        {
-            "pesticide": "Alternative pesticide name",
-            "reason": "Lower risk or better crop/pest match"
-        }
-    ]
+    "alternatives": []
 }
 ```
 
+MVP compatibility decisions:
+
+- Keep the existing `score` field as the canonical compliance safety score. It remains a 0-100 score where 100 is safest. Do not add a separate top-level `risk_score` in MVP; the dashboard can render risk as `100 - score` when it needs risk-first wording.
+- Add `summary` as a deterministic rule-derived sentence based on `status`, `blocking_reasons`, `warnings`, and failed checks. Do not call an LLM to generate compliance summaries in MVP.
+- Keep `alternatives` in the response shape, but return an empty list in MVP. Alternative pesticide recommendation requires candidate ranking and filtering, so it is Phase 2.
+- Keep current check fields `rule`, `status`, and `message`. The frontend may display `rule` as the check id and `message` as the reason. Do not require a separate `id` or `reason` field in MVP.
+
 The first implementation should keep five fixed checks:
 
-1. **Source credibility**
+1. **Source credibility** (`source_match`)
    - Whether the recommended pesticide appears in RAG results or structured catalog data.
-2. **Crop applicability**
+2. **Crop applicability** (`crop_match`)
    - Whether the pesticide is suitable for the current crop.
-3. **Target pest applicability**
+3. **Target pest applicability** (`pest_match`)
    - Whether the pesticide covers the detected pest or normalized pest synonym.
-4. **Safety level**
+4. **Safety level** (`toxicity_risk`)
    - Whether the pesticide is high toxicity, restricted, or unsuitable for the demo scenario.
-5. **Weather constraint**
+5. **Weather constraint** (`weather_risk`)
    - Whether wind, rain, and temperature permit spraying.
+
+These names intentionally match the existing `modules/decision/compliance.py` rule names.
+
+Evidence mapping:
+
+- RAG candidates currently expose `content`, `score`, and `metadata`.
+- `evidence.source` should come from `metadata.source` when present, otherwise from the collection type such as `pesticides`, `historical_cases`, or `knowledge`.
+- `evidence.title` should prefer `metadata.product_name`, then `metadata.active_ingredient`, then a concise first-line or truncated value from `content`.
+- `evidence.score` may carry the candidate retrieval score.
+- `evidence.matched_fields` should be derived from the fields actually used by the check:
+  - `source_match`: `product_name`, `active_ingredient`, or `content`
+  - `crop_match`: `target_crops` or content field `适用作物`
+  - `pest_match`: `target_pests` or content field `防治对象`
+  - `toxicity_risk`: `toxicity` or content field `毒性`
+  - `weather_risk`: weather keys such as `wind_speed`, `humidity`, and `temperature`
 
 Status policy:
 
@@ -103,17 +120,17 @@ The main pipeline in `app/main.py` should consume only the normalized compliance
 
 ## Frontend Design
 
-Add or upgrade a dashboard panel named:
+Upgrade the existing compliance audit area in `DecisionExplainPanel` into a dashboard section named:
 
 **农药安全合规推理链**
 
-Place it after the AI decision card and before the drone execution panel. This position makes the safety audit visible as the gate between recommendation and action.
+In MVP, this should not be a separate competing panel unless layout extraction is needed. It should replace the current lightweight compliance area inside `DecisionExplainPanel`, while keeping its position after the AI decision explanation and before the drone execution controls. This position makes the safety audit visible as the gate between recommendation and action.
 
 The panel should include four areas:
 
 1. **Audit summary**
    - Overall state: `passed`, `warning`, or `blocked`.
-   - Risk score, such as `32/100`.
+   - Safety score from backend `score`, such as `68/100`; if the UI uses risk wording, render it as `100 - score`.
    - Execution policy: auto execution, human confirmation, or execution blocked.
 
 2. **Five-check chain**
@@ -142,7 +159,7 @@ The panel should not describe how to use the UI. It should present the system st
 The generated competition report should include a compliance audit section:
 
 - Overall compliance status.
-- Risk score.
+- Safety score from backend `score`, with optional risk wording derived as `100 - score`.
 - The five check results.
 - Key evidence sources.
 - Final execution policy.
@@ -176,16 +193,19 @@ Backend tests:
 
 - Compliance unit tests for all five checks.
 - Status aggregation tests for `passed`, `warning`, and `blocked`.
+- Summary derivation tests proving `summary` is generated from rules and not from an LLM.
+- Evidence mapping tests for RAG candidate `metadata`, `content`, and `score`.
 - Pipeline tests proving:
   - `passed` can continue.
   - `warning` forces manual confirmation.
-  - `blocked` does not start PX4 or spraying.
+  - `blocked` does not start PX4 or spraying. These tests should mock `DroneController` or the resolved drone backend; they should not require a live PX4 integration environment.
 
 Frontend tests:
 
 - Panel renders all five checks.
 - Panel renders evidence sources.
 - Panel renders execution policy for all three statuses.
+- Existing `DecisionExplainPanel` compliance rendering is upgraded rather than duplicated.
 
 Script/demo tests:
 
@@ -194,11 +214,12 @@ Script/demo tests:
 
 Report tests:
 
-- Generated report includes compliance summary, checks, evidence, and execution policy.
+- Generated report includes compliance summary, score, checks, evidence, and execution policy.
 
 ## Acceptance Criteria
 
-- Compliance result includes `status`, `summary`, `risk_score`, `checks`, and `execution_policy`; every check can carry `checks[*].evidence`.
+- Compliance result includes `status`, `score`, `summary`, `checks`, and `execution_policy`; every check can carry `checks[*].evidence`.
+- MVP returns `alternatives: []`; populated alternatives are Phase 2.
 - Every `warning` result forces manual confirmation.
 - Every `blocked` result prevents PX4 startup and spraying execution.
 - Dashboard shows the five-check reasoning chain.
