@@ -114,6 +114,12 @@ simulator = Px4MapStateSimulator()
 # Create FastAPI app
 api_app = FastAPI(title="Muye Frontend API", version="1.3.0")
 
+# Rate limiting middleware
+from app.middleware import RateLimitMiddleware
+
+_rate_limit = int(os.environ.get("MUYE_API_RATE_LIMIT_PER_MINUTE", "120"))
+api_app.add_middleware(RateLimitMiddleware, limit_per_minute=_rate_limit)
+
 # Register all routes
 register_health_routes(api_app)
 register_workflow_routes(api_app)
@@ -654,6 +660,8 @@ class MuyeApplication:
                     field_id=field_context.get("field_id"),
                 ),
             )
+            from app.slo import get_slo_metrics
+            get_slo_metrics().record_pipeline_start()
             self.event_bus.publish(
                 request_id=request_id,
                 stage="pipeline",
@@ -696,6 +704,8 @@ class MuyeApplication:
                     "mark_task_finished_no_detections",
                     lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
                 )
+                from app.slo import get_slo_metrics
+                get_slo_metrics().record_pipeline_complete()
                 self.event_bus.publish(
                     request_id=request_id,
                     stage="pipeline",
@@ -801,6 +811,8 @@ class MuyeApplication:
                 "mark_task_finished_success",
                 lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
             )
+            from app.slo import get_slo_metrics
+            get_slo_metrics().record_pipeline_complete()
             self.event_bus.publish(
                 request_id=request_id,
                 stage="pipeline",
@@ -834,6 +846,8 @@ class MuyeApplication:
                 "mark_task_finished_error",
                 lambda: self.sqlite_store.mark_task_finished(request_id, "error"),
             )
+            from app.slo import get_slo_metrics
+            get_slo_metrics().record_pipeline_error()
             self.event_bus.publish(
                 request_id=request_id,
                 stage="pipeline",

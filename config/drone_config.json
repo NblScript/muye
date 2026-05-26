@@ -159,6 +159,17 @@
     "request_timeout_seconds": 15,
     "takeoff_mode": "manual"
   },
+  "dji_osdk": {
+    "execution_mode": "osdk_sim",
+    "connection_type": "serial",
+    "serial_port": "/dev/ttyACM0",
+    "baud_rate": 921600,
+    "app_id": "",
+    "app_key": "",
+    "connect_timeout_seconds": 30,
+    "mission_timeout_seconds": 300,
+    "drone_model": "Matrice 30T"
+  },
   "px4": {
     "system_address": "udpout://127.0.0.1:14580",
     "connect_timeout_seconds": 30,

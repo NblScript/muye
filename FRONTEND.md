@@ -19,7 +19,7 @@ frontend/src/
 │   ├── simMap.ts      # 仿真地图 API
 │   └── workflow.ts    # 工作流 API
 ├── components/        # UI 组件
-│   ├── dashboard/     # 仪表盘组件（DecisionFlow, PipelineStepper, StatCard, TaskList, WeatherCard）
+│   ├── dashboard/     # 仪表盘组件（DecisionFlow, DJIStatusCard, PipelineStepper, StatCard, TaskList, WeatherCard）
 │   ├── map/           # 地图组件（FieldMap, StatusPanel/）
 │   ├── ui/            # 通用 UI 组件（Alert, Button, Card, Drawer, Input, Progress, Select, Tag, Toast）
 │   ├── workflow/      # 工作流组件（WorkflowPanel）
@@ -39,7 +39,7 @@ frontend/src/
 │   ├── dashboard.types.ts
 │   ├── health.ts
 │   ├── simMap.ts
-│   └── workflow.ts
+│   └── workflow.ts    # 含 DJITelemetry, DJIStatus 类型
 ├── styles/            # 样式
 │   ├── dashboard.css
 │   └── px4-viewer.css

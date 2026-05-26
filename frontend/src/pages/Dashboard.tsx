@@ -14,6 +14,7 @@ import {
 } from '../api/workflow'
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import DecisionFlow from '../components/dashboard/DecisionFlow'
+import ExpertPanel from '../components/dashboard/ExpertPanel'
 import PipelineStepper, { deriveStages } from '../components/dashboard/PipelineStepper'
 import FieldMap from '../components/map/FieldMap'
 import WorkflowPanel from '../components/workflow/WorkflowPanel'
@@ -568,6 +569,11 @@ export default function Dashboard() {
       <section className="dashboard-grid">
         <aside className="dashboard-column dashboard-column-left">
           <DecisionFlow task={latestTask} />
+          {latestTask?.rag_context?.consultation_detail && (
+            <Card className="dashboard-card">
+              <ExpertPanel ragContext={latestTask.rag_context} />
+            </Card>
+          )}
         </aside>
 
         <main className="dashboard-column dashboard-column-center">
@@ -578,30 +584,6 @@ export default function Dashboard() {
                 <span className="map-header-note">演示动画 / 地块边界 / 航线规划 / 检测点位</span>
               </div>
               <FieldMap droneStatus={latestTask?.drone?.status} />
-            </div>
-          </Card>
-
-          <Card className="dashboard-card briefing-card">
-            <div className="briefing-card-topline">
-              <div>
-                <span className="panel-label">系统能力</span>
-                <div className="briefing-title">从图像识别到精准施药的一体化闭环</div>
-              </div>
-              <Tag color="cyan">现场流程清晰</Tag>
-            </div>
-            <div className="briefing-grid">
-              <div className="briefing-item">
-                <strong>一张农田图片即可启动任务</strong>
-                <span>适合现场快速启动，无需复杂交互即可看到完整流程。</span>
-              </div>
-              <div className="briefing-item">
-                <strong>AI 决策不是孤立输出</strong>
-                <span>融合天气、RAG 知识与历史决策，形成更像生产调度的建议。</span>
-              </div>
-              <div className="briefing-item">
-                <strong>无人机执行可视化可回放</strong>
-                <span>地图、工作流、任务记录三条视角同时展示执行过程。</span>
-              </div>
             </div>
           </Card>
         </main>

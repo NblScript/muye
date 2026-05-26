@@ -20,7 +20,7 @@
 | 前端 | React 19 + TypeScript + Vite + Ant Design（暗色大屏） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
 | AI | YOLOv8（检测）+ Qwen/DeepSeek/Xiaomi（多模型决策）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
-| 无人机 | PX4 SITL + MAVSDK（仿真） |
+| 无人机 | PX4 SITL + MAVSDK（仿真）/ DJI OSDK（行业级无人机） |
 | 存储 | SQLite（结构化）+ JSONL（事件流）+ ChromaDB（向量） |
 
 ## 服务端口
@@ -56,7 +56,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 |----|------|------|
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
 | decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 |
-| drone | `modules/drone/` | 无人机控制 + 任务规划 + PX4 仿真 |
+| drone | `modules/drone/` | 无人机控制 + 任务规划 + 后端抽象（PX4/DJI OSDK） |
 | infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
 
 ## 演示脚本
@@ -103,6 +103,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | 小米 MiMo | AI 决策（植保专家） | `XIAOMI_API_KEY` / `XIAOMI_API_URL` / `XIAOMI_MODEL` |
 | DashScope | RAG 文本向量化 | `DASHSCOPE_API_KEY` |
 | PX4 SITL | 无人机仿真 | 自动启动 |
+| DJI OSDK | 行业级无人机对接（Matrice/M300/M350） | `config/drone_config.json` → `dji_osdk` 节 |
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
 | DecisionRouter | 路由决策路径（专家/多智能体） | `MUYE_ROUTER_ENABLED`（bool，默认 false）· `MUYE_ROUTER_FAMILIARITY_THRESHOLD`（float，默认 0.6） |
 

@@ -154,3 +154,20 @@ export interface DashboardContextResponse {
   modes: Record<string, string>
   upload_accept: string[]
 }
+
+export interface DJITelemetry {
+  latitude: number
+  longitude: number
+  altitude: number
+  battery_percent: number
+  drone_model: string
+  connected: boolean
+  mode: string
+}
+
+export interface DJIStatus {
+  backend: string
+  execution_mode: string
+  drone_model: string
+  connected: boolean
+}

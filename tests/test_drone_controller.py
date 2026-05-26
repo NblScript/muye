@@ -142,14 +142,14 @@ async def test_drone_controller_persists_px4_status_updates_to_sqlite(tmp_path) 
         on_status("completed", "PX4 喷洒任务完成", 100, 4)
         return {
             "status": "submitted",
-            "task_id": f"px4-{request_id[:8]}",
+            "task_id": f"drone-{request_id[:8]}",
             "accepted": True,
             "backend": "px4",
             "last_known_status": "completed",
             "final_status": "completed",
         }
 
-    controller.px4_backend.execute_spray_mission = fake_execute_spray_mission  # type: ignore[method-assign]
+    controller.backend.execute_spray_mission = fake_execute_spray_mission  # type: ignore[method-assign]
 
     try:
         result = await controller.execute_spray_mission(
@@ -177,10 +177,10 @@ async def test_drone_controller_persists_px4_status_updates_to_sqlite(tmp_path) 
     assert result["final_status"] == "completed"
     assert result["last_known_status"] == "completed"
     assert [item["status"] for item in updates] == ["connecting", "spraying", "completed"]
-    assert updates[-1]["task_id"] == "px4-req-dron"
+    assert updates[-1]["task_id"] == "drone-req-dron"
     assert updates[-1]["progress"] == 100
     assert task_view["drone"]["status"] == "completed"
-    assert task_view["drone"]["task_id"] == "px4-req-dron"
+    assert task_view["drone"]["task_id"] == "drone-req-dron"
     assert task_view["drone"]["message"] == "PX4 喷洒任务完成"
 
 

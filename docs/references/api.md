@@ -177,3 +177,82 @@
   "message": "Takeoff confirmed"
 }
 ```
+
+### GET /drone/px4-status
+
+获取 PX4 SITL 运行状态。
+
+### GET /drone/dji/status
+
+获取 DJI 无人机连接状态。
+
+**响应**：
+```json
+{
+  "backend": "dji_osdk",
+  "execution_mode": "osdk_sim",
+  "drone_model": "Matrice 30T",
+  "connected": false
+}
+```
+
+### GET /drone/dji/telemetry
+
+获取 DJI 无人机遥测数据（位置、电量、高度）。
+
+**响应**：
+```json
+{
+  "latitude": 34.7467,
+  "longitude": 113.6241,
+  "altitude": 0.0,
+  "battery_percent": 100.0,
+  "drone_model": "Matrice 30T",
+  "connected": false,
+  "mode": "osdk_sim"
+}
+```
+
+### POST /drone/dji/connect
+
+连接 DJI 无人机（osdk_real 模式需硬件，osdk_sim 模式立即返回）。
+
+**响应**：
+```json
+{
+  "status": "connected",
+  "backend": "dji_osdk",
+  "execution_mode": "osdk_sim",
+  "drone_model": "Matrice 30T",
+  "connected": true
+}
+```
+
+### POST /drone/dji/disconnect
+
+断开 DJI 无人机连接。
+
+**响应**：
+```json
+{
+  "status": "disconnected"
+}
+```
+
+## SLO 监控
+
+### GET /slo
+
+获取 SLO 指标快照（API 成功率、管线完成率、WebSocket 稳定性、系统可用性）。
+
+**响应**：
+```json
+{
+  "api_success_rate": {"current": 1.0, "target": 0.99},
+  "pipeline_completion_rate": {"current": 1.0, "target": 0.95},
+  "websocket_stability": {"current": 1.0, "target": 0.99},
+  "system_availability": {"current": 1.0, "target": 0.999},
+  "window_seconds": 60,
+  "timestamp": "2026-05-26T10:00:00Z"
+}
+```

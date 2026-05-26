@@ -89,6 +89,15 @@ class MuyeConfig:
     multi_agent_enabled: bool = False
     multi_agent_timeout_seconds: float = 60.0
 
+    # API 限流配置
+    api_rate_limit_per_minute: int = 120
+
+    # DJI OSDK 配置
+    dji_osdk_execution_mode: str = "osdk_sim"
+    dji_osdk_serial_port: str = "/dev/ttyACM0"
+    dji_osdk_baud_rate: int = 921600
+    dji_osdk_drone_model: str = "Matrice 30T"
+
     # 路由层配置
     router_enabled: bool = False
     router_familiarity_threshold: float = 0.6
@@ -228,6 +237,13 @@ class MuyeConfig:
             # 多智能体会诊配置
             multi_agent_enabled=_parse_env_bool(os.getenv("MUYE_MULTI_AGENT_ENABLED"), False),
             multi_agent_timeout_seconds=float(os.getenv("MUYE_MULTI_AGENT_TIMEOUT_SECONDS", "60")),
+            # API 限流配置
+            api_rate_limit_per_minute=int(os.getenv("MUYE_API_RATE_LIMIT_PER_MINUTE", "120")),
+            # DJI OSDK 配置
+            dji_osdk_execution_mode=os.getenv("DJI_OSDK_EXECUTION_MODE", "osdk_sim"),
+            dji_osdk_serial_port=os.getenv("DJI_OSDK_SERIAL_PORT", "/dev/ttyACM0"),
+            dji_osdk_baud_rate=int(os.getenv("DJI_OSDK_BAUD_RATE", "921600")),
+            dji_osdk_drone_model=os.getenv("DJI_OSDK_DRONE_MODEL", "Matrice 30T"),
             # 路由层配置
             router_enabled=_parse_env_bool(os.getenv("MUYE_ROUTER_ENABLED"), False),
             router_familiarity_threshold=float(os.getenv("MUYE_ROUTER_FAMILIARITY_THRESHOLD", "0.6")),

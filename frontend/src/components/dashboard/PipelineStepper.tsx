@@ -1,3 +1,4 @@
+import { useRef, useEffect, useState } from 'react'
 import type { WorkflowEventEntry, WorkflowTaskState } from '../../types/workflow'
 
 export type StageStatus = 'done' | 'active' | 'pending'
@@ -44,9 +45,9 @@ const RocketIcon = () => (
   </svg>
 )
 
-const CheckCircleIcon = () => (
-  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+const CheckIcon = () => (
+  <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
   </svg>
 )
 
@@ -111,7 +112,6 @@ export function deriveStages(task: WorkflowTaskState | null): PipelineStage[] {
           status = 'done'
           message = (task.weather as Record<string, unknown>).summary as string ?? '气象数据已采集'
         } else if (hasRunning('yolo') && !hasCompleted('yolo')) {
-          // weather runs in parallel with yolo
           status = 'active'
           message = '采集中...'
         }
@@ -154,14 +154,39 @@ interface PipelineStepperProps {
 
 export default function PipelineStepper({ task }: PipelineStepperProps) {
   const stages = deriveStages(task)
+  const prevStatusRef = useRef<Map<string, StageStatus>>(new Map())
+  const [justCompleted, setJustCompleted] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    const newlyCompleted = new Set<string>()
+    for (const stage of stages) {
+      if (stage.status === 'done' && prev.get(stage.key) !== 'done') {
+        newlyCompleted.add(stage.key)
+      }
+    }
+    prevStatusRef.current = new Map(stages.map((s) => [s.key, s.status]))
+
+    if (newlyCompleted.size > 0) {
+      setJustCompleted(newlyCompleted)
+      const timer = setTimeout(() => setJustCompleted(new Set()), 1400)
+      return () => clearTimeout(timer)
+    }
+  }, [stages])
 
   return (
     <div className="pipeline-stepper">
       {stages.map((stage, index) => (
         <div key={stage.key} className="pipeline-step-group">
           <div className={`pipeline-step is-${stage.status}`}>
-            <div className="pipeline-step-icon">
-              {stage.status === 'done' ? <CheckCircleIcon /> : stage.status === 'active' ? <span className="spinner" /> : stage.icon}
+            <div className={`pipeline-step-icon ${justCompleted.has(stage.key) ? 'stage-just-completed' : ''}`}>
+              {stage.status === 'done' ? (
+                <span className="stage-complete-icon"><CheckIcon /></span>
+              ) : stage.status === 'active' ? (
+                <span className="spinner" />
+              ) : (
+                stage.icon
+              )}
             </div>
             <div className="pipeline-step-label">{stage.label}</div>
             {stage.message && <div className="pipeline-step-message">{stage.message}</div>}

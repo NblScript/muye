@@ -52,6 +52,18 @@ PX4 SITL 不可用 → 使用动画演示模式
 - **行为**：切换到 `animated_demo` 模式
 - **影响**：视觉效果略有差异，但演示流程完整
 
+### DJI OSDK 降级
+
+```
+DJI OSDK 真机连接可用 → 真实 DJI 无人机执行
+DJI OSDK 真机不可用 → 使用 osdk_sim 仿真模式
+PX4 也可用 → 回退到 PX4 后端
+```
+
+- **触发条件**：`execution.backend` 设为 `dji_osdk` 但无硬件
+- **行为**：`osdk_sim` 模式用 GPS 坐标插值模拟飞行，接口与真机一致
+- **影响**：无物理飞行，但任务流程完整可演示
+
 ## 故障恢复
 
 ### 自动恢复
@@ -73,6 +85,28 @@ PX4 SITL 不可用 → 使用动画演示模式
 | PX4 仿真挂起 | 重启 PX4 SITL 进程 |
 
 ## 监控
+
+### SLO 指标
+
+系统内置进程内 SLO 指标采集（`app/slo.py`），无需外部依赖。通过滑动窗口（60 秒）追踪 4 项 SLO：
+
+| SLO | 目标 | 采集点 |
+|-----|------|--------|
+| API 成功率 | 99% | 每次请求后记录状态码 |
+| 管线完成率 | 95% | pipeline_start/complete/error 事件 |
+| WebSocket 稳定性 | 99% | ws_connect/ws_disconnect 事件 |
+| 系统可用性 | 99.9% | 基于请求成功率 |
+
+```bash
+# SLO 指标快照
+curl http://localhost:18000/slo
+```
+
+### API 限流
+
+滑动窗口 per-IP 限流中间件（`app/middleware.py`），默认每分钟 120 次请求。超限返回 429。
+
+配置项：`config/app_config.json` → `api_rate_limit_per_minute`
 
 ### 健康检查
 

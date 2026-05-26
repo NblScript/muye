@@ -133,7 +133,15 @@ async def api_health() -> Any:
     return JSONResponse(status_code=503, content=payload)
 
 
+async def api_slo() -> Any:
+    """SLO metrics endpoint."""
+    from app.slo import get_slo_metrics
+    return get_slo_metrics().snapshot()
+
+
 def register_health_routes(app: FastAPI) -> None:
-    """Register health check routes."""
+    """Register health check and SLO routes."""
     app.get("/health", response_model=None)(api_health)
     app.get("/api/health", include_in_schema=False, response_model=None)(api_health)
+    app.get("/slo", response_model=None)(api_slo)
+    app.get("/api/slo", include_in_schema=False, response_model=None)(api_slo)

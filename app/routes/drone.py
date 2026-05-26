@@ -465,6 +465,48 @@ async def get_px4_status() -> Px4StatusResponse:
     return Px4StatusResponse(running=True, ready=ready, pid=pid, world=world, source=source)
 
 
+# DJI 无人机端点 — 全局后端实例
+_dji_backend = None
+
+
+def _load_drone_config() -> dict[str, Any]:
+    config_path = Path(__file__).resolve().parent.parent.parent / "config" / "drone_config.json"
+    if config_path.exists():
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    return {}
+
+
+def _get_dji_backend():
+    global _dji_backend
+    if _dji_backend is None:
+        from modules.drone.backends.dji_osdk import DJIOSDKBackend
+        drone_config = _load_drone_config()
+        _dji_backend = DJIOSDKBackend(drone_config)
+    return _dji_backend
+
+
+async def get_dji_status() -> Any:
+    backend = _get_dji_backend()
+    return await backend.get_status()
+
+
+async def get_dji_telemetry() -> Any:
+    backend = _get_dji_backend()
+    return await backend.get_telemetry()
+
+
+async def connect_dji() -> Any:
+    backend = _get_dji_backend()
+    await backend.connect()
+    return {"status": "connected", **(await backend.get_status())}
+
+
+async def disconnect_dji() -> Any:
+    backend = _get_dji_backend()
+    await backend.disconnect()
+    return {"status": "disconnected"}
+
+
 def register_drone_routes(app: FastAPI) -> None:
     """Register drone routes."""
     app.post("/drone/confirm-takeoff")(confirm_drone_takeoff)
@@ -475,3 +517,13 @@ def register_drone_routes(app: FastAPI) -> None:
     app.post("/api/drone/stop-px4-demo", include_in_schema=False)(stop_px4_demo)
     app.get("/drone/px4-status")(get_px4_status)
     app.get("/api/drone/px4-status", include_in_schema=False)(get_px4_status)
+
+    # DJI 无人机端点
+    app.get("/drone/dji/status")(get_dji_status)
+    app.get("/api/drone/dji/status", include_in_schema=False)(get_dji_status)
+    app.get("/drone/dji/telemetry")(get_dji_telemetry)
+    app.get("/api/drone/dji/telemetry", include_in_schema=False)(get_dji_telemetry)
+    app.post("/drone/dji/connect")(connect_dji)
+    app.post("/api/drone/dji/connect", include_in_schema=False)(connect_dji)
+    app.post("/drone/dji/disconnect")(disconnect_dji)
+    app.post("/api/drone/dji/disconnect", include_in_schema=False)(disconnect_dji)

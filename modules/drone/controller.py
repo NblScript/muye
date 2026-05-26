@@ -8,8 +8,10 @@ from typing import Any
 
 from modules.infra.common import log_event, point_in_polygon
 from modules.infra.event_bus import FileEventBus
+from modules.drone.backends import resolve_backend
+from modules.drone.backends.base import DroneBackend
 from modules.drone.mission_planner import MissionPlanner
-from modules.drone.px4_simulator import PX4SimulationError, PX4Simulator
+from modules.drone.px4_simulator import PX4SimulationError
 from modules.infra.sqlite_store import SqliteStore
 
 
@@ -33,10 +35,11 @@ class DroneController:
             self.drone_config.get("flight_constraints", {}),
             logger=self.logger,
         )
-        self.px4_backend = PX4Simulator(self.drone_config, logger=self.logger)
+        backend_name = self.drone_config.get("execution", {}).get("backend", "px4")
+        self.backend: DroneBackend = resolve_backend(backend_name, self.drone_config, logger=self.logger)
 
     async def close(self) -> None:
-        return None
+        await self.backend.disconnect()
 
     async def execute_spray_mission(
         self,
@@ -59,7 +62,7 @@ class DroneController:
                 client_ip=client_ip,
                 geofence=(field_context or {}).get("geofence"),
             )
-            result = await self._execute_px4_mission(
+            result = await self._execute_mission(
                 request_id=request_id,
                 plan=plan,
                 medication=decision["用药"],
@@ -68,7 +71,7 @@ class DroneController:
             log_event(
                 self.logger,
                 logging.INFO,
-                "PX4 喷洒任务已提交",
+                "喷洒任务已提交",
                 request_id=request_id,
                 client_ip=client_ip,
                 duration_ms=(time.perf_counter() - started) * 1000,
@@ -87,7 +90,7 @@ class DroneController:
             )
             raise DroneExecutionError(str(exc)) from exc
 
-    async def _execute_px4_mission(
+    async def _execute_mission(
         self,
         *,
         request_id: str,
@@ -96,14 +99,14 @@ class DroneController:
         current_weather: dict[str, Any],
     ) -> dict[str, Any]:
         try:
-            result = await self.px4_backend.execute_spray_mission(
+            result = await self.backend.execute_spray_mission(
                 request_id=request_id,
                 execution_plan=plan,
                 medication=medication,
                 current_weather=current_weather,
                 on_status=lambda status, message, progress, current_waypoint_index, position=None: self._publish_drone_update(
                     request_id=request_id,
-                    task_id=f"px4-{request_id[:8]}",
+                    task_id=f"drone-{request_id[:8]}",
                     status=status,
                     message=message,
                     progress=progress,
@@ -233,9 +236,6 @@ class DroneController:
         }:
             return "in_progress"
         return "planned"
-
-    def _resolve_backend(self) -> str:
-        return "px4"
 
     def validate_execution_plan(
         self,

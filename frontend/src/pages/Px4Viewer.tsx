@@ -25,7 +25,7 @@ export default function Px4Viewer() {
 
   return (
     <div className="px4-viewer-shell">
-      <section className="px4-viewer-hero glass-card">
+      <section className="px4-viewer-hero panel">
         <div className="px4-viewer-hero-top">
           <div>
             <span className="label-uppercase">PX4 观察页</span>
@@ -68,7 +68,7 @@ export default function Px4Viewer() {
         </div>
       </section>
 
-      <section className="px4-viewer-map glass-card">
+      <section className="px4-viewer-map panel">
         <div className="px4-viewer-map-header">
           <div>
             <span className="label-uppercase">动画场景</span>

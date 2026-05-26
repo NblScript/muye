@@ -83,13 +83,19 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 
 ### 3. drone（无人机域）
 
-- **入口**：`app/routes/drone.py` — PX4 启停与确认起飞接口
+- **入口**：`app/routes/drone.py` — PX4 启停、确认起飞、DJI 无人机接口
 - **核心**：`modules/drone/`
-  - `controller.py` — DroneController，编排任务执行
+  - `controller.py` — DroneController，编排任务执行（通过后端抽象层）
   - `mission_planner.py` — 航线生成 + 喷洒参数
   - `px4_simulator.py` — PX4 SITL 集成（MAVSDK）
   - `field_context_resolver.py` — 农田上下文解析
-- **数据流**：决策结果 → 任务规划 → 航线生成 → [手动确认] → PX4 SITL 执行
+  - `backends/` — 后端抽象层
+    - `base.py` — DroneBackend ABC（connect/disconnect/execute_spray_mission/get_telemetry/get_status）
+    - `px4_backend.py` — PX4Backend，包装 PX4Simulator
+    - `dji_osdk.py` — DJIOSDKBackend，DJI OSDK 对接（osdk_sim 仿真 + osdk_real 真机）
+    - `__init__.py` — 后端注册表（BACKEND_REGISTRY + resolve_backend）
+- **后端切换**：`config/drone_config.json` → `execution.backend` 字段（`px4` / `dji_osdk`）
+- **数据流**：决策结果 → 任务规划 → 航线生成 → [手动确认] → 后端执行（PX4 或 DJI OSDK）
 - **起飞模式**：`manual`（等待确认）/ `auto`（自主），由 `config/drone_config.json` 配置
 
 ### 4. infra（基础设施域）
@@ -165,3 +171,7 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 | 决策路由层 | 熟悉场景走快速路径节省延迟，陌生场景走多模型保质量 | 固定路径（无法兼顾效率与质量） |
 | 专家路径自动升级 | 专家路径失败时降级到多智能体会诊，保证决策总能产出 | 直接报错（决策中断） |
 | LLM 调用指数退避重试 | 瞬态网络/5xx 错误自动恢复，减少单次失败导致专家退出投票 | 单次调用失败即放弃 |
+| 无人机后端抽象层 | DroneBackend ABC + 注册表，PX4/DJI OSDK 可切换 | 硬编码单一后端（无法扩展） |
+| DJI OSDK 仿真模式 | 无硬件时 GPS 插值模拟飞行，接口与真机一致 | 仅真机可用（开发受阻） |
+| SLO 指标采集 | 进程内 WindowCounter 滑动窗口，零外部依赖 | Prometheus/外部监控（竞赛环境过重） |
+| API 限流中间件 | 滑动窗口 per-IP 限流，防止单客户端过载 | 无限流（演示时可能被意外打爆） |
