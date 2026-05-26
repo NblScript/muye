@@ -33,8 +33,8 @@
   --accent-blue-dim: rgba(90, 122, 154, 0.08);
   --accent-cyan: #5a8a8a;
   --accent-cyan-dim: rgba(90, 138, 138, 0.08);
-  --accent-orange: #c48a2a;
-  --accent-orange-dim: rgba(196, 138, 42, 0.08);
+  --accent-orange: #d48a3a;
+  --accent-orange-dim: rgba(212, 138, 58, 0.08);
 
   /* Gradients */
   --gradient-primary: linear-gradient(135deg, #c48a2a, #b8705a);
@@ -69,6 +69,9 @@
   --blur-glass: blur(12px);
   --transition-fast: 150ms ease;
   --transition-normal: 250ms ease;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-enter: 350ms;
+  --duration-hover: 200ms;
 
   font-family: var(--font-sans);
   line-height: 1.5;
@@ -131,8 +134,10 @@ pre {
 }
 
 .panel:hover {
-  border-color: var(--border-default);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  transition: border-color var(--duration-hover), box-shadow var(--duration-hover), transform var(--duration-hover);
 }
 
 .panel-header {
@@ -465,7 +470,7 @@ pre {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   padding: 12px 10px;
   overflow-y: auto;
 }
@@ -500,6 +505,20 @@ pre {
   color: var(--text-primary);
   background: rgba(45, 35, 25, 0.06);
   font-weight: 600;
+  position: relative;
+}
+
+.sidebar-link.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--accent-amber);
+  border-radius: 0 3px 3px 0;
+  transition: height var(--duration-hover);
 }
 
 .sidebar-link-icon {
@@ -702,6 +721,30 @@ pre {
 .stage-complete-icon svg path {
   stroke-dasharray: 24;
   animation: checkmark-draw 0.4s ease-out 0.1s forwards;
+}
+
+/* ── Keyframe Animations ── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ── Skeleton Loader ── */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-surface) 50%, var(--bg-elevated) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+  border-radius: var(--radius-sm);
 }
 
 /* ── Responsive ── */

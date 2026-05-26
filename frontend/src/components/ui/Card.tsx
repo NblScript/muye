@@ -11,7 +11,7 @@ type CardProps = {
 
 export default function Card({ title, extra, className = '', style, onClick, children }: CardProps) {
   return (
-    <div className={`panel dashboard-card ${className}`} style={style} onClick={onClick}>
+    <div className={`dashboard-card ${className}`} style={style} onClick={onClick}>
       {title && (
         <div className="panel-header">
           <span className="panel-title">{title}</span>

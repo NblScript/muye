@@ -531,7 +531,7 @@ export default function Dashboard() {
         <section className="narrative-banner">
           <div className="narrative-step">
             <span className={`narrative-dot ${detections.length > 0 ? 'done' : ''}`} />
-            <span>{detections.length > 0 ? <>识别到 <strong>{primaryPest}</strong>，置信度 {(detections[0]?.confidence * 100).toFixed(0)}%</> : '等待虫情识别'}</span>
+            <span>{detections.length > 0 ? <>识别到 <strong>{primaryPest}</strong>，置信度 {((detections[0]?.confidence ?? 0) * 100).toFixed(0)}%</> : '等待虫情识别'}</span>
           </div>
           <span className="narrative-arrow">→</span>
           <div className="narrative-step">

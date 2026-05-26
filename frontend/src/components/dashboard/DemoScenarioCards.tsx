@@ -85,9 +85,9 @@ export default function DemoScenarioCards({ apiBase = '/api', onStarted }: Props
   }
 
   return (
-    <div style={{ padding: '0 12px', marginBottom: 8 }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>演示场景</div>
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+    <div className="scenario-cards">
+      <div className="scenario-cards-title">演示场景</div>
+      <div className="scenario-cards-row">
         {SCENARIOS.map((s) => {
           const isLoading = loading === s.id
           return (
@@ -95,34 +95,19 @@ export default function DemoScenarioCards({ apiBase = '/api', onStarted }: Props
               key={s.id}
               onClick={() => handleRun(s)}
               disabled={loading !== null}
-              style={{
-                flex: '0 0 auto',
-                width: 140,
-                padding: '8px 10px',
-                background: isLoading ? 'var(--bg-elevated)' : 'var(--bg-surface)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                cursor: loading ? 'wait' : 'pointer',
-                textAlign: 'left',
-                transition: 'var(--transition-fast)',
-                opacity: loading !== null && !isLoading ? 0.5 : 1,
-              }}
+              className={`scenario-card ${isLoading ? 'is-loading' : ''}`}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{ fontSize: 16 }}>{s.icon}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {s.name}
-                </span>
+              <div className="scenario-card-header">
+                <span className="scenario-card-icon">{s.icon}</span>
+                <span className="scenario-card-name">{s.name}</span>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                {s.desc}
-              </div>
+              <div className="scenario-card-desc">{s.desc}</div>
             </button>
           )
         })}
       </div>
       {error && (
-        <div style={{ fontSize: 11, color: 'var(--accent-red)', marginTop: 4 }}>{error}</div>
+        <div className="scenario-card-error">{error}</div>
       )}
     </div>
   )

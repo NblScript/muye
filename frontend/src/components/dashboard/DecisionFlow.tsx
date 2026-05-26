@@ -127,23 +127,12 @@ function DocList({ title, docs, color }: { title: string; docs: RagDocument[]; c
   if (docs.length === 0) return null
   return (
     <div style={{ marginBottom: 20 }}>
-      <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color, letterSpacing: '0.03em' }}>
-        {title}
-      </h4>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h4 className="drawer-doc-title" style={{ color }}>{title}</h4>
+      <div className="drawer-doc-list">
         {docs.map((doc, i) => (
-          <div key={i} style={{
-            padding: '10px 12px',
-            background: 'var(--bg-surface)',
-            borderRadius: 'var(--radius-sm)',
-            borderLeft: `3px solid ${color}`,
-            fontSize: 12,
-            lineHeight: 1.6,
-          }}>
-            <div style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{doc.content}</div>
-            <div style={{ marginTop: 4, color: 'var(--text-muted)', fontSize: 11 }}>
-              相似度: {(doc.score * 100).toFixed(1)}%
-            </div>
+          <div key={i} className="drawer-doc-item" style={{ borderLeftColor: color }}>
+            <div className="drawer-doc-content">{doc.content}</div>
+            <div className="drawer-doc-score">相似度: {(doc.score * 100).toFixed(1)}%</div>
           </div>
         ))}
       </div>
@@ -202,30 +191,18 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
           ))}
         </div>
         {canExpand && (
-          <div style={{ textAlign: 'right', marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-            点击查看完整决策链路 →
-          </div>
+          <div className="decision-flow-expand-hint">点击查看完整决策链路 →</div>
         )}
         {/* 专家模型快速路径摘要 */}
         {rag?.decision_path === 'expert' && (() => {
           const famScore = rag.familiarity_score ?? 0
           return (
-            <div style={{
-              marginTop: 10, padding: '8px 10px',
-              background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)',
-              borderLeft: '3px solid var(--accent-green)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green)' }}>
-                  专家模型快速路径
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  匹配度 {(famScore * 100).toFixed(0)}%
-                </span>
+            <div className="path-summary expert">
+              <div className="path-summary-header">
+                <span className="path-summary-label expert">专家模型快速路径</span>
+                <span className="path-summary-score">匹配度 {(famScore * 100).toFixed(0)}%</span>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                已知害虫+作物组合，单模型快速决策
-              </div>
+              <div className="path-summary-desc">已知害虫+作物组合，单模型快速决策</div>
             </div>
           )
         })()}
@@ -233,22 +210,12 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
         {rag?.decision_path === 'escalated' && (() => {
           const famScore = rag.familiarity_score ?? 0
           return (
-            <div style={{
-              marginTop: 10, padding: '8px 10px',
-              background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)',
-              borderLeft: '3px solid var(--accent-amber)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-amber)' }}>
-                  专家路径异常 → 多智能体升级
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  匹配度 {(famScore * 100).toFixed(0)}%
-                </span>
+            <div className="path-summary escalated">
+              <div className="path-summary-header">
+                <span className="path-summary-label escalated">专家路径异常 → 多智能体升级</span>
+                <span className="path-summary-score">匹配度 {(famScore * 100).toFixed(0)}%</span>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                专家模型输出异常，已自动升级到多智能体会诊
-              </div>
+              <div className="path-summary-desc">专家模型输出异常，已自动升级到多智能体会诊</div>
             </div>
           )
         })()}
@@ -267,17 +234,10 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
             all_failed: '全部失败',
           }
           return (
-            <div style={{
-              marginTop: 10, padding: '8px 10px',
-              background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)',
-              borderLeft: '3px solid var(--accent-cyan)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                  多智能体会诊 · {activeCount} 位专家
-                </span>
-                <span style={{
-                  fontSize: 11, fontWeight: 600,
+            <div className="path-summary consultation">
+              <div className="consultation-summary-header">
+                <span className="consultation-summary-label">多智能体会诊 · {activeCount} 位专家</span>
+                <span className="consultation-summary-agreement" style={{
                   color: agreement === 'unanimous' ? 'var(--accent-green)'
                     : agreement === 'majority' ? 'var(--accent-amber)'
                     : agreement === 'all_failed' ? 'var(--accent-red)'
@@ -287,13 +247,9 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
                 </span>
               </div>
               {Object.keys(experts).length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <div className="consultation-chips">
                   {Object.entries(experts).map(([role, info]) => (
-                    <span key={role} style={{
-                      fontSize: 10, padding: '2px 6px',
-                      background: 'var(--bg-elevated)', borderRadius: 4,
-                      color: 'var(--text-secondary)',
-                    }}>
+                    <span key={role} className="consultation-chip">
                       {info.name}: {info['农药名称']}
                     </span>
                   ))}
@@ -306,41 +262,30 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
 
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="AI 决策链路详情" width={460}>
         {/* 害虫检测 */}
-        <section style={{ marginBottom: 24 }}>
-          <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-red)', letterSpacing: '0.03em' }}>
-            🔍 害虫检测
-          </h4>
+        <section className="drawer-section">
+          <h4 className="drawer-section-title" style={{ color: 'var(--accent-red)' }}>🔍 害虫检测</h4>
           {task?.detections && task.detections.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="drawer-detection-list">
               {task.detections.map((d, i) => (
-                <div key={i} style={{
-                  padding: '8px 12px',
-                  background: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 12,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                }}>
-                  <span style={{ fontWeight: 600 }}>{d.pest_type ?? '未知'}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>
+                <div key={i} className="drawer-detection-row">
+                  <span className="drawer-detection-name">{d.pest_type ?? '未知'}</span>
+                  <span className="drawer-detection-conf">
                     置信度 {d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '-'}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>暂无检测数据</div>
+            <div className="drawer-empty-text">暂无检测数据</div>
           )}
         </section>
 
         {/* RAG 知识检索 */}
         {rag && hasRagContext(rag) && (
-          <section style={{ marginBottom: 24 }}>
-            <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-purple)', letterSpacing: '0.03em' }}>
-              📚 RAG 知识检索
-            </h4>
+          <section className="drawer-section">
+            <h4 className="drawer-section-title" style={{ color: 'var(--accent-purple)' }}>📚 RAG 知识检索</h4>
             {rag.crop_name && (
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+              <div className="drawer-crop-context">
                 作物: {rag.crop_name}
                 {rag.pest_types && rag.pest_types.length > 0 && (
                   <> · 害虫: {rag.pest_types.join('、')}</>
@@ -374,68 +319,46 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
             single_expert: 'var(--text-muted)',
           }
           return (
-            <section style={{ marginBottom: 24 }}>
-              <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-cyan)', letterSpacing: '0.03em' }}>
-                🧑‍⚕️ 多智能体专家会诊
-              </h4>
-              {/* 置信度和一致性 */}
-              <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-                <div style={{
-                  flex: 1, padding: '8px 12px', background: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-sm)', textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent-cyan)' }}>
-                    {(confidence * 100).toFixed(0)}%
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>会诊置信度</div>
+            <section className="drawer-section">
+              <h4 className="drawer-section-title" style={{ color: 'var(--accent-cyan)' }}>🧑‍⚕️ 多智能体专家会诊</h4>
+              <div className="drawer-metric-pair">
+                <div className="drawer-metric-item">
+                  <div className="drawer-metric-value">{(confidence * 100).toFixed(0)}%</div>
+                  <div className="drawer-metric-label">会诊置信度</div>
                 </div>
-                <div style={{
-                  flex: 1, padding: '8px 12px', background: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-sm)', textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: agreementColor[agreement] ?? 'var(--text-primary)' }}>
+                <div className="drawer-metric-item">
+                  <div className="drawer-metric-value small" style={{ color: agreementColor[agreement] ?? 'var(--text-primary)' }}>
                     {agreementLabel[agreement] ?? agreement}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>专家一致性</div>
+                  <div className="drawer-metric-label">专家一致性</div>
                 </div>
               </div>
-              {/* 各专家意见 */}
               {Object.entries(experts).length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                <div className="drawer-expert-list">
                   {Object.entries(experts).map(([role, info]) => (
-                    <div key={role} style={{
-                      padding: '8px 12px', background: 'var(--bg-surface)',
-                      borderRadius: 'var(--radius-sm)', fontSize: 12,
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}>
+                    <div key={role} className="drawer-expert-row">
                       <div>
-                        <span style={{ fontWeight: 600, marginRight: 8 }}>{info.name}</span>
-                        <span style={{ color: 'var(--text-primary)' }}>{info['农药名称']}</span>
+                        <span className="drawer-expert-name">{info.name}</span>
+                        <span>{info['农药名称']}</span>
                       </div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                        权重 {(info.weight * 100).toFixed(0)}%
-                      </div>
+                      <div className="drawer-expert-weight">权重 {(info.weight * 100).toFixed(0)}%</div>
                     </div>
                   ))}
                 </div>
               )}
-              {/* 失败专家 */}
               {failedRoles.length > 0 && (
-                <div style={{ fontSize: 11, color: 'var(--accent-red)', marginBottom: 8 }}>
-                  {failedRoles.length} 位专家调用失败，已降级处理
-                </div>
+                <div className="drawer-failed-notice">{failedRoles.length} 位专家调用失败，已降级处理</div>
               )}
-              {/* 投票分布 */}
               {Object.keys(votes).length > 1 && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>投票分布</div>
+                <div className="drawer-vote-section">
+                  <div className="drawer-vote-title">投票分布</div>
                   {Object.entries(votes).map(([name, weight]) => (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, minWidth: 80 }}>{name}</span>
-                      <div style={{ flex: 1, height: 6, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${weight * 100}%`, height: '100%', background: 'var(--accent-cyan)', borderRadius: 3 }} />
+                    <div key={name} className="drawer-vote-row">
+                      <span className="drawer-vote-name">{name}</span>
+                      <div className="drawer-vote-track">
+                        <div className="drawer-vote-fill" style={{ width: `${weight * 100}%` }} />
                       </div>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{(weight * 100).toFixed(0)}%</span>
+                      <span className="drawer-vote-pct">{(weight * 100).toFixed(0)}%</span>
                     </div>
                   ))}
                 </div>
@@ -446,16 +369,12 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
 
         {/* 决策结果 */}
         {Object.keys(decision).length > 0 && (
-          <section style={{ marginBottom: 24 }}>
-            <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-green)', letterSpacing: '0.03em' }}>
-              💊 用药方案
-            </h4>
+          <section className="drawer-section">
+            <h4 className="drawer-section-title" style={{ color: 'var(--accent-green)' }}>💊 用药方案</h4>
             {Boolean(medication['农药名称']) && (
-              <div style={{ padding: '10px 12px', background: 'var(--accent-green-dim)', borderRadius: 'var(--radius-sm)', marginBottom: 8 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--accent-green)' }}>
-                  {String(medication['农药名称'])}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+              <div className="medication-highlight">
+                <div className="medication-highlight-name">{String(medication['农药名称'])}</div>
+                <div className="medication-highlight-detail">
                   {Boolean(medication['配比']) && <>配比: {String(medication['配比'])} </>}
                   {Boolean(medication['总量']) && <>· 总量: {String(medication['总量'])}</>}
                   {Boolean(medication['浓度']) && <> · 浓度: {String(medication['浓度'])}</>}
@@ -463,12 +382,10 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
               </div>
             )}
             {Array.isArray(medication['安全提示']) && (medication['安全提示'] as string[]).length > 0 && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>安全提示</div>
+              <div>
+                <div className="safety-tips-label">安全提示</div>
                 {(medication['安全提示'] as string[]).map((tip, i) => (
-                  <div key={i} style={{ fontSize: 12, color: 'var(--text-primary)', paddingLeft: 10, borderLeft: '2px solid var(--accent-red)', marginBottom: 4 }}>
-                    {tip}
-                  </div>
+                  <div key={i} className="safety-tip-item">{tip}</div>
                 ))}
               </div>
             )}
@@ -477,22 +394,11 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
 
         {/* 农事建议 */}
         {agronomyTips.length > 0 && (
-          <section>
-            <h4 style={{ margin: '0 0 10px', fontSize: 13, fontWeight: 700, color: 'var(--accent-amber)', letterSpacing: '0.03em' }}>
-              🌾 农事建议
-            </h4>
+          <section className="drawer-section">
+            <h4 className="drawer-section-title" style={{ color: 'var(--accent-amber)' }}>🌾 农事建议</h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {agronomyTips.map((tip, i) => (
-                <div key={i} style={{
-                  padding: '8px 12px',
-                  background: 'var(--bg-surface)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: 12,
-                  color: 'var(--text-primary)',
-                  borderLeft: '3px solid var(--accent-amber)',
-                }}>
-                  {tip}
-                </div>
+                <div key={i} className="agronomy-tip-item">{tip}</div>
               ))}
             </div>
           </section>

@@ -48,24 +48,20 @@ export default function DecisionExplainPanel({ task }: Props) {
   return (
     <Card className="dashboard-card">
       <span className="label-uppercase">决策依据</span>
-      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="explain-root">
 
         {/* 虫害检测 */}
         {detections.length > 0 && (
-          <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>虫害检测</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div className="explain-section">
+            <div className="explain-section-title">虫害检测</div>
+            <div className="explain-detection-tags">
               {detections.map((d, i) => {
                 const conf = d.confidence ?? 0
                 const haz = hazardLevel(conf)
                 return (
-                  <span key={i} style={{
-                    fontSize: 12, padding: '3px 8px',
-                    background: 'var(--bg-surface)', borderRadius: 4,
-                    borderLeft: `3px solid ${haz.color}`,
-                  }}>
-                    <span style={{ fontWeight: 600 }}>{d.pest_type ?? '未知'}</span>
-                    <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>
+                  <span key={i} className="explain-detection-tag" style={{ borderLeftColor: haz.color }}>
+                    <span className="tag-label">{d.pest_type ?? '未知'}</span>
+                    <span className="tag-meta">
                       {(conf * 100).toFixed(0)}% · 危害{haz.label}
                     </span>
                   </span>
@@ -77,14 +73,14 @@ export default function DecisionExplainPanel({ task }: Props) {
 
         {/* 天气因素 */}
         {Object.keys(weather).length > 0 && (
-          <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>天气因素</div>
-            <div style={{ fontSize: 12, display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+          <div className="explain-section">
+            <div className="explain-section-title">天气因素</div>
+            <div className="explain-weather-row">
               {weather.temperature != null && <span>温度 {String(weather.temperature)}°C</span>}
               {weather.humidity != null && <span>湿度 {String(weather.humidity)}%</span>}
               {(weather.wind_speed ?? weather.windSpeed) != null && <span>风速 {String(weather.wind_speed ?? weather.windSpeed)}m/s</span>}
             </div>
-            <div style={{ fontSize: 11, color: suit.ok ? 'var(--accent-green)' : 'var(--accent-terracotta)' }}>
+            <div className={`explain-weather-suit ${suit.ok ? 'ok' : 'warn'}`}>
               {suit.text}
             </div>
           </div>
@@ -92,29 +88,29 @@ export default function DecisionExplainPanel({ task }: Props) {
 
         {/* 合规推理链 */}
         {compliance && (
-          <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>农药安全合规推理链</div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="explain-section">
+            <div className="explain-compliance-header">
+              <div className="explain-section-title">农药安全合规推理链</div>
+              <div className="explain-compliance-score">
                 <Tag color={complianceDisplay.color}>{complianceDisplay.label}</Tag>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                <span className="explain-compliance-score-value">
                   {compliance.score}/100
                 </span>
               </div>
             </div>
 
             {/* Five-check chain */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
-              {(compliance.checks ?? []).map((check, i) => {
+            <div className="explain-check-list">
+              {(compliance.checks ?? []).map((check) => {
                 const checkColor = check.status === 'passed' ? 'var(--accent-green)' : check.status === 'blocked' ? 'var(--accent-red)' : 'var(--accent-amber)'
                 const dot = check.status === 'passed' ? '●' : check.status === 'blocked' ? '✕' : '▲'
                 return (
-                  <div key={check.rule} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12 }}>
-                    <span style={{ color: checkColor, fontWeight: 700, width: 14, textAlign: 'center' }}>{dot}</span>
-                    <span style={{ fontWeight: 600, minWidth: 72 }}>{check.name ?? check.rule}</span>
-                    <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{check.message}</span>
+                  <div key={check.rule} className="explain-check-row">
+                    <span className="explain-check-dot" style={{ color: checkColor }}>{dot}</span>
+                    <span className="explain-check-name">{check.name ?? check.rule}</span>
+                    <span className="explain-check-msg">{check.message}</span>
                     {check.evidence && check.evidence.length > 0 && (
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      <span className="explain-check-evidence">
                         {check.evidence.map((e) => e.title).join(', ')}
                       </span>
                     )}
@@ -124,8 +120,8 @@ export default function DecisionExplainPanel({ task }: Props) {
             </div>
 
             {/* Summary + Execution policy */}
-            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{compliance.summary ?? ''}</span>
+            <div className="explain-footer">
+              <span className="explain-footer-summary">{compliance.summary ?? ''}</span>
               {compliance.execution_policy && (
                 <Tag color={compliance.execution_policy.takeoff_mode === 'auto' ? 'green' : compliance.execution_policy.takeoff_mode === 'blocked' ? 'red' : 'amber'}>
                   {compliance.execution_policy.takeoff_mode === 'auto' ? '自动执行' : compliance.execution_policy.takeoff_mode === 'blocked' ? '已拦截' : '需人工确认'}
@@ -135,15 +131,15 @@ export default function DecisionExplainPanel({ task }: Props) {
 
             {/* Alternatives */}
             {compliance.alternatives && compliance.alternatives.length > 0 && (
-              <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>替代方案推荐</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div className="explain-alternatives">
+                <div className="explain-alternatives-title">替代方案推荐</div>
+                <div className="explain-alt-list">
                   {compliance.alternatives.map((alt, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12 }}>
-                      <span style={{ color: 'var(--accent-cyan)', fontWeight: 700 }}>{i + 1}.</span>
-                      <span style={{ fontWeight: 600 }}>{alt.pesticide}</span>
-                      <span style={{ color: 'var(--text-secondary)', flex: 1 }}>{alt.reason}</span>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{alt.score}</span>
+                    <div key={i} className="explain-alt-row">
+                      <span className="explain-alt-index">{i + 1}.</span>
+                      <span className="explain-alt-name">{alt.pesticide}</span>
+                      <span className="explain-alt-reason">{alt.reason}</span>
+                      <span className="explain-alt-score">{alt.score}</span>
                     </div>
                   ))}
                 </div>
@@ -154,9 +150,9 @@ export default function DecisionExplainPanel({ task }: Props) {
 
         {/* RAG 引用 */}
         {rag && ((rag.pesticides?.length ?? 0) + (rag.historical_cases?.length ?? 0) + (rag.knowledge?.length ?? 0) > 0) && (
-          <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>RAG 知识引用</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div className="explain-section">
+            <div className="explain-section-title">RAG 知识引用</div>
+            <div className="explain-rag-tags">
               {rag.pesticides && rag.pesticides.length > 0 && (
                 <Tag color="green">{rag.pesticides.length} 条农药</Tag>
               )}
@@ -172,16 +168,14 @@ export default function DecisionExplainPanel({ task }: Props) {
 
         {/* 安全提示 */}
         {safetyTips.length > 0 && (
-          <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>安全提示</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div className="explain-section">
+            <div className="explain-section-title">安全提示</div>
+            <div className="explain-safety-tips">
               {safetyTips.slice(0, 3).map((tip, i) => (
-                <div key={i} style={{ fontSize: 12, color: 'var(--text-primary)', paddingLeft: 8, borderLeft: '2px solid var(--accent-terracotta)' }}>
-                  {tip}
-                </div>
+                <div key={i} className="explain-safety-tip">{tip}</div>
               ))}
               {safetyTips.length > 3 && (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{safetyTips.length - 3} 条</div>
+                <div className="explain-safety-more">+{safetyTips.length - 3} 条</div>
               )}
             </div>
           </div>

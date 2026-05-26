@@ -68,7 +68,7 @@ export default function History() {
     if (!data || data.items.length === 0) return null
     const byDay: Record<string, { total: number; completed: number }> = {}
     for (const item of data.items) {
-      const ts = item.updated_at ?? item.started_at
+      const ts = item.updated_at
       if (!ts) continue
       const day = new Date(ts).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
       if (!byDay[day]) byDay[day] = { total: 0, completed: 0 }

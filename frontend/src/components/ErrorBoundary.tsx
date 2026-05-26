@@ -26,11 +26,11 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div style={{ padding: 32, textAlign: 'center' }}>
+          <div className="error-boundary">
             <h2>页面出错了</h2>
-            <p style={{ color: '#888', marginTop: 8 }}>{this.state.error?.message}</p>
+            <p className="error-boundary-msg">{this.state.error?.message}</p>
             <button
-              style={{ marginTop: 16, padding: '6px 18px', cursor: 'pointer' }}
+              className="btn btn-secondary error-boundary-retry"
               onClick={() => this.setState({ hasError: false, error: null })}
             >
               重试

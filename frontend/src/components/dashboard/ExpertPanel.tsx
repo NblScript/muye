@@ -141,7 +141,7 @@ export default function ExpertPanel({ ragContext }: ExpertPanelProps) {
                 : 'qwen'
               return (
                 <div key={name} className="expert-vote-bar">
-                  <span style={{ fontSize: 12, minWidth: 80, color: 'var(--text-secondary)' }}>{name}</span>
+                  <span className="vote-dist-name">{name}</span>
                   <div className="expert-vote-track">
                     <div
                       className={`expert-vote-fill ${colorClass}`}
@@ -163,9 +163,9 @@ export default function ExpertPanel({ ragContext }: ExpertPanelProps) {
             <div className="consultation-final">
               <span className="consultation-label">最终方案</span>
               <div className="consultation-final-result">
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{winnerExpert[1]['农药名称']}</span>
+                <span className="final-result-name">{winnerExpert[1]['农药名称']}</span>
                 {winnerExpert[1]['总量'] && (
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>
+                  <span className="final-result-detail">
                     {winnerExpert[1]['总量']}
                   </span>
                 )}

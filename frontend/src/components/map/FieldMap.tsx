@@ -289,7 +289,7 @@ function buildDetectionMarkerData(
   })
 }
 
-export default function FieldMap({ droneStatus, detections = [], spraySchedule }: FieldMapProps) {
+export default function FieldMap({ droneStatus, detections = [], spraySchedule: _spraySchedule }: FieldMapProps) {
   const fallbackFieldPlot = buildDemoFallbackField()
   const primaryFieldPlot = fallbackFieldPlot
   const displayFieldPlots = [primaryFieldPlot]
