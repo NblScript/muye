@@ -19,7 +19,7 @@ frontend/src/
 │   ├── simMap.ts      # 仿真地图 API
 │   └── workflow.ts    # 工作流 API
 ├── components/        # UI 组件
-│   ├── dashboard/     # 仪表盘组件（DecisionFlow, DJIStatusCard, ModelSwitcher, PipelineStepper, StatCard, TaskList, WeatherCard）
+│   ├── dashboard/     # 仪表盘组件（DecisionFlow, DecisionExplainPanel, ExpertPanel, DJIStatusCard, ModelSwitcher, PipelineStepper, StatCard, TaskList, WeatherCard）
 │   ├── map/           # 地图组件（FieldMap, StatusPanel/）
 │   ├── ui/            # 通用 UI 组件（Alert, Button, Card, Drawer, Input, Progress, Select, Tag, Toast）
 │   ├── workflow/      # 工作流组件（WorkflowPanel）

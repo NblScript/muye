@@ -55,7 +55,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | 域 | 路径 | 职责 |
 |----|------|------|
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
-| decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 |
+| decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 + 合规推理链 |
 | drone | `modules/drone/` | 无人机控制 + 任务规划 + 后端抽象（PX4/DJI OSDK） |
 | infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
 
@@ -66,6 +66,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 ./scripts/demo.sh      # 一键演示主入口（通过 env var 注入配置，不修改 config 文件）
 ./scripts/demo_scenario.sh <场景名> # 预设演示场景（aphid_normal|planthopper_humid|wind_high|rag_down|px4_down）
 ./scripts/demo_smoke.sh # 烟雾测试（验证 API + mock 链路，不依赖 PX4）
+./scripts/check.sh     # 竞赛总验证（关键路径测试 + 前端构建 + 文档校验；MUYE_FULL_CHECK=1 开启全量回归）
 ./scripts/precheck.sh  # 可 source 的环境检查工具库
 ```
 
@@ -90,6 +91,8 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | [docs/references/api.md](docs/references/api.md) | API 端点参考 |
 | [docs/references/data-model.md](docs/references/data-model.md) | 数据模型参考 |
 | [docs/references/rag-llms.txt](docs/references/rag-llms.txt) | RAG/LangChain 使用指南 |
+| [docs/superpowers/specs/](docs/superpowers/) | 技术创新设计规格 |
+| [docs/project-plan.md](docs/project-plan.md) | 项目计划书 |
 
 ## 当前活跃计划
 
@@ -109,6 +112,26 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
 | DecisionRouter | 路由决策路径（专家/多智能体） | `MUYE_ROUTER_ENABLED`（bool，默认 false）· `MUYE_ROUTER_FAMILIARITY_THRESHOLD`（float，默认 0.6） |
 | 模型切换 | 检测模型热切换 + 决策 provider 映射 | `config/yolo_config.yaml` → `models` + `active_model`；`config/model_config.yaml` → `expert_providers` |
+
+## 农药安全合规推理链
+
+位于 AI 决策与无人机执行之间，审核推荐农药的安全性。
+
+```text
+AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked → 自动执行/人工确认/拦截
+```
+
+**五项检查**：`source_match`（来源验证）· `crop_match`（作物适用性）· `pest_match`（防治对象匹配）· `toxicity_risk`（毒性安全）· `weather_risk`（天气约束）
+
+**执行策略**：
+- `passed` → 按配置的 takeoff_mode 执行
+- `warning` → 强制人工确认（即使配置为 auto）
+- `blocked` → 禁止启动无人机
+
+每项检查携带 `evidence`（来源 + 匹配字段），顶层返回 `summary`（规则拼接）、`execution_policy`、`alternatives`（MVP 空列表，Phase 2）。
+
+**代码**：`modules/decision/compliance.py`
+**设计文档**：`docs/superpowers/specs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`
 
 ## 遇到无法解决的问题
 

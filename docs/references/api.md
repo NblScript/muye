@@ -192,7 +192,7 @@
 
 ### GET /tasks/{request_id}/report
 
-生成任务 Markdown 报告。包含地块信息、虫害检测、气象数据、合规审核、AI 决策方案、会诊过程、无人机执行记录。
+生成任务 Markdown 报告。包含地块信息、虫害检测、气象数据、合规推理链（五项检查 + 证据 + 执行策略）、AI 决策方案、会诊过程、无人机执行记录。
 
 **响应**：`text/markdown; charset=utf-8`
 
