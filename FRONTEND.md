@@ -5,9 +5,9 @@
 | 技术 | 版本 | 用途 |
 |------|------|------|
 | React | 19 | UI 框架 |
-| TypeScript | 5.x | 类型安全 |
-| Vite | 5.x | 构建工具 |
-| Ant Design | 5.x | UI 组件库（暗色主题） |
+| TypeScript | 6.x | 类型安全 |
+| Vite | 8.x | 构建工具 |
+| 自定义 UI | - | `components/ui/`（Card, Button, Tag, Toast, Drawer 等） |
 
 ## 目录结构
 
@@ -126,9 +126,9 @@ function useSimMapState() {
 
 ## 样式规范
 
-- **主题**：暗色主题（Ant Design Dark Theme）
+- **主题**：暗色主题（CSS 变量驱动）
 - **全局样式**：`index.css` 定义 CSS 变量和基础样式
-- **组件样式**：使用 Ant Design 内置样式 + 少量自定义 CSS
+- **组件样式**：`components/ui/` 自定义组件 + `styles/dashboard.css`
 - **响应式**：大屏展示为主，支持 1920x1080 分辨率
 - **地图样式**：SVG 渲染，`styles/` 目录存放专用样式
 
@@ -168,7 +168,6 @@ npm run test                    # 运行前端测试
 
 | 包 | 用途 |
 |----|------|
-| `antd` | UI 组件库 |
 | `axios` | HTTP 客户端 |
 | `react-router-dom` | 路由 |
-| `@ant-design/icons` | 图标 |
+| `leaflet` + `react-leaflet` | 地图渲染 |

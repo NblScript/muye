@@ -17,7 +17,7 @@
 
 | 层 | 技术 |
 |---|------|
-| 前端 | React 19 + TypeScript + Vite + Ant Design（暗色大屏） |
+| 前端 | React 19 + TypeScript 6 + Vite 8（暗色大屏） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
 | AI | YOLOv8（检测，可切换模型）+ Qwen/DeepSeek/Xiaomi（多模型决策，provider 可配置）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
 | 无人机 | PX4 SITL + MAVSDK（仿真）/ DJI OSDK（行业级无人机） |
