@@ -1184,6 +1184,99 @@ def test_main_pipeline_blocks_drone_execution_when_compliance_blocks(monkeypatch
     )
 
 
+def test_main_pipeline_forces_manual_takeoff_when_compliance_warns(monkeypatch, tmp_path) -> None:
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", drone_backend="px4", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    calls: list[str] = []
+    detections = [{"pest_type": "aphid", "confidence": 0.94, "position": {}}]
+    weather = {"temperature": 26.5, "humidity": 88, "summary": "多云", "wind_speed": 6.1}
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "500mL",
+            "安全提示": [],
+        },
+        "农事建议": [],
+    }
+    compliance = {
+        "status": "warning",
+        "score": 76,
+        "checks": [],
+        "blocking_reasons": [],
+        "warnings": ["当前风速6.1m/s偏高，注意药液漂移风险"],
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {"weather": weather, "decision": decision, "compliance": compliance}
+
+    async def fake_ensure_px4_ready():
+        calls.append("ensure_px4")
+        return {"status": "started", "ready": True}
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        calls.append("execute")
+        return {"status": "completed"}
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> str:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        try:
+            task = asyncio.create_task(
+                app._process_image(request_id, queued_image, field_context, worker_id=1)
+            )
+            for _ in range(50):
+                events = [
+                    event
+                    for event in event_bus.load_events(app.event_bus.path)
+                    if event.get("request_id") == request_id
+                ]
+                if any(
+                    event.get("stage") == "drone"
+                    and event.get("status") == "pending_confirmation"
+                    for event in events
+                ):
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                    return request_id
+                await asyncio.sleep(0.01)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            return request_id
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id = asyncio.run(run_pipeline())
+        events = [
+            event
+            for event in event_bus.load_events(app.event_bus.path)
+            if event.get("request_id") == request_id
+        ]
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert calls == []
+    assert any(
+        event.get("stage") == "drone" and event.get("status") == "pending_confirmation"
+        for event in events
+    )
+
+
 def test_main_pipeline_uses_mission_final_status_for_spray_record(monkeypatch, tmp_path) -> None:
     """Test that mission final status is used for spray records via MuyeConfig."""
     config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)

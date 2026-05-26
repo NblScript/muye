@@ -769,8 +769,20 @@ class MuyeApplication:
                 lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
             )
 
-            execution_policy = (compliance.get("execution_policy") or {}) if isinstance(compliance, dict) else {}
-            policy_takeoff = str(execution_policy.get("takeoff_mode", "auto")).strip().lower()
+            execution_policy = (
+                (compliance.get("execution_policy") or {})
+                if isinstance(compliance, dict)
+                else {}
+            )
+            policy_takeoff = str(execution_policy.get("takeoff_mode") or "").strip().lower()
+            if not policy_takeoff and isinstance(compliance, dict):
+                compliance_status = str(compliance.get("status") or "").strip().lower()
+                if compliance_status == "blocked":
+                    policy_takeoff = "blocked"
+                elif compliance_status == "warning":
+                    policy_takeoff = "manual"
+                else:
+                    policy_takeoff = "auto"
 
             if policy_takeoff == "blocked":
                 reasons = compliance.get("blocking_reasons") or []

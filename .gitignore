@@ -35,3 +35,6 @@ __pycache__/
 .claude/
 .claude-plugin/
 CLAUDE.md
+
+# Node
+node_modules/
