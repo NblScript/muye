@@ -1,6 +1,8 @@
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import DecisionFlow from '../components/dashboard/DecisionFlow'
+import DecisionSummaryCard from '../components/dashboard/DecisionSummaryCard'
 import DemoScenarioCards from '../components/dashboard/DemoScenarioCards'
+import DemoReadinessBar from '../components/dashboard/DemoReadinessBar'
 import DecisionExplainPanel from '../components/dashboard/DecisionExplainPanel'
 import ExpertPanel from '../components/dashboard/ExpertPanel'
 import PipelineStepper from '../components/dashboard/PipelineStepper'
@@ -243,6 +245,16 @@ export default function Dashboard() {
         />
       ) : null}
 
+      <DemoReadinessBar
+        connected={s.connected}
+        workflowLoading={s.workflowLoading}
+        workflowError={s.workflowError}
+        latestTask={s.latestTask}
+        qwenMode={s.context?.modes.qwen}
+        px4Running={s.px4Running}
+        readiness={s.demoReadiness}
+      />
+
       <section className="mission-metric-ribbon" aria-label="作业关键指标">
         <StatCard
           className="stat-card-ribbon"
@@ -283,13 +295,14 @@ export default function Dashboard() {
 
       <section className="dashboard-grid">
         <aside className="dashboard-column dashboard-column-left">
+          <DecisionSummaryCard task={s.latestTask} />
           <DecisionFlow task={s.latestTask} />
-          <DecisionExplainPanel task={s.latestTask} />
           {s.latestTask?.rag_context?.consultation_detail && (
-            <Card className="dashboard-card">
+            <Card className="dashboard-card expert-panel-card">
               <ExpertPanel ragContext={s.latestTask.rag_context} />
             </Card>
           )}
+          <DecisionExplainPanel task={s.latestTask} />
         </aside>
 
         <main className="dashboard-column dashboard-column-center">
@@ -302,6 +315,10 @@ export default function Dashboard() {
               <FieldMap
                 droneStatus={s.latestTask?.drone?.status}
                 detections={s.latestTask?.detections}
+                densityGrid={s.densityGrid}
+                spraySchedule={s.spraySchedule}
+                instructionRoute={s.instructionRoute}
+                instructionCoverage={s.instructionCoverage}
               />
             </div>
           </Card>

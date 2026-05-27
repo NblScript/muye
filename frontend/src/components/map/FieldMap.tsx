@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LatLngTuple } from 'leaflet'
 import type { SimDroneState } from '../../types/simMap'
-import type { WorkflowDetectionEntry } from '../../types/workflow'
+import type { DensityGridCell, WorkflowDetectionEntry } from '../../types/workflow'
 import { mapCenter, type FieldPlot, type FieldStatus } from './mapData'
 import { computeCommandPoint } from './commandPoint'
 
@@ -25,10 +25,10 @@ const C = {
   waypointStart: '#42d392',
   detection: '#c73758',
   commandPoint: '#d78d1f',
-  heatmapHigh: 'rgba(192, 96, 90, 0.35)',
-  heatmapMedium: 'rgba(196, 138, 42, 0.30)',
-  heatmapLow: 'rgba(90, 138, 106, 0.25)',
-  heatmapMinimal: 'rgba(90, 138, 106, 0.12)',
+  heatmapHigh: 'rgba(235, 40, 35, 0.92)',
+  heatmapMedium: 'rgba(235, 165, 15, 0.82)',
+  heatmapLow: 'rgba(35, 190, 95, 0.65)',
+  heatmapMinimal: 'rgba(35, 190, 95, 0.40)',
   gridStroke: 'rgba(32, 91, 154, 0.10)',
   overlayFill: 'rgba(255, 255, 255, 0.46)',
   overlayStroke: 'rgba(32, 91, 154, 0.12)',
@@ -44,7 +44,10 @@ const C = {
 type FieldMapProps = {
   droneStatus?: string
   detections?: WorkflowDetectionEntry[]
-  spraySchedule?: number[]
+  spraySchedule?: number[] | null
+  densityGrid?: DensityGridCell[] | null
+  instructionRoute?: [number, number][] | null
+  instructionCoverage?: [number, number][] | null
 }
 
 function fieldStatusStyle(status: FieldStatus) {
@@ -168,7 +171,44 @@ function toPathD(points: LatLngTuple[]) {
     .join(' ')
 }
 
-const DRONE_SPEED = 0.004
+const DRONE_STRAIGHT_SPEED = 0.004
+const DRONE_TURN_SPEED = 0.016
+const DRONE_TURN_ZONE = 0.015
+
+type GpsBounds = { minLon: number; maxLon: number; minLat: number; maxLat: number }
+
+function computeGpsBounds(coords: [number, number][]): GpsBounds {
+  const lons = coords.map((c) => c[0])
+  const lats = coords.map((c) => c[1])
+  return { minLon: Math.min(...lons), maxLon: Math.max(...lons), minLat: Math.min(...lats), maxLat: Math.max(...lats) }
+}
+
+function computeSvgBounds(boundary: LatLngTuple[]): GpsBounds {
+  const lngs = boundary.map((p) => p[1])
+  const lats = boundary.map((p) => p[0])
+  return { minLon: Math.min(...lngs), maxLon: Math.max(...lngs), minLat: Math.min(...lats), maxLat: Math.max(...lats) }
+}
+
+function projectGpsToSvg(
+  gpsPoint: [number, number],
+  gpsBounds: GpsBounds,
+  svgBounds: GpsBounds,
+): LatLngTuple {
+  const lonSpan = gpsBounds.maxLon - gpsBounds.minLon || 1
+  const latSpan = gpsBounds.maxLat - gpsBounds.minLat || 1
+  const nLng = (gpsPoint[0] - gpsBounds.minLon) / lonSpan
+  const nLat = (gpsPoint[1] - gpsBounds.minLat) / latSpan
+  const svgLat = svgBounds.minLat + nLat * (svgBounds.maxLat - svgBounds.minLat)
+  const svgLng = svgBounds.minLon + nLng * (svgBounds.maxLon - svgBounds.minLon)
+  return [svgLat, svgLng]
+}
+
+function sprayRateColor(normalized: number): string {
+  if (normalized >= 0.7) return 'rgba(192, 96, 90, 0.9)'
+  if (normalized >= 0.4) return 'rgba(196, 138, 42, 0.85)'
+  return 'rgba(90, 138, 106, 0.75)'
+}
+
 function resolveStaticRoutePosition(route: LatLngTuple[]) {
   if (route.length === 0) {
     return mapCenter
@@ -228,12 +268,22 @@ function useAnimatedDrones(
       const dt = Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
 
-      progressRef.current += DRONE_SPEED * dt
+      const currentRoute = routeRef.current
+      const segCount = Math.max(1, currentRoute.length - 1)
+      const currentSeg = progressRef.current * segCount
+      const nearestWaypointDist = Math.min(
+        Math.abs(currentSeg - Math.round(currentSeg)),
+        Math.abs(currentSeg),
+        Math.abs(currentSeg - segCount),
+      )
+      const nearTurn = nearestWaypointDist < DRONE_TURN_ZONE * segCount
+      const speed = nearTurn ? DRONE_TURN_SPEED : DRONE_STRAIGHT_SPEED
+
+      progressRef.current += speed * dt
       if (progressRef.current > 1) {
         progressRef.current -= 1
       }
 
-      const currentRoute = routeRef.current
       if (currentRoute.length < 2) {
         rafRef.current = requestAnimationFrame(tick)
         return
@@ -304,13 +354,23 @@ function buildDetectionMarkerData(
   })
 }
 
-export default function FieldMap({ droneStatus, detections = [], spraySchedule: _spraySchedule }: FieldMapProps) {
+export default function FieldMap({ droneStatus, detections = [], spraySchedule, densityGrid, instructionRoute, instructionCoverage }: FieldMapProps) {
   const fallbackFieldPlot = buildDemoFallbackField()
   const primaryFieldPlot = fallbackFieldPlot
   const displayFieldPlots = [primaryFieldPlot]
   const commandPoint = computeCommandPoint(primaryFieldPlot.boundary, mapCenter)
   const fallbackRoutePoints = buildDemoFallbackRoute()
-  const routePoints = buildCoverageRouteFromBoundary(primaryFieldPlot.boundary)
+
+  // Project backend GPS route into SVG space when available
+  const routePoints = useMemo(() => {
+    if (instructionRoute && instructionRoute.length >= 2 && instructionCoverage && instructionCoverage.length >= 3) {
+      const gpsBounds = computeGpsBounds(instructionCoverage)
+      const svgBounds = computeSvgBounds(primaryFieldPlot.boundary)
+      return instructionRoute.map((pt) => projectGpsToSvg(pt, gpsBounds, svgBounds))
+    }
+    return buildCoverageRouteFromBoundary(primaryFieldPlot.boundary)
+  }, [instructionRoute, instructionCoverage, primaryFieldPlot.boundary])
+
   const finalRoutePoints = routePoints.length >= 2 ? routePoints : fallbackRoutePoints
   const routeHoldPosition = resolveStaticRoutePosition(finalRoutePoints)
   const coveragePoints: LatLngTuple[] = []
@@ -340,8 +400,28 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
     [detections, primaryFieldPlot.center],
   )
 
-  // Density heatmap from detection positions
-  const densityGrid = useMemo(() => {
+  // Backend density grid projected from GPS to SVG
+  const projectedDensityGrid = useMemo(() => {
+    if (!densityGrid || densityGrid.length === 0 || !instructionCoverage || instructionCoverage.length < 3) return null
+    const gpsBounds = computeGpsBounds(instructionCoverage)
+    const svgBounds = computeSvgBounds(primaryFieldPlot.boundary)
+    return densityGrid
+      .filter((cell) => cell.density > 0.05)
+      .map((cell) => {
+        const [svgLat1, svgLng1] = projectGpsToSvg(cell.bounds[0], gpsBounds, svgBounds)
+        const [svgLat2, svgLng2] = projectGpsToSvg(cell.bounds[1], gpsBounds, svgBounds)
+        return {
+          x: Math.min(svgLng1, svgLng2),
+          y: Math.min(svgLat1, svgLat2),
+          w: Math.abs(svgLng2 - svgLng1),
+          h: Math.abs(svgLat2 - svgLat1),
+          density: cell.density,
+        }
+      })
+  }, [densityGrid, instructionCoverage, primaryFieldPlot.boundary])
+
+  // Fallback: local density grid from detection positions
+  const localDensityGrid = useMemo(() => {
     if (detectionMarkers.length === 0) return null
     const boundary = primaryFieldPlot.boundary
     const lats = boundary.map((p: LatLngTuple) => p[0])
@@ -374,6 +454,8 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
     }
     return cells
   }, [detectionMarkers, primaryFieldPlot.boundary])
+
+  const effectiveDensityGrid = projectedDensityGrid ?? localDensityGrid
   const telemetry = {
     altitude: 5,
     speed: 4.5,
@@ -456,9 +538,9 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
           )
         })}
 
-        {showHeatmap && densityGrid && densityGrid.length > 0 && (
-          <g opacity="0.85">
-            {densityGrid.map((cell, i) => (
+        {showHeatmap && effectiveDensityGrid && effectiveDensityGrid.length > 0 && (
+          <g opacity="0.92">
+            {effectiveDensityGrid.map((cell, i) => (
               <rect
                 key={`density-${i}`}
                 x={cell.x}
@@ -493,15 +575,40 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-            <polyline
-              points={toSvgPoints(routePoints)}
-              fill="none"
-              stroke={C.plannedRoute}
-              strokeWidth="1.8"
-              strokeDasharray="3 1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            {spraySchedule && spraySchedule.length > 0 ? (
+              // Variable-rate: per-lane colored segments
+              spraySchedule.map((rate, laneIdx) => {
+                const startPt = routePoints[laneIdx * 2]
+                const endPt = routePoints[laneIdx * 2 + 1]
+                if (!startPt || !endPt) return null
+                const maxRate = Math.max(...spraySchedule)
+                const minRate = Math.min(...spraySchedule)
+                const normalized = maxRate > minRate ? (rate - minRate) / (maxRate - minRate) : 0.5
+                const color = sprayRateColor(normalized)
+                const width = 1.4 + normalized * 1.6
+                return (
+                  <line
+                    key={`spray-lane-${laneIdx}`}
+                    x1={startPt[1]} y1={startPt[0]}
+                    x2={endPt[1]} y2={endPt[0]}
+                    stroke={color}
+                    strokeWidth={width}
+                    strokeLinecap="round"
+                  />
+                )
+              })
+            ) : (
+              // Uniform rate: standard dashed route
+              <polyline
+                points={toSvgPoints(routePoints)}
+                fill="none"
+                stroke={C.plannedRoute}
+                strokeWidth="1.8"
+                strokeDasharray="3 1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
 
             {routePoints.map((point, index) => (
               <g key={`route-waypoint-${index}-${point[0].toFixed(3)}-${point[1].toFixed(3)}`}>
@@ -547,54 +654,51 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
           const markerKey = `${drone.id}-${drone.position.x.toFixed(4)}-${drone.position.y.toFixed(4)}`
 
           return (
-            <g key={markerKey} filter="url(#drone-glow)">
-              <g opacity="0.86">
-                <path
-                  d={`M ${drone.position.x} ${drone.position.y + 1.8} L ${drone.position.x - 4.6} ${drone.position.y + 8.2} L ${drone.position.x + 4.6} ${drone.position.y + 8.2} Z`}
-                  fill={C.fieldCompleted}
-                  fillOpacity="0.12"
-                />
-                <ellipse
-                  cx={drone.position.x}
-                  cy={drone.position.y + 8.2}
-                  rx="5.2"
-                  ry="1.35"
-                  fill={C.fieldCompleted}
-                  fillOpacity="0.16"
-                />
-                <circle cx={drone.position.x - 2.8} cy={drone.position.y + 5.8} r="0.45" fill={C.waypointStart} fillOpacity="0.52" />
-                <circle cx={drone.position.x} cy={drone.position.y + 6.9} r="0.38" fill={C.waypointStart} fillOpacity="0.46" />
-                <circle cx={drone.position.x + 2.6} cy={drone.position.y + 5.5} r="0.42" fill={C.waypointStart} fillOpacity="0.5" />
+            <g
+              key={markerKey}
+              data-testid="drone-marker"
+              filter="url(#drone-glow)"
+              aria-label="植保无人机"
+              transform={`translate(${drone.position.x} ${drone.position.y})`}
+            >
+              <circle r="9.8" fill={style.fill} fillOpacity="0.10" stroke={style.stroke} strokeOpacity="0.58" strokeWidth="0.65">
+                <animate attributeName="r" values="7.4;10.2;7.4" dur="2.2s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.95;0.36;0.95" dur="2.2s" repeatCount="indefinite" />
+              </circle>
+              <circle r="5.7" fill="rgba(255,255,255,0.10)" stroke={style.stroke} strokeWidth="0.55" strokeDasharray="1.4 1.1" />
+
+              {isSpraying ? (
+                <g opacity="0.86">
+                  <path d="M -5.8 4.4 Q 0 10.8 5.8 4.4 L 3.1 11.4 L -3.1 11.4 Z" fill={C.waypointStart} fillOpacity="0.18" stroke={C.waypointStart} strokeWidth="0.45" />
+                  <circle cx="-3.2" cy="7.8" r="0.52" fill={C.waypointStart} fillOpacity="0.82" />
+                  <circle cx="0" cy="9.1" r="0.42" fill={C.waypointStart} fillOpacity="0.72" />
+                  <circle cx="3.2" cy="7.8" r="0.52" fill={C.waypointStart} fillOpacity="0.82" />
+                </g>
+              ) : null}
+
+              <g stroke={style.stroke} strokeWidth="0.9" strokeLinecap="round">
+                <line x1="-5.8" y1="-3.8" x2="5.8" y2="3.8" />
+                <line x1="5.8" y1="-3.8" x2="-5.8" y2="3.8" />
+                <line x1="-4.8" y1="0" x2="4.8" y2="0" />
               </g>
-              <circle
-                cx={drone.position.x}
-                cy={drone.position.y}
-                r="2.8"
-                fill={style.fill}
-                fillOpacity="0.28"
-                stroke={style.stroke}
-                strokeWidth="0.7"
-              />
-              <circle
-                cx={drone.position.x}
-                cy={drone.position.y}
-                r="1.5"
-                fill={style.fill}
-                stroke={C.text}
-                strokeWidth="0.4"
-              />
-              <text
-                x={drone.position.x}
-                y={drone.position.y - 3.4}
-                textAnchor="middle"
-                fontSize="3.2"
-                fill={C.text}
-                stroke={C.textStrokeLight}
-                strokeWidth="0.45"
-                paintOrder="stroke"
-              >
-                无人机
-              </text>
+
+              {[
+                [-6.5, -4.4, -18],
+                [6.5, -4.4, 18],
+                [-6.5, 4.4, 18],
+                [6.5, 4.4, -18],
+              ].map(([cx, cy, rotate], index) => (
+                <g key={`rotor-${index}`} transform={`translate(${cx} ${cy}) rotate(${rotate})`}>
+                  <ellipse rx="2.65" ry="0.9" fill={style.fill} fillOpacity="0.24" stroke={style.stroke} strokeWidth="0.48">
+                    <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="0.55s" repeatCount="indefinite" />
+                  </ellipse>
+                  <circle r="0.7" fill={style.fill} stroke={C.textStrokeLight} strokeWidth="0.25" />
+                </g>
+              ))}
+
+              <path d="M -2.2 -1.45 L 0 -3.7 L 2.2 -1.45 L 2.2 1.55 Q 0 2.5 -2.2 1.55 Z" fill={style.fill} stroke={C.textStrokeLight} strokeWidth="0.42" />
+              <circle cx="0" cy="0.15" r="0.72" fill="#eaf6ff" fillOpacity="0.88" />
+              <path d="M -1.8 2.3 L -3.2 4.1 M 1.8 2.3 L 3.2 4.1" stroke={style.stroke} strokeWidth="0.62" strokeLinecap="round" />
             </g>
           )
         })}
@@ -679,11 +783,27 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                 <span>检测点 ({detectionMarkers.length})</span>
               </div>
             )}
-            {densityGrid && densityGrid.length > 0 && (
+            {effectiveDensityGrid && effectiveDensityGrid.length > 0 && (
               <div className="map-legend-item is-interactive" onClick={() => setShowHeatmap(!showHeatmap)}>
                 <span className={`map-legend-swatch ${showHeatmap ? 'is-active' : 'is-inactive'}`} />
-                <span>{showHeatmap ? '隐藏热力图' : '显示热力图'}</span>
+                <span>{showHeatmap ? '隐藏密度热力图' : '显示密度热力图'}</span>
               </div>
+            )}
+            {spraySchedule && spraySchedule.length > 0 && (
+              <>
+                <div className="map-legend-item">
+                  <span className="map-legend-swatch" style={{ background: 'rgba(192, 96, 90, 0.9)' }} />
+                  <span>高密度区域 (高喷洒量)</span>
+                </div>
+                <div className="map-legend-item">
+                  <span className="map-legend-swatch" style={{ background: 'rgba(196, 138, 42, 0.85)' }} />
+                  <span>中密度区域 (标准喷洒)</span>
+                </div>
+                <div className="map-legend-item">
+                  <span className="map-legend-swatch" style={{ background: 'rgba(90, 138, 106, 0.75)' }} />
+                  <span>低密度区域 (低喷洒量)</span>
+                </div>
+              </>
             )}
           </div>
         </section>
@@ -708,6 +828,28 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                 <div className="map-telemetry-item">
                   <span>电量</span>
                   <strong>{telemetry.battery}%</strong>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {effectiveDensityGrid && effectiveDensityGrid.length > 0 && (
+          <section className="map-info-card map-density-stats" aria-label="密度统计">
+            <div className="map-info-card-title">密度统计</div>
+            <div className="map-telemetry-grid">
+              <div className="map-telemetry-item">
+                <span>网格数</span>
+                <strong>{effectiveDensityGrid.length}</strong>
+              </div>
+              <div className="map-telemetry-item">
+                <span>最高密度</span>
+                <strong>{Math.max(...effectiveDensityGrid.map((c) => c.density)).toFixed(2)}</strong>
+              </div>
+              {spraySchedule && spraySchedule.length > 0 && (
+                <div className="map-telemetry-item">
+                  <span>喷洒速率</span>
+                  <strong>{Math.min(...spraySchedule).toFixed(1)}–{Math.max(...spraySchedule).toFixed(1)} L/min</strong>
                 </div>
               )}
             </div>

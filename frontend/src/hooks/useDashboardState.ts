@@ -5,6 +5,7 @@ import {
   buildTaskOriginalImageUrl,
   confirmDroneTakeoff,
   fetchDashboardContext,
+  fetchDemoReadiness,
   fetchWorkflowHistory,
   getPx4Status,
   resetDemoEvents,
@@ -14,7 +15,12 @@ import {
 } from '../api/workflow'
 import { useEnhancedMapState } from './useEnhancedMapState'
 import { useToast } from '../components/ui'
-import type { DashboardContextResponse, WorkflowHistoryResponse, WorkflowStateResponse } from '../types/workflow'
+import type {
+  DashboardContextResponse,
+  DemoReadinessResponse,
+  WorkflowHistoryResponse,
+  WorkflowStateResponse,
+} from '../types/workflow'
 import {
   asRecord,
   formatDateTime,
@@ -50,6 +56,7 @@ export function useDashboardState() {
   const [workflowLoading, setWorkflowLoading] = useState(true)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [context, setContext] = useState<DashboardContextResponse | null>(null)
+  const [demoReadiness, setDemoReadiness] = useState<DemoReadinessResponse | null>(null)
   const [history, setHistory] = useState<WorkflowHistoryResponse | null>(null)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -92,6 +99,24 @@ export function useDashboardState() {
     }
     void loadContext()
     return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const loadReadiness = async () => {
+      try {
+        const next = await fetchDemoReadiness()
+        if (active) setDemoReadiness(next)
+      } catch (error) {
+        if (active) console.error('Failed to load demo readiness', error)
+      }
+    }
+    void loadReadiness()
+    const timer = window.setInterval(() => void loadReadiness(), 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -151,6 +176,11 @@ export function useDashboardState() {
   const agronomyTips = Array.isArray(decision['农事建议']) ? (decision['农事建议'] as string[]) : []
   const safetyTips = Array.isArray(medication['安全提示']) ? (medication['安全提示'] as string[]) : []
   const detections = latestTask?.detections ?? []
+  const droneInstruction = latestTask?.drone?.instruction
+  const densityGrid = droneInstruction?.density_grid ?? null
+  const spraySchedule = droneInstruction?.spray_schedule ?? null
+  const instructionRoute = droneInstruction?.['飞行路径'] ?? null
+  const instructionCoverage = droneInstruction?.['覆盖区域']?.coordinates ?? null
   const pestSummary = useMemo(() => summarizePests(detections), [detections])
   const primaryPest = detections.length > 0 ? formatPestLabel(detections[0]?.pest_type) : '等待识别'
   const currentArea = spraySummary['spray_area_mu'] ?? field['area_mu'] ?? '--'
@@ -352,6 +382,9 @@ export function useDashboardState() {
     commandMetaItems, combinedStatusError,
     weatherOk,
 
+    // Density & variable-rate
+    densityGrid, spraySchedule, instructionRoute, instructionCoverage,
+
     // History
     history, historyLoading, historyError,
     historyStatus, setHistoryStatus,
@@ -359,7 +392,7 @@ export function useDashboardState() {
     historyLimit, setHistoryLimit,
 
     // Context
-    context,
+    context, demoReadiness,
 
     // Action states
     uploading, resetting, confirmingTakeoff,

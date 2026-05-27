@@ -28,6 +28,13 @@ export interface WorkflowDetectionEntry {
   position?: WorkflowDetectionPosition
 }
 
+export interface DensityGridCell {
+  row: number
+  col: number
+  density: number
+  bounds: [number, number][]
+}
+
 export interface WorkflowDroneInstruction {
   飞行路径?: [number, number][]
   覆盖区域?: {
@@ -36,6 +43,9 @@ export interface WorkflowDroneInstruction {
   高度?: number | string
   速度?: number | string
   喷洒速率?: number | string
+  density_grid?: DensityGridCell[]
+  spray_schedule?: number[]
+  source?: string
 }
 
 export interface WorkflowDronePosition {
@@ -145,6 +155,7 @@ export interface WorkflowTaskState {
   recent_events: WorkflowEventEntry[]
   error?: string | null
   evaluation?: EvaluationResult
+  mission?: MissionDetail
 }
 
 export interface EvaluationResult {
@@ -161,6 +172,39 @@ export interface EvaluationResult {
   notes?: string | null
   message?: string
   needs_confirmation?: boolean
+}
+
+export interface MissionIteration {
+  iteration_id: number
+  iteration_number: number
+  spray_request_id?: string | null
+  status: string
+  pre_pest_count?: number | null
+  post_pest_count?: number | null
+  kill_rate?: number | null
+  spray_completed_at?: string | null
+  inspected_at?: string | null
+  evaluated_at?: string | null
+  notes?: string | null
+}
+
+export interface MissionDetail {
+  mission_row_id: number
+  mission_uuid: string
+  original_request_id: string
+  field_id?: string | null
+  status: string
+  kill_rate_threshold: number
+  max_iterations: number
+  current_iteration: number
+  final_kill_rate?: number | null
+  pest_types: string[]
+  pesticide_name?: string | null
+  crop_name?: string | null
+  created_at?: string | null
+  completed_at?: string | null
+  notes?: string | null
+  iterations: MissionIteration[]
 }
 
 export interface DashboardTaskEntry {
@@ -207,6 +251,31 @@ export interface WorkflowHistoryResponse {
 export interface DashboardContextResponse {
   modes: Record<string, string>
   upload_accept: string[]
+}
+
+export type DemoReadinessStatus = 'ready' | 'degraded' | 'blocked'
+export type DemoReadinessCheckStatus = 'ok' | 'warning' | 'error'
+
+export interface DemoReadinessCheck {
+  key: string
+  label: string
+  status: DemoReadinessCheckStatus
+  detail: string
+  reason?: string
+  impact?: string
+  system_action?: string
+  human_action?: string
+}
+
+export interface DemoReadinessResponse {
+  status: DemoReadinessStatus
+  summary: {
+    ok: number
+    warning: number
+    error: number
+  }
+  checks: Record<string, DemoReadinessCheck>
+  issues: DemoReadinessCheck[]
 }
 
 export interface DJITelemetry {

@@ -194,7 +194,7 @@ async def start_px4_demo(request: Px4StartRequest) -> dict[str, Any]:
         await asyncio.sleep(1)
 
     if not ready:
-        _kill_px4_process(proc.pid)
+        await _kill_px4_process(proc.pid)
         _clear_pid_file()
         raise HTTPException(
             status_code=504,
@@ -224,7 +224,7 @@ async def stop_px4_demo() -> dict[str, str]:
         _clear_pid_file()
         return {"status": "not_running"}
 
-    _kill_px4_process(pid)
+    await _kill_px4_process(pid)
     _clear_pid_file()
     return {"status": "stopped", "pid": str(pid), "source": source}
 
@@ -316,14 +316,14 @@ async def get_density_map(request_id: str) -> Any:
 
     store = get_sqlite_store()
     row = store.fetch_one(
-        "SELECT drone_instruction FROM tasks WHERE request_id = ?",
+        "SELECT instruction FROM drone_mission_updates WHERE request_id = ? ORDER BY id DESC LIMIT 1",
         (request_id,),
     )
 
-    if not row or not row.get("drone_instruction"):
+    if not row or not row.get("instruction"):
         raise HTTPException(status_code=404, detail="任务不存在或无无人机指令")
 
-    instruction = row["drone_instruction"]
+    instruction = row["instruction"]
     if isinstance(instruction, str):
         instruction = json.loads(instruction)
 
