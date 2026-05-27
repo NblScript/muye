@@ -12,20 +12,16 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from modules.infra.common import CONFIG_DIR, DATA_DIR, LOGS_DIR, ensure_runtime_dirs, load_yaml
-from modules.infra.sqlite_store import SqliteStore
+from app.services.workflow_service import get_sqlite_store
 
 
 def check_sqlite_health() -> dict[str, Any]:
     """Check SQLite health status."""
-    sqlite_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-    store = SqliteStore(sqlite_path)
-    try:
-        row = store.fetch_one("SELECT 1 AS ok")
-        if not row or int(row.get("ok") or 0) != 1:
-            raise RuntimeError("sqlite_query_failed")
-        return {"status": "ok", "path": str(sqlite_path)}
-    finally:
-        store.close()
+    store = get_sqlite_store()
+    row = store.fetch_one("SELECT 1 AS ok")
+    if not row or int(row.get("ok") or 0) != 1:
+        raise RuntimeError("sqlite_query_failed")
+    return {"status": "ok", "path": str(store.db_path)}
 
 
 def check_data_dir_health() -> dict[str, Any]:

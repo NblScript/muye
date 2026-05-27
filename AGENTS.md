@@ -70,8 +70,13 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 
 | 服务 | 职责 |
 |------|------|
+| `app/services/workflow_service.py` | 工作流状态构建、任务合并、历史查询、SqliteStore 单例（`get_sqlite_store()`） |
 | `app/services/takeoff_confirmation_service.py` | SQLite-backed 起飞确认状态机，兼容旧文件标记 |
 | `app/services/px4_process_service.py` | PX4 SITL 进程管理 helper：PID 文件、端口探测、进程识别、日志与停止 |
+| `app/services/pipeline_policy_service.py` | 主处理链合规执行策略解析：blocked/manual/auto |
+| `app/services/pipeline_planning_service.py` | 主处理链喷洒规划选择：变量喷洒优先，失败回退均匀路径 |
+| `app/services/map_simulator.py` | 模拟 PX4 地图状态用于演示大屏 |
+| `app/services/telemetry_service.py` | PX4 遥测状态管理、轨迹缓冲 |
 
 ## 演示脚本
 

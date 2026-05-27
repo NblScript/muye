@@ -11,13 +11,6 @@ def truthy_env(name: str) -> bool:
     return os.getenv(name, "false").lower() in {"1", "true", "yes", "on"}
 
 
-def parse_env_bool(value: str | None, default: bool) -> bool:
-    """Parse a boolean environment variable."""
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
 def current_mode_labels() -> dict[str, str]:
     """Get current mode labels for dashboard display."""
     drone_backend = os.getenv("DRONE_BACKEND", "px4").lower()

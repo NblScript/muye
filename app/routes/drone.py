@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import json
 import logging
 import os
@@ -44,103 +43,15 @@ _read_proc_exe = px4_process.read_proc_exe
 _read_proc_cmdline = px4_process.read_proc_cmdline
 _is_px4_process = px4_process.is_px4_process
 _find_running_px4_pid = px4_process.find_running_px4_pid
+_adopt_existing_px4 = px4_process.adopt_existing_px4
+_find_px4_pgid = px4_process.find_px4_pgid
+_kill_px4_process_sync = px4_process.kill_px4_process
 
 
-def _ensure_pid_dir() -> None:
-    px4_process.ensure_runtime_dirs()
-    PX4_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-
-def _write_pid_file(pid: int, world: str, source: str) -> None:
-    _ensure_pid_dir()
-    with PX4_PID_FILE.open("w", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        handle.write(
-            json.dumps(
-                {"pid": pid, "world": world, "source": source, "ts": time.time()},
-                ensure_ascii=False,
-            )
-        )
-        handle.flush()
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-
-def _read_pid_file() -> dict[str, Any] | None:
-    if not PX4_PID_FILE.exists():
-        return None
-    try:
-        with PX4_PID_FILE.open("r", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
-            content = handle.read()
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        data = json.loads(content)
-        pid = data.get("pid")
-        if not isinstance(pid, int):
-            return None
-        return data
-    except (OSError, json.JSONDecodeError, ValueError):
-        return None
-
-
-def _clear_pid_file() -> None:
-    try:
-        PX4_PID_FILE.unlink()
-    except FileNotFoundError:
-        pass
-
-
-def _adopt_existing_px4(*, px4_dir: Path, world: str) -> dict[str, Any] | None:
-    """Adopt an already-running PX4 SITL instance when the PID file is stale or missing."""
-    if not _is_port_open(PX4_SIMULATOR_PORT) or not _is_port_open(PX4_MAVLINK_PORT):
-        return None
-
-    pid = _find_running_px4_pid(px4_dir=px4_dir)
-    if pid is None:
-        return None
-
-    _write_pid_file(pid, world, "detected")
-    return {
-        "status": "already_running",
-        "pid": str(pid),
-        "world": world,
-        "source": "detected",
-        "ready": True,
-    }
-
-
-def _find_px4_pgid() -> int | None:
-    """Find PX4 SITL process group via PID file."""
-    info = _read_pid_file()
-    if info is None:
-        return None
-    pid = info["pid"]
-    if not _is_process_alive(pid):
-        return None
-    try:
-        return os.getpgid(pid)
-    except (ProcessLookupError, PermissionError):
-        return None
-
-
-def _kill_px4_process(pid: int) -> None:
-    """Kill PX4 process group."""
-    try:
-        pgid = os.getpgid(pid)
-        os.killpg(pgid, 15)
-    except (ProcessLookupError, PermissionError):
-        pass
-
-    for _ in range(20):
-        if not _is_process_alive(pid):
-            break
-        time.sleep(0.5)
-
-    if _is_process_alive(pid):
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, 9)
-        except (ProcessLookupError, PermissionError):
-            pass
+async def _kill_px4_process(pid: int) -> None:
+    """Async wrapper: kill PX4 process group without blocking the event loop."""
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _kill_px4_process_sync, pid)
 
 
 async def ensure_px4_ready(request: Px4StartRequest | None = None) -> dict[str, Any]:
@@ -401,17 +312,13 @@ async def disconnect_dji() -> Any:
 
 
 async def get_density_map(request_id: str) -> Any:
-    from modules.infra.sqlite_store import SqliteStore
+    from app.services.workflow_service import get_sqlite_store
 
-    db_path = Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-    store = SqliteStore(db_path)
-    try:
-        row = store.fetch_one(
-            "SELECT drone_instruction FROM tasks WHERE request_id = ?",
-            (request_id,),
-        )
-    finally:
-        store.close()
+    store = get_sqlite_store()
+    row = store.fetch_one(
+        "SELECT drone_instruction FROM tasks WHERE request_id = ?",
+        (request_id,),
+    )
 
     if not row or not row.get("drone_instruction"):
         raise HTTPException(status_code=404, detail="任务不存在或无无人机指令")

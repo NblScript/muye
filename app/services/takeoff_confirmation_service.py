@@ -7,9 +7,10 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import Any, Callable
 
 from modules.infra.common import DATA_DIR, ensure_runtime_dirs
-from modules.infra.sqlite_store import SqliteStore
+from app.services.workflow_service import get_sqlite_store
 
 
 ACTION_TYPE = "takeoff_confirmation"
@@ -18,16 +19,9 @@ TAKEOFF_PENDING_REQUEST_PATH = TAKEOFF_STATE_DIR / "pending_request.json"
 TAKEOFF_CONFIRMATION_FLAG_PATH = TAKEOFF_STATE_DIR / "confirmed.flag"
 
 
-def sqlite_path() -> Path:
-    return Path(os.getenv("MUYE_SQLITE_PATH", str(DATA_DIR / "muye.db")))
-
-
-def _with_store(callback):
-    store = SqliteStore(sqlite_path())
-    try:
-        return callback(store)
-    finally:
-        store.close()
+def _with_store(callback: Callable[[Any], Any]) -> Any:
+    store = get_sqlite_store()
+    return callback(store)
 
 
 def _ensure_takeoff_state_dir(state_dir: Path = TAKEOFF_STATE_DIR) -> None:

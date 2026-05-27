@@ -17,7 +17,6 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -71,32 +70,12 @@ from app.routes.tasks import register_tasks_routes
 from app.routes.workflow import register_workflow_routes
 
 # Import services and models
-from models.schemas import (
-    DashboardContextResponse,
-    DashboardTaskEntry,
-    HistoryTaskEntry,
-    SimDroneState,
-    SimMapStateResponse,
-    SimPoint,
-    WorkflowEventEntry,
-    WorkflowHistoryResponse,
-    WorkflowStateResponse,
-    WorkflowTaskState,
-    WorkflowTimelineEntry,
-)
 from app.services.map_simulator import Px4MapStateSimulator
-from app.services.workflow_service import (
-    MAX_UPLOAD_BYTES,
-    build_fallback_workflow_state,
-    build_history_response,
-    build_workflow_state_response,
-    clear_demo_runtime_state,
-    count_sqlite_tasks,
-    load_sqlite_task_views,
-    load_task_by_request_id,
-    merge_sqlite_tasks_with_events,
-    sanitize_filename,
+from app.services.pipeline_policy_service import (
+    resolve_policy_takeoff_mode,
+    resolve_runtime_takeoff_mode,
 )
+from app.services.pipeline_planning_service import plan_spray_mission
 
 # Import core configuration
 from app.config import build_local_yolo_urls
@@ -697,137 +676,31 @@ class MuyeApplication:
                     "field_name": field_context.get("name"),
                 },
             )
-            self.event_bus.publish(
-                request_id=request_id,
-                stage="yolo",
-                status="running",
-                message="正在执行 YOLO 识别",
-                payload={"image_path": str(image_path)},
-            )
-            detections = await self.image_processor.detect_pests(
-                image_path=image_path,
-                request_id=request_id,
-                client_ip=self.client_ip,
-            )
-            self.event_bus.publish(
-                request_id=request_id,
-                stage="yolo",
-                status="completed",
-                message="YOLO 识别完成",
-                payload={"image_path": str(image_path), "detections": detections},
-            )
+
+            # Stage 1: Detection
+            detections = await self._detect_pests(request_id, image_path)
             self._sqlite_write(
                 request_id,
                 "replace_detections",
                 lambda: self.sqlite_store.replace_detections(request_id, detections),
             )
             if not detections:
-                self._sqlite_write(
-                    request_id,
-                    "mark_task_finished_no_detections",
-                    lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
-                )
-                from app.slo import get_slo_metrics
-                get_slo_metrics().record_pipeline_complete()
-                self.event_bus.publish(
-                    request_id=request_id,
-                    stage="pipeline",
-                    status="completed",
-                    message="未发现超过阈值的害虫目标",
-                    payload={"image_path": str(image_path), "detections": []},
-                )
-                log_event(
-                    self.logger,
-                    logging.INFO,
-                    "未发现超过阈值的害虫目标",
-                    request_id=request_id,
-                    client_ip=self.client_ip,
-                    duration_ms=(time.perf_counter() - started) * 1000,
-                    image_path=str(image_path),
-                    worker_id=worker_id,
-                )
+                self._finish_pipeline_no_pests(request_id, image_path, worker_id, started)
                 return
 
+            # Stage 2: Decision + Compliance
             bundle = await self.decision_engine.generate_decision(
                 pest_detections=detections,
                 field_context=field_context,
                 request_id=request_id,
                 client_ip=self.client_ip,
             )
-            compliance = bundle.get("compliance") or {}
+            self._persist_decision(request_id, bundle)
+            takeoff_mode = self._check_compliance(request_id, bundle, started)
+            if takeoff_mode is None:
+                return  # blocked
 
-            # Write weather/decision to SQLite before compliance checks
-            # so blocked tasks still have full data for reports.
-            self._sqlite_write(
-                request_id,
-                "add_weather_snapshot",
-                lambda: self.sqlite_store.add_weather_snapshot(request_id, bundle["weather"]),
-            )
-            self._sqlite_write(
-                request_id,
-                "add_decision",
-                lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
-            )
-
-            execution_policy = (
-                (compliance.get("execution_policy") or {})
-                if isinstance(compliance, dict)
-                else {}
-            )
-            policy_takeoff = str(execution_policy.get("takeoff_mode") or "").strip().lower()
-            if not policy_takeoff and isinstance(compliance, dict):
-                compliance_status = str(compliance.get("status") or "").strip().lower()
-                if compliance_status == "blocked":
-                    policy_takeoff = "blocked"
-                elif compliance_status == "warning":
-                    policy_takeoff = "manual"
-                else:
-                    policy_takeoff = "auto"
-
-            if policy_takeoff == "blocked":
-                reasons = compliance.get("blocking_reasons") or []
-                message = "农药合规审核未通过，已阻止无人机执行"
-                self._sqlite_write(
-                    request_id,
-                    "mark_task_finished_compliance_blocked",
-                    lambda: self.sqlite_store.mark_task_finished(request_id, "blocked"),
-                )
-                from app.slo import get_slo_metrics
-                get_slo_metrics().record_pipeline_error()
-                self.event_bus.publish(
-                    request_id=request_id,
-                    stage="compliance",
-                    status="blocked",
-                    message=message,
-                    payload={
-                        "compliance": compliance,
-                        "blocking_reasons": reasons,
-                    },
-                )
-                log_event(
-                    self.logger,
-                    logging.WARNING,
-                    message,
-                    request_id=request_id,
-                    client_ip=self.client_ip,
-                    duration_ms=(time.perf_counter() - started) * 1000,
-                    blocking_reasons=reasons,
-                )
-                return
-            takeoff_mode = str(
-                self.drone_config.get("execution", {}).get("takeoff_mode", "auto")
-            ).strip().lower()
-            if policy_takeoff == "manual":
-                warnings = compliance.get("warnings") or []
-                log_event(
-                    self.logger,
-                    logging.WARNING,
-                    "合规审核有风险提示，强制进入人工确认流程",
-                    request_id=request_id,
-                    client_ip=self.client_ip,
-                    warnings=warnings,
-                )
-                takeoff_mode = "manual"
+            # Stage 3: Planning + RAG index
             execution_plan = self._plan_spray_mission(
                 field_context=field_context,
                 current_weather=bundle["weather"],
@@ -840,117 +713,236 @@ class MuyeApplication:
                 field_context=field_context,
             )
 
-            # 手动模式：决策完成后暂停，等待人工确认起飞
+            # Stage 4: Takeoff confirmation (manual mode)
             if takeoff_mode == "manual":
-                self._takeoff_request_id = request_id
-                self._takeoff_confirmed.clear()
-                deps.set_pending_takeoff_request(request_id)
-                self.event_bus.publish(
-                    request_id=request_id,
-                    stage="drone",
-                    status="pending_confirmation",
-                    message="决策完成，等待确认起飞",
-                    payload={
-                        "task_id": f"manual-{request_id[:8]}",
-                        "progress": 30,
-                        "instruction": execution_plan,
-                        "medication": bundle["decision"].get("施药方案", {}),
-                        "current_waypoint_index": 0,
-                        "position": None,
-                    },
-                )
-                self.logger.info(
-                    "手动模式：等待起飞确认 request_id=%s", request_id
-                )
-                await deps.wait_for_takeoff_confirmation()
-                deps.clear_takeoff_confirmation_state()
-                self.logger.info(
-                    "手动模式：已确认起飞 request_id=%s", request_id
-                )
+                await self._wait_for_takeoff_confirmation(request_id, execution_plan, bundle["decision"])
 
-            await self._ensure_px4_ready_for_spray(request_id)
-            result = await self.drone_controller.execute_spray_mission(
-                decision=bundle["decision"],
-                current_weather=bundle["weather"],
-                request_id=request_id,
-                client_ip=self.client_ip,
-                execution_plan=execution_plan,
-                field_context=field_context,
-            )
-            spray_record = self.drone_controller.build_spray_record(
-                request_id=request_id,
-                field_context=field_context,
-                decision=bundle["decision"],
-                weather=bundle["weather"],
-                execution_plan=execution_plan,
-                mission_result=result,
-            )
-            if spray_record is not None:
-                self._sqlite_write(
-                    request_id,
-                    "upsert_spray_record",
-                    lambda: self.sqlite_store.upsert_spray_record(spray_record),
-                )
-            self._sqlite_write(
-                request_id,
-                "mark_task_finished_success",
-                lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
-            )
-            from app.slo import get_slo_metrics
-            get_slo_metrics().record_pipeline_complete()
-            self.event_bus.publish(
-                request_id=request_id,
-                stage="pipeline",
-                status="completed",
-                message="整条处理链执行成功",
-                payload={
-                    "image_path": str(image_path),
-                    "detections": detections,
-                    "weather": bundle["weather"],
-                    "decision": bundle["decision"],
-                    "execution_plan": execution_plan,
-                    "mission_result": result,
-                },
-            )
-            log_event(
-                self.logger,
-                logging.INFO,
-                "整条处理链执行成功",
-                request_id=request_id,
-                client_ip=self.client_ip,
-                duration_ms=(time.perf_counter() - started) * 1000,
-                image_path=str(image_path),
-                worker_id=worker_id,
-                detections=detections,
-                execution_plan=execution_plan,
-                mission_result=result,
+            # Stage 5: Execute spray mission
+            await self._execute_mission(
+                request_id, image_path, worker_id, started,
+                detections, bundle, execution_plan, field_context,
             )
         except Exception as exc:
+            self._handle_pipeline_error(request_id, image_path, worker_id, started, exc)
+
+    # ── Pipeline Stage Methods ──
+
+    async def _detect_pests(self, request_id: str, image_path: Path) -> list[dict[str, Any]]:
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="yolo",
+            status="running",
+            message="正在执行 YOLO 识别",
+            payload={"image_path": str(image_path)},
+        )
+        detections = await self.image_processor.detect_pests(
+            image_path=image_path,
+            request_id=request_id,
+            client_ip=self.client_ip,
+        )
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="yolo",
+            status="completed",
+            message="YOLO 识别完成",
+            payload={"image_path": str(image_path), "detections": detections},
+        )
+        return detections
+
+    def _finish_pipeline_no_pests(
+        self, request_id: str, image_path: Path, worker_id: int, started: float,
+    ) -> None:
+        from app.slo import get_slo_metrics
+        self._sqlite_write(
+            request_id,
+            "mark_task_finished_no_detections",
+            lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
+        )
+        get_slo_metrics().record_pipeline_complete()
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="pipeline",
+            status="completed",
+            message="未发现超过阈值的害虫目标",
+            payload={"image_path": str(image_path), "detections": []},
+        )
+        log_event(
+            self.logger, logging.INFO, "未发现超过阈值的害虫目标",
+            request_id=request_id, client_ip=self.client_ip,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            image_path=str(image_path), worker_id=worker_id,
+        )
+
+    def _persist_decision(self, request_id: str, bundle: dict[str, Any]) -> None:
+        self._sqlite_write(
+            request_id,
+            "add_weather_snapshot",
+            lambda: self.sqlite_store.add_weather_snapshot(request_id, bundle["weather"]),
+        )
+        self._sqlite_write(
+            request_id,
+            "add_decision",
+            lambda: self.sqlite_store.add_decision(request_id, bundle["decision"]),
+        )
+
+    def _check_compliance(
+        self, request_id: str, bundle: dict[str, Any], started: float,
+    ) -> str | None:
+        """Check compliance and return takeoff_mode, or None if blocked."""
+        from app.slo import get_slo_metrics
+        compliance = bundle.get("compliance") or {}
+        policy_takeoff = resolve_policy_takeoff_mode(compliance)
+
+        if policy_takeoff == "blocked":
+            reasons = compliance.get("blocking_reasons") or []
+            message = "农药合规审核未通过，已阻止无人机执行"
             self._sqlite_write(
                 request_id,
-                "mark_task_finished_error",
-                lambda: self.sqlite_store.mark_task_finished(request_id, "error"),
+                "mark_task_finished_compliance_blocked",
+                lambda: self.sqlite_store.mark_task_finished(request_id, "blocked"),
             )
-            from app.slo import get_slo_metrics
             get_slo_metrics().record_pipeline_error()
             self.event_bus.publish(
                 request_id=request_id,
-                stage="pipeline",
-                status="error",
-                message="图片处理链执行失败",
-                payload={"image_path": str(image_path), "error": str(exc)},
+                stage="compliance",
+                status="blocked",
+                message=message,
+                payload={"compliance": compliance, "blocking_reasons": reasons},
             )
             log_event(
-                self.logger,
-                logging.ERROR,
-                "图片处理链执行失败",
-                request_id=request_id,
-                client_ip=self.client_ip,
+                self.logger, logging.WARNING, message,
+                request_id=request_id, client_ip=self.client_ip,
                 duration_ms=(time.perf_counter() - started) * 1000,
-                image_path=str(image_path),
-                worker_id=worker_id,
-                error=str(exc),
+                blocking_reasons=reasons,
             )
+            return None
+
+        takeoff_mode, forced_manual, warnings = resolve_runtime_takeoff_mode(
+            configured_takeoff_mode=str(
+                self.drone_config.get("execution", {}).get("takeoff_mode", "auto")
+            ),
+            policy_takeoff_mode=policy_takeoff,
+            compliance=compliance,
+        )
+        if forced_manual:
+            log_event(
+                self.logger, logging.WARNING,
+                "合规审核有风险提示，强制进入人工确认流程",
+                request_id=request_id, client_ip=self.client_ip,
+                warnings=warnings,
+            )
+        return takeoff_mode
+
+    async def _wait_for_takeoff_confirmation(
+        self, request_id: str, execution_plan: dict[str, Any], decision: dict[str, Any],
+    ) -> None:
+        self._takeoff_request_id = request_id
+        self._takeoff_confirmed.clear()
+        deps.set_pending_takeoff_request(request_id)
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="drone",
+            status="pending_confirmation",
+            message="决策完成，等待确认起飞",
+            payload={
+                "task_id": f"manual-{request_id[:8]}",
+                "progress": 30,
+                "instruction": execution_plan,
+                "medication": decision.get("施药方案", {}),
+                "current_waypoint_index": 0,
+                "position": None,
+            },
+        )
+        self.logger.info("手动模式：等待起飞确认 request_id=%s", request_id)
+        await deps.wait_for_takeoff_confirmation()
+        deps.clear_takeoff_confirmation_state()
+        self.logger.info("手动模式：已确认起飞 request_id=%s", request_id)
+
+    async def _execute_mission(
+        self,
+        request_id: str, image_path: Path, worker_id: int, started: float,
+        detections: list[dict[str, Any]], bundle: dict[str, Any],
+        execution_plan: dict[str, Any], field_context: dict[str, Any],
+    ) -> None:
+        from app.slo import get_slo_metrics
+        await self._ensure_px4_ready_for_spray(request_id)
+        result = await self.drone_controller.execute_spray_mission(
+            decision=bundle["decision"],
+            current_weather=bundle["weather"],
+            request_id=request_id,
+            client_ip=self.client_ip,
+            execution_plan=execution_plan,
+            field_context=field_context,
+        )
+        spray_record = self.drone_controller.build_spray_record(
+            request_id=request_id,
+            field_context=field_context,
+            decision=bundle["decision"],
+            weather=bundle["weather"],
+            execution_plan=execution_plan,
+            mission_result=result,
+        )
+        if spray_record is not None:
+            self._sqlite_write(
+                request_id,
+                "upsert_spray_record",
+                lambda: self.sqlite_store.upsert_spray_record(spray_record),
+            )
+        self._sqlite_write(
+            request_id,
+            "mark_task_finished_success",
+            lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
+        )
+        get_slo_metrics().record_pipeline_complete()
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="pipeline",
+            status="completed",
+            message="整条处理链执行成功",
+            payload={
+                "image_path": str(image_path),
+                "detections": detections,
+                "weather": bundle["weather"],
+                "decision": bundle["decision"],
+                "execution_plan": execution_plan,
+                "mission_result": result,
+            },
+        )
+        log_event(
+            self.logger, logging.INFO, "整条处理链执行成功",
+            request_id=request_id, client_ip=self.client_ip,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            image_path=str(image_path), worker_id=worker_id,
+            detections=detections, execution_plan=execution_plan,
+            mission_result=result,
+        )
+
+    def _handle_pipeline_error(
+        self,
+        request_id: str, image_path: Path, worker_id: int,
+        started: float, exc: Exception,
+    ) -> None:
+        from app.slo import get_slo_metrics
+        self._sqlite_write(
+            request_id,
+            "mark_task_finished_error",
+            lambda: self.sqlite_store.mark_task_finished(request_id, "error"),
+        )
+        get_slo_metrics().record_pipeline_error()
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="pipeline",
+            status="error",
+            message="图片处理链执行失败",
+            payload={"image_path": str(image_path), "error": str(exc)},
+        )
+        log_event(
+            self.logger, logging.ERROR, "图片处理链执行失败",
+            request_id=request_id, client_ip=self.client_ip,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            image_path=str(image_path), worker_id=worker_id,
+            error=str(exc),
+        )
 
     def _plan_spray_mission(
         self,
@@ -959,36 +951,27 @@ class MuyeApplication:
         current_weather: dict[str, Any],
         detections: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        has_bbox = any(
-            isinstance(d.get("position") or d.get("bbox"), dict)
-            for d in detections
-        )
-        if has_bbox:
-            try:
-                from modules.drone.density_map import DensityMap
+        try:
+            plan = plan_spray_mission(
+                drone_controller=self.drone_controller,
+                field_context=field_context,
+                current_weather=current_weather,
+                detections=detections,
+            )
+        except Exception:
+            self.logger.warning("变量喷洒规划失败，降级为均匀路径", exc_info=True)
+            return self.drone_controller.plan_spray_mission(
+                field_context=field_context,
+                current_weather=current_weather,
+            )
 
-                geofence = field_context.get("geofence", [])
-                if geofence and len(geofence) >= 3:
-                    dm = DensityMap(geofence)
-                    dm.add_detections(detections)
-                    plan = self.drone_controller.planner.plan_variable_rate_mission(
-                        field_context=field_context,
-                        current_weather=current_weather,
-                        density_map=dm,
-                    )
-                    self.logger.info(
-                        "变量喷洒规划完成: %d lanes, %d density cells",
-                        len(plan.get("spray_schedule", [])),
-                        len(plan.get("density_grid", [])),
-                    )
-                    return plan
-            except Exception:
-                self.logger.warning("变量喷洒规划失败，降级为均匀路径", exc_info=True)
-
-        return self.drone_controller.plan_spray_mission(
-            field_context=field_context,
-            current_weather=current_weather,
-        )
+        if plan.get("density_grid"):
+            self.logger.info(
+                "变量喷洒规划完成: %d lanes, %d density cells",
+                len(plan.get("spray_schedule", [])),
+                len(plan.get("density_grid", [])),
+            )
+        return plan
 
     def _sqlite_write(
         self,
