@@ -156,6 +156,7 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "drone_timeline": [],
                 "events": [],
                 "error": None,
+                "evaluation": {},
             }
             order.append(request_id)
 

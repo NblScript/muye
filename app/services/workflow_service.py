@@ -175,6 +175,7 @@ def merge_sqlite_tasks_with_events(
             merged_task["drone_timeline"] = event_task.get("drone_timeline", [])
             merged_task["events"] = event_task.get("events", [])
             merged_task["error"] = event_task.get("error") or sqlite_task.get("error")
+            merged_task["evaluation"] = event_task.get("evaluation") or {}
         merged_task["field"] = merge_runtime_field_hints(
             merged_task.get("field", {}) or {},
             merged_task.get("drone", {}) or {},
@@ -436,6 +437,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
                 "decision": latest_structured.get("decision", {}) or {},
                 "compliance": latest_structured.get("compliance", {}) or {},
                 "error": latest_structured.get("error"),
+                "evaluation": latest_structured.get("evaluation") or {},
             }
         )
         fallback.recent_tasks = build_recent_task_entries(tasks, current_request_id=fallback.latest_task.request_id)
@@ -480,6 +482,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
         drone_timeline=timeline,
         recent_events=recent_events,
         error=latest.get("error"),
+        evaluation=latest.get("evaluation") or {},
     )
     return WorkflowStateResponse(
         source="event_bus",
