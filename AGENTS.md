@@ -6,7 +6,7 @@
 
 牧野（muye）是一个端到端智慧农业害虫防治演示系统，用于大学竞赛（挑战杯、计算机设计大赛）。
 
-**核心管线**：害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 大屏展示
+**核心管线**：害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 效果评估 → 大屏展示
 
 **成功标准**：
 - 竞赛演示全程稳定，无中断
@@ -64,7 +64,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
 | decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 + 合规推理链 |
 | drone | `modules/drone/` | 无人机控制 + 任务规划 + 变量喷洒（DensityMap）+ 后端抽象（PX4/DJI OSDK） |
-| infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
+| infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 + 效果评估（EvaluationMixin） |
 
 ## 后端应用服务
 
@@ -77,6 +77,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | `app/services/pipeline_planning_service.py` | 主处理链喷洒规划选择：变量喷洒优先，失败回退均匀路径 |
 | `app/services/map_simulator.py` | 模拟 PX4 地图状态用于演示大屏 |
 | `app/services/telemetry_service.py` | PX4 遥测状态管理、轨迹缓冲 |
+| `app/main.py`（评估编排） | `_schedule_reinspection`、`_run_reinspection`、`_evaluate_effectiveness` 闭环评估管线阶段 |
 
 ## 演示脚本
 
@@ -155,6 +156,27 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 
 **代码**：`modules/decision/compliance.py`
 **设计文档**：`docs/superpowers/specs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`
+
+## 闭环效果评估
+
+喷洒完成后自动进入效果评估闭环，量化农药防治效果。
+
+**流程**：无人机喷洒完成 → 调度复检（`_schedule_reinspection`）→ 等待预计见效时间 → 定时复检（`_run_reinspection`）→ 效果评估（`_evaluate_effectiveness`）→ 写入 `task_evaluations` 表
+
+**评估结论**：`effective`（害虫显著减少）/ `partial`（部分减少）/ `ineffective`（无显著变化）
+
+**API 端点**：
+- `GET /api/evaluation/{request_id}` — 获取单条评估记录
+- `GET /api/evaluations` — 获取全部评估记录（支持 `status` 过滤）
+- `POST /api/evaluation/{request_id}/cancel` — 取消待执行评估
+
+**数据存储**：`task_evaluations` 表（SQLite），由 `EvaluationMixin`（`modules/infra/sqlite_store/evaluation.py`）管理
+
+**决策扩展**：`DECISION_SCHEMA` 新增 `预计见效时间` 字段，评估配置定义在 `app/config_types.py`
+
+**前端展示**：`EvaluationCard` 组件 + `PipelineStepper` 新增评估阶段
+
+**`WorkflowTaskState` 扩展**：新增可选 `evaluation` 字段，携带评估状态和评分
 
 ## 遇到无法解决的问题
 

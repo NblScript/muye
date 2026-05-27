@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Card, Drawer } from '../ui'
+import EvaluationCard from './EvaluationCard'
 import type { RagContext, RagDocument, WorkflowDetectionEntry, WorkflowTaskState } from '../../types/workflow'
 
 interface StepData {
@@ -403,6 +404,9 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
             </div>
           </section>
         )}
+
+        {/* 药效评估 */}
+        <EvaluationCard evaluation={task?.evaluation} />
       </Drawer>
     </>
   )

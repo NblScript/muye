@@ -84,6 +84,24 @@
 | confirmed_at | DATETIME | | 确认时间 |
 | expires_at | DATETIME | | 过期时间 |
 
+#### task_evaluations
+
+用于跟踪农药喷洒后的效果评估闭环。在决策完成时创建记录，经过等待期后自动复检，评估防治效果。
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| id | INTEGER | PK, AUTOINCREMENT | 记录 ID |
+| request_id | TEXT | NOT NULL, INDEX | 关联请求 |
+| status | TEXT | CHECK(scheduled/reinspection/evaluated/cancelled) | 评估状态 |
+| estimated_action_time | TIMESTAMP | | 预计见效时间（来自决策 `预计见效时间` 字段） |
+| scheduled_at | TIMESTAMP | | 评估创建时间 |
+| reinspection_at | TIMESTAMP | | 复检执行时间 |
+| effectiveness_score | REAL | | 效果评分（0.0–1.0） |
+| pest_count_before | INTEGER | | 喷洒前害虫数量 |
+| pest_count_after | INTEGER | | 复检时害虫数量 |
+| verdict | TEXT | | 评估结论（effective/partial/ineffective） |
+| cancelled_at | TIMESTAMP | | 取消时间 |
+
 ### 2. 农业基础/参考表
 
 #### fields

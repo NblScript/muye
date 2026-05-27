@@ -74,6 +74,7 @@ class WorkflowTaskState(BaseModel):
     drone_timeline: list[WorkflowTimelineEntry]
     recent_events: list[WorkflowEventEntry]
     error: str | None = None
+    evaluation: dict[str, Any] = {}
 
 
 class DashboardTaskEntry(BaseModel):
@@ -230,3 +231,27 @@ class WsCombinedState(BaseModel):
     timestamp: float
     sim_map: SimMapStateResponse | None = None
     workflow_state: WorkflowStateResponse | None = None
+
+
+class EvaluationResult(BaseModel):
+    """Pesticide effectiveness evaluation result."""
+
+    evaluation_id: int
+    original_request_id: str
+    status: str
+    kill_rate: float | None = None
+    pre_pest_count: int | None = None
+    post_pest_count: int | None = None
+    kill_rate_threshold: float = 0.7
+    action_time_hours: float | None = None
+    retry_count: int = 0
+    scheduled_at: str | None = None
+    evaluated_at: str | None = None
+    notes: str | None = None
+
+
+class EvaluationListResponse(BaseModel):
+    """Paginated evaluation list."""
+
+    total: int
+    items: list[EvaluationResult]

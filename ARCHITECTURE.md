@@ -3,7 +3,7 @@
 ## 系统定位
 
 牧野（muye）是一个端到端的智慧农业害虫防治演示与原型系统：
-害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 大屏展示
+害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 效果评估 → 大屏展示
 
 ## 架构分层
 
@@ -115,6 +115,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
     - `field.py` — 农田操作
     - `catalog.py` — 目录操作
     - `agri_data.py` — 农业数据操作
+    - `evaluation.py` — EvaluationMixin，效果评估 CRUD（`task_evaluations` 表）
 
 ## 数据流总图
 
@@ -150,6 +151,35 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 大屏展示 (frontend)
 ```
 
+### 闭环评估流程
+
+喷洒完成后，系统自动进入效果评估闭环：
+
+```
+无人机喷洒完成
+    │
+    ▼
+调度复检 (_schedule_reinspection)
+    │ 根据 DECISION_SCHEMA 中的「预计见效时间」计算等待期
+    ▼
+定时复检 (_run_reinspection)
+    │ 再次检测害虫数量
+    ▼
+效果评估 (_evaluate_effectiveness)
+    │ 对比喷洒前后害虫数量 → effectiveness_score + verdict
+    ▼
+评估记录写入 task_evaluations 表
+    │
+    ▼
+大屏展示 EvaluationCard 组件
+```
+
+- **触发时机**：无人机喷洒完成后，`app/main.py` 自动创建 `task_evaluations` 记录（状态 `scheduled`）
+- **等待期**：由决策输出的 `预计见效时间` 字段确定，存储于 `app/config_types.py` 的评估配置中
+- **复检方式**：定时器触发后重新调用检测，对比前后害虫数量
+- **评估结论**：`effective`（害虫显著减少）/ `partial`（部分减少）/ `ineffective`（无显著变化）
+- **取消机制**：通过 `POST /api/evaluation/{request_id}/cancel` 可取消待执行的评估
+
 ## 部署拓扑
 
 ```
@@ -182,3 +212,4 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 | DJI OSDK 仿真模式 | 无硬件时 GPS 插值模拟飞行，接口与真机一致 | 仅真机可用（开发受阻） |
 | SLO 指标采集 | 进程内 WindowCounter 滑动窗口，零外部依赖 | Prometheus/外部监控（竞赛环境过重） |
 | API 限流中间件 | 滑动窗口 per-IP 限流，防止单客户端过载 | 无限流（演示时可能被意外打爆） |
+| 闭环效果评估 | 喷洒后自动调度复检，量化防治效果 | 一次性喷洒无反馈（无法评估方案优劣） |

@@ -31,6 +31,7 @@ const HERO_STAGE_LABELS: Record<string, string> = {
   weather: '气象融合',
   decision: 'AI决策',
   drone: '无人机执行',
+  evaluation: '效果评估',
 }
 
 function clampPercent(value: unknown): number {

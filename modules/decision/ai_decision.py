@@ -42,6 +42,7 @@ DECISION_SCHEMA = {
                     "minItems": 1,
                     "items": {"type": "string", "minLength": 1},
                 },
+                "预计见效时间": {"type": "string", "minLength": 1},
             },
         },
         "农事建议": {
@@ -383,7 +384,7 @@ class DecisionEngine:
             "禁止写“适量”“按标签”“按需”等无法计算的总量。\n"
             "输出 JSON Schema 关键字段："
             "用药.农药名称/浓度/配比/总量/安全提示，"
-            "可选字段为农事建议。"
+            "可选字段为用药.预计见效时间（如\"24小时\"、\"48小时\"）和农事建议。"
         )
 
     def _build_rag_context_text(
@@ -686,14 +687,19 @@ class DecisionEngine:
     def _normalize_decision_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         medication = payload.get("用药", {}) if isinstance(payload.get("用药"), dict) else {}
 
+        medication_out: dict[str, Any] = {
+            "农药名称": self._normalize_text(medication.get("农药名称")),
+            "浓度": self._normalize_text(medication.get("浓度")),
+            "配比": self._normalize_text(medication.get("配比")),
+            "总量": self._normalize_text(medication.get("总量")),
+            "安全提示": self._normalize_string_list(medication.get("安全提示")),
+        }
+        action_time = self._normalize_text(medication.get("预计见效时间"))
+        if action_time:
+            medication_out["预计见效时间"] = action_time
+
         return {
-            "用药": {
-                "农药名称": self._normalize_text(medication.get("农药名称")),
-                "浓度": self._normalize_text(medication.get("浓度")),
-                "配比": self._normalize_text(medication.get("配比")),
-                "总量": self._normalize_text(medication.get("总量")),
-                "安全提示": self._normalize_string_list(medication.get("安全提示")),
-            },
+            "用药": medication_out,
             "农事建议": self._normalize_string_list(payload.get("农事建议")),
         }
 
@@ -795,6 +801,7 @@ class DecisionEngine:
                     "作业人员佩戴防护服和护目镜",
                     "喷洒期间远离水源和人畜活动区域",
                 ],
+                "预计见效时间": "24小时",
             },
             "农事建议": [
                 f"优先针对{primary_pest}高发区域安排喷洒作业",

@@ -287,6 +287,29 @@ CREATE INDEX IF NOT EXISTS idx_agri_statistical_indicators_region_year
 ON agri_statistical_indicators(province, city, county, year);
 CREATE INDEX IF NOT EXISTS idx_agri_statistical_indicators_code
 ON agri_statistical_indicators(indicator_code);
+
+CREATE TABLE IF NOT EXISTS task_evaluations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  original_request_id TEXT NOT NULL REFERENCES tasks(request_id),
+  reinspect_request_id TEXT REFERENCES tasks(request_id),
+  status TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK(status IN ('scheduled','inspecting','evaluated','retry_scheduled','passed')),
+  scheduled_at DATETIME NOT NULL,
+  inspected_at DATETIME,
+  evaluated_at DATETIME,
+  pre_pest_count INTEGER,
+  post_pest_count INTEGER,
+  kill_rate REAL,
+  kill_rate_threshold REAL DEFAULT 0.7,
+  action_time_hours REAL,
+  retry_request_id TEXT REFERENCES tasks(request_id),
+  retry_count INTEGER DEFAULT 0,
+  notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_eval_original
+ON task_evaluations(original_request_id);
+CREATE INDEX IF NOT EXISTS idx_eval_status
+ON task_evaluations(status);
 """
 
 from modules.infra.sqlite_store._private import utc_now_iso

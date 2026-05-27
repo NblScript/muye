@@ -1624,6 +1624,41 @@
 }
 
 /* ── Expert Panel (Multi-Agent) ── */
+.consultation-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.consultation-metric {
+  min-height: 62px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.consultation-metric span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.consultation-metric strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.consultation-metric.is-warning strong {
+  color: var(--accent-red);
+}
+
 .expert-panel-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1640,6 +1675,11 @@
   transition: border-color 0.2s ease;
 }
 
+.expert-card.is-adopted {
+  border-color: rgba(90, 138, 106, 0.45);
+  background: linear-gradient(180deg, rgba(90, 138, 106, 0.08), var(--bg-elevated));
+}
+
 .expert-card:hover {
   border-color: var(--border-default);
 }
@@ -1648,6 +1688,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.expert-card-title {
+  min-width: 0;
+  flex: 1;
 }
 
 .expert-avatar {
@@ -1684,6 +1729,51 @@
 .expert-provider {
   color: var(--text-muted);
   font-size: 11px;
+}
+
+.expert-adopted-badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid rgba(90, 138, 106, 0.2);
+  border-radius: 999px;
+  background: var(--accent-green-dim);
+  color: var(--accent-green);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.expert-focus {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.expert-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.expert-detail-grid div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+}
+
+.expert-detail-grid span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.expert-detail-grid strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .expert-opinion {
@@ -1833,13 +1923,31 @@
 
 .consultation-final-result {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 6px;
   padding: 8px 12px;
   background: rgba(90, 138, 106, 0.08);
   border-radius: var(--radius-sm);
   color: var(--accent-green);
+}
+
+.final-result-name {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.final-result-detail {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.final-result-source {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: right;
 }
 
 /* ── Workflow Panel ── */
@@ -2338,6 +2446,10 @@
     grid-template-columns: 100px 60px 72px minmax(0, 1fr);
   }
 
+  .consultation-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .expert-panel-grid {
     grid-template-columns: 1fr;
   }
@@ -2362,6 +2474,20 @@
   .hero-bullet-list,
   .hero-mission-grid {
     grid-template-columns: 1fr;
+  }
+
+  .consultation-metrics,
+  .expert-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .consultation-final-result {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .final-result-source {
+    text-align: left;
   }
 
   .command-strip-topline,
@@ -3288,4 +3414,102 @@
 .map-legend-swatch.is-inactive {
   background: var(--text-muted);
   opacity: 0.5;
+}
+
+/* ── Evaluation Card ── */
+.evaluation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+.evaluation-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.evaluation-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.evaluation-status-dot.is-active {
+  background: var(--accent-cyan);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+.evaluation-status-dot.is-passed {
+  background: var(--accent-green);
+}
+.evaluation-status-dot.is-failed {
+  background: var(--accent-red);
+}
+.evaluation-status-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+.evaluation-message {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.evaluation-meta {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.evaluation-rate-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.evaluation-rate-bar-track {
+  position: relative;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.evaluation-rate-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.evaluation-rate-bar-fill.is-passed {
+  background: var(--accent-green);
+}
+.evaluation-rate-bar-fill.is-failed {
+  background: var(--accent-red);
+}
+.evaluation-rate-threshold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text-secondary);
+}
+.evaluation-rate-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.evaluation-rate-value {
+  font-weight: 600;
+}
+.evaluation-rate-value.is-passed {
+  color: var(--accent-green);
+}
+.evaluation-rate-value.is-failed {
+  color: var(--accent-red);
+}
+.evaluation-rate-threshold-label {
+  color: var(--text-secondary);
+}
+.evaluation-counts {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+}
+.evaluation-notes {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
 }

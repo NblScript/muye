@@ -64,6 +64,7 @@ from modules.infra.weather import WeatherClient
 from app.routes.dashboard import register_dashboard_routes
 from app.routes.demo import register_demo_routes
 from app.routes.drone import ensure_px4_ready, register_drone_routes
+from app.routes.evaluation import register_evaluation_routes
 from app.routes.health import register_health_routes
 from app.routes.sim import register_sim_routes
 from app.routes.tasks import register_tasks_routes
@@ -107,6 +108,7 @@ register_dashboard_routes(api_app)
 register_demo_routes(api_app)
 register_drone_routes(api_app)
 register_tasks_routes(api_app)
+register_evaluation_routes(api_app)
 register_sim_routes(api_app, simulator)
 
 
@@ -281,6 +283,7 @@ class MuyeApplication:
         self.rag_vector_store: VectorStoreManager | None = None
         self.rag_retriever: DecisionRAGRetriever | None = None
         self._background_tasks: set[asyncio.Task[None]] = set()
+        self._evaluation_contexts: dict[str, dict[str, Any]] = {}
 
         self.queue: asyncio.Queue[tuple[str, Path, dict[str, Any]]] = asyncio.Queue()
         self.pending_images: set[str] = set()
@@ -917,6 +920,12 @@ class MuyeApplication:
             mission_result=result,
         )
 
+        # Stage 6: Schedule re-inspection for effectiveness evaluation
+        if self.config.evaluation_enabled:
+            self._schedule_reinspection(
+                request_id, bundle["decision"], detections, field_context, image_path,
+            )
+
     def _handle_pipeline_error(
         self,
         request_id: str, image_path: Path, worker_id: int,
@@ -943,6 +952,204 @@ class MuyeApplication:
             image_path=str(image_path), worker_id=worker_id,
             error=str(exc),
         )
+
+    # ── Evaluation (Closed-loop Re-inspection) ──
+
+    def _schedule_reinspection(
+        self,
+        request_id: str,
+        decision: dict[str, Any],
+        detections: list[dict[str, Any]],
+        field_context: dict[str, Any],
+        image_path: Path,
+    ) -> None:
+        """Schedule a re-inspection after pesticide action time elapses."""
+        import random
+        from datetime import datetime, timedelta, timezone
+
+        medication = decision.get("用药", {})
+        action_time_str = medication.get("预计见效时间", "")
+        action_hours = self._parse_action_time(action_time_str)
+        if action_hours is None:
+            action_hours = self.config.evaluation_default_action_time_hours
+
+        # In demo mode, use a short delay instead of real hours
+        delay_seconds = self.config.evaluation_demo_delay_seconds
+
+        scheduled_at = (datetime.now(timezone.utc) + timedelta(hours=action_hours)).isoformat()
+        pre_pest_count = len(detections)
+
+        evaluation_id = self.sqlite_store.create_evaluation(
+            original_request_id=request_id,
+            scheduled_at=scheduled_at,
+            action_time_hours=action_hours,
+            pre_pest_count=pre_pest_count,
+            kill_rate_threshold=self.config.evaluation_kill_rate_threshold,
+        )
+
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="evaluation",
+            status="scheduled",
+            message=f"已安排药效复检（预计 {action_hours}h 后）",
+            payload={
+                "evaluation_id": evaluation_id,
+                "action_time_hours": action_hours,
+                "pre_pest_count": pre_pest_count,
+                "demo_delay_seconds": delay_seconds,
+            },
+        )
+        log_event(
+            self.logger, logging.INFO, "已安排药效复检",
+            request_id=request_id, client_ip=self.client_ip,
+            evaluation_id=evaluation_id, action_time_hours=action_hours,
+            demo_delay_seconds=delay_seconds,
+        )
+
+        # Store context for re-inspection
+        self._evaluation_contexts[request_id] = {
+            "image_path": image_path,
+            "field_context": field_context,
+            "decision": decision,
+            "detections": detections,
+            "evaluation_id": evaluation_id,
+        }
+
+        asyncio.create_task(self._run_reinspection(evaluation_id, request_id, delay_seconds))
+
+    async def _run_reinspection(
+        self, evaluation_id: int, request_id: str, delay_seconds: float,
+    ) -> None:
+        """Wait for action time, then re-inspect and evaluate effectiveness."""
+        import random
+        from modules.infra.sqlite_store._private import utc_now_iso
+
+        try:
+            await asyncio.sleep(delay_seconds)
+
+            ctx = self._evaluation_contexts.get(request_id)
+            if ctx is None:
+                self.logger.warning("Evaluation context lost for %s", request_id)
+                return
+
+            # Check evaluation wasn't cancelled
+            eval_row = self.sqlite_store.fetch_one(
+                "SELECT status FROM task_evaluations WHERE id = ?", (evaluation_id,)
+            )
+            if not eval_row or eval_row["status"] != "scheduled":
+                self.logger.info("Evaluation %d no longer scheduled, skipping", evaluation_id)
+                return
+
+            # Update status to inspecting
+            self.sqlite_store.update_evaluation(
+                evaluation_id, status="inspecting", inspected_at=utc_now_iso(),
+            )
+            self.event_bus.publish(
+                request_id=request_id,
+                stage="evaluation",
+                status="inspecting",
+                message="无人机正在复检巡飞...",
+                payload={"evaluation_id": evaluation_id},
+            )
+
+            # Run YOLO re-detection on original image
+            detections_after = await self._detect_pests(request_id, ctx["image_path"])
+
+            # Simulate kill rate: reduce detections by a random percentage
+            min_rate = self.config.evaluation_simulated_kill_rate_min
+            max_rate = self.config.evaluation_simulated_kill_rate_max
+            simulated_kill_rate = random.uniform(min_rate, max_rate)
+            pre_count = ctx["detections"].__len__()
+            post_count = max(0, round(pre_count * (1 - simulated_kill_rate)))
+
+            kill_rate, eval_status = self._evaluate_effectiveness(
+                pre_count, post_count, self.config.evaluation_kill_rate_threshold,
+            )
+
+            self.sqlite_store.update_evaluation(
+                evaluation_id,
+                status="evaluated",
+                post_pest_count=post_count,
+                kill_rate=round(kill_rate, 4),
+                evaluated_at=utc_now_iso(),
+                notes=f"模拟杀灭率: {simulated_kill_rate:.0%}, YOLO原始检测: {len(detections_after)}",
+            )
+
+            if eval_status == "passed":
+                self.sqlite_store.update_evaluation(evaluation_id, status="passed")
+                self.event_bus.publish(
+                    request_id=request_id,
+                    stage="evaluation",
+                    status="passed",
+                    message=f"药效评估通过，杀灭率 {kill_rate:.0%}",
+                    payload={
+                        "evaluation_id": evaluation_id,
+                        "kill_rate": kill_rate,
+                        "pre_pest_count": pre_count,
+                        "post_pest_count": post_count,
+                        "threshold": self.config.evaluation_kill_rate_threshold,
+                    },
+                )
+                log_event(
+                    self.logger, logging.INFO, "药效评估通过",
+                    request_id=request_id, client_ip=self.client_ip,
+                    kill_rate=kill_rate, pre=pre_count, post=post_count,
+                )
+            else:
+                self.sqlite_store.update_evaluation(evaluation_id, status="retry_scheduled")
+                self.event_bus.publish(
+                    request_id=request_id,
+                    stage="evaluation",
+                    status="retry_scheduled",
+                    message=f"杀灭率 {kill_rate:.0%} 未达标（阈值 {self.config.evaluation_kill_rate_threshold:.0%}），等待人工确认二次打药",
+                    payload={
+                        "evaluation_id": evaluation_id,
+                        "kill_rate": kill_rate,
+                        "pre_pest_count": pre_count,
+                        "post_pest_count": post_count,
+                        "threshold": self.config.evaluation_kill_rate_threshold,
+                        "needs_confirmation": True,
+                    },
+                )
+                log_event(
+                    self.logger, logging.WARNING, "杀灭率未达标，等待人工确认二次打药",
+                    request_id=request_id, client_ip=self.client_ip,
+                    kill_rate=kill_rate, threshold=self.config.evaluation_kill_rate_threshold,
+                )
+
+        except Exception as exc:
+            self.logger.exception("Re-inspection failed for %s: %s", request_id, exc)
+            self.sqlite_store.update_evaluation(
+                evaluation_id, status="evaluated", notes=f"复检失败: {exc}",
+            )
+
+    @staticmethod
+    def _evaluate_effectiveness(
+        pre_count: int, post_count: int, threshold: float,
+    ) -> tuple[float, str]:
+        """Calculate kill rate and determine if threshold is met."""
+        if pre_count <= 0:
+            return 1.0, "passed"
+        kill_rate = (pre_count - post_count) / pre_count
+        status = "passed" if kill_rate >= threshold else "retry_scheduled"
+        return kill_rate, status
+
+    @staticmethod
+    def _parse_action_time(text: str) -> float | None:
+        """Parse Chinese action time expressions like '24小时', '48-72小时' to hours."""
+        if not text:
+            return None
+        import re
+        match = re.search(r"(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)\s*小时", text)
+        if match:
+            return float(match.group(2))  # use the upper bound
+        match = re.search(r"(\d+(?:\.\d+)?)\s*小时", text)
+        if match:
+            return float(match.group(1))
+        match = re.search(r"(\d+(?:\.\d+)?)\s*天", text)
+        if match:
+            return float(match.group(1)) * 24
+        return None
 
     def _plan_spray_mission(
         self,

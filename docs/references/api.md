@@ -356,6 +356,62 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 - `density 0.3-0.6` → `base_rate × 1.0`（标准喷洒）
 - `density < 0.3` → `base_rate × 0.5`（低密度区减量喷洒）
 
+## 效果评估
+
+### GET /api/evaluation/{request_id}
+
+获取指定任务的效果评估记录。
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "status": "scheduled",
+  "estimated_action_time": "2026-05-27T14:00:00Z",
+  "scheduled_at": "2026-05-27T12:00:00Z",
+  "reinspection_at": null,
+  "effectiveness_score": null,
+  "pest_count_before": 5,
+  "pest_count_after": null,
+  "verdict": null,
+  "cancelled_at": null
+}
+```
+
+### GET /api/evaluations
+
+获取所有效果评估记录列表。
+
+**查询参数**：
+- `status` (str, 可选): 按状态过滤（scheduled/reinspection/evaluated/cancelled）
+- `limit` (int, 可选): 返回条数，默认 50
+
+**响应**：
+```json
+{
+  "evaluations": [
+    {
+      "request_id": "req_abc123",
+      "status": "evaluated",
+      "effectiveness_score": 0.8,
+      "verdict": "effective"
+    }
+  ]
+}
+```
+
+### POST /api/evaluation/{request_id}/cancel
+
+取消指定任务的待执行效果评估（仅 scheduled 状态可取消）。
+
+**响应**：
+```json
+{
+  "status": "cancelled",
+  "message": "Evaluation cancelled"
+}
+```
+
 ## SLO 监控
 
 ### GET /slo

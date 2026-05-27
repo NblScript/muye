@@ -21,7 +21,8 @@ frontend/src/
 │   └── workflow.ts    # 工作流 API
 ├── components/        # UI 组件
 │   ├── dashboard/     # 仪表盘组件（DecisionFlow, DecisionExplainPanel, ExpertPanel, DJIStatusCard,
-│   │                  #   DemoScenarioCards, ModelSwitcher, PipelineStepper, StatCard, TaskList, WeatherCard）
+│   │                  #   DemoScenarioCards, EvaluationCard, ModelSwitcher, PipelineStepper, StatCard,
+│   │                  #   TaskList, WeatherCard）
 │   ├── map/           # 地图组件（FieldMap, StatusPanel/）
 │   ├── ui/            # 通用 UI 组件（Alert, Button, Card, Drawer, Input, Progress, Select, Tag, Toast）
 │   ├── workflow/      # 工作流组件（WorkflowPanel）
@@ -173,3 +174,13 @@ npx vitest run                  # 运行前端测试（52 个用例）
 |----|------|
 | `axios` | HTTP 客户端 |
 | `react-router-dom` | 路由 |
+
+## 闭环评估组件
+
+### EvaluationCard
+
+位于 `components/dashboard/`，展示农药喷洒效果评估状态。显示评估结论（effective/partial/ineffective）、效果评分、喷洒前后害虫数量对比。支持取消待执行评估的操作按钮（仅 `scheduled` 状态可见）。
+
+### PipelineStepper
+
+已扩展新增「效果评估」阶段（`evaluation`）。管线步骤顺序为：upload → detection → weather → decision → drone → evaluation。评估阶段根据 `WorkflowTaskState.evaluation` 字段渲染状态（scheduled/evaluated/cancelled）。

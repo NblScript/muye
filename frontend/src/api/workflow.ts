@@ -70,3 +70,13 @@ export async function getPx4Status() {
   const response = await apiClient.get<{ running: boolean; ready: boolean; pid?: number }>('/drone/px4-status')
   return response.data
 }
+
+export async function fetchEvaluation(requestId: string) {
+  const response = await apiClient.get(`/evaluation/${requestId}`)
+  return response.data
+}
+
+export async function cancelEvaluation(requestId: string) {
+  const response = await apiClient.post(`/evaluation/${requestId}/cancel`)
+  return response.data
+}

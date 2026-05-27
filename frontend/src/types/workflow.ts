@@ -144,6 +144,23 @@ export interface WorkflowTaskState {
   drone_timeline: WorkflowTimelineEntry[]
   recent_events: WorkflowEventEntry[]
   error?: string | null
+  evaluation?: EvaluationResult
+}
+
+export interface EvaluationResult {
+  evaluation_id?: number
+  status: string
+  kill_rate?: number | null
+  pre_pest_count?: number | null
+  post_pest_count?: number | null
+  kill_rate_threshold?: number
+  action_time_hours?: number | null
+  retry_count?: number
+  scheduled_at?: string | null
+  evaluated_at?: string | null
+  notes?: string | null
+  message?: string
+  needs_confirmation?: boolean
 }
 
 export interface DashboardTaskEntry {

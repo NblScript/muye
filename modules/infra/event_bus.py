@@ -212,4 +212,12 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event.get("status") == "error":
             task["error"] = payload.get("error") or event.get("message")
 
+        if event.get("stage") == "evaluation":
+            task["evaluation"] = {
+                **task.get("evaluation", {}),
+                **payload,
+                "status": event.get("status"),
+                "message": event.get("message"),
+            }
+
     return [tasks[request_id] for request_id in reversed(order)]
