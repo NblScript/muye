@@ -17,6 +17,19 @@ DATA_DIR = PROJECT_ROOT / "data"
 IMAGES_DIR = DATA_DIR / "images"
 LOGS_DIR = DATA_DIR / "logs"
 
+# Earth geometry: ~111 km per degree of latitude
+METERS_PER_DEGREE_LAT = 111_000
+
+
+def safe_float(value: Any) -> float | None:
+    """Parse a value to float, returning None for missing / non-numeric inputs."""
+    if value in (None, "", "NA", "N/A", "null", "NULL"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
 
 def ensure_runtime_dirs() -> None:
     for directory in (CONFIG_DIR, DATA_DIR, IMAGES_DIR, LOGS_DIR):

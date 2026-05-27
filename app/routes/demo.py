@@ -12,9 +12,7 @@ import app.deps as deps
 from modules.infra.common import IMAGES_DIR, ensure_runtime_dirs
 import modules.infra.event_bus as event_bus
 import app.services.workflow_service as workflow_service
-
-
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+from app.services.workflow_service import MAX_UPLOAD_BYTES
 
 
 def _save_uploaded_image(file, content: bytes) -> Path:

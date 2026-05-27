@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
@@ -23,9 +23,10 @@ from models.schemas import (
 from app.services import workflow_service
 from app.services.map_simulator import Px4MapStateSimulator
 from app.services.telemetry_service import get_telemetry_service
+from modules.infra.common import safe_float
 
 # Global simulator instance, set during app initialization
-_simulator: Optional[Px4MapStateSimulator] = None
+_simulator: Px4MapStateSimulator | None = None
 logger = logging.getLogger(__name__)
 
 
@@ -202,13 +203,7 @@ def _position_from_raw(raw: Any, *, timestamp: float) -> GPSPosition | None:
     )
 
 
-def _to_number(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+_to_number = safe_float
 
 
 def _optional_str(value: Any) -> str | None:

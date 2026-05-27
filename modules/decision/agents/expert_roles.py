@@ -4,36 +4,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from modules.decision.ai_decision import DECISION_SCHEMA
+
 logger = logging.getLogger(__name__)
 
 # 专家角色输出必须符合此 schema，与 DecisionEngine.DECISION_SCHEMA 一致
-EXPERT_OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "required": ["用药"],
-    "additionalProperties": False,
-    "properties": {
-        "用药": {
-            "type": "object",
-            "required": ["农药名称", "浓度", "配比", "总量", "安全提示"],
-            "additionalProperties": False,
-            "properties": {
-                "农药名称": {"type": "string", "minLength": 1},
-                "浓度": {"type": "string", "minLength": 1},
-                "配比": {"type": "string", "minLength": 1},
-                "总量": {"type": "string", "minLength": 1},
-                "安全提示": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {"type": "string", "minLength": 1},
-                },
-            },
-        },
-        "农事建议": {
-            "type": "array",
-            "items": {"type": "string", "minLength": 1},
-        },
-    },
-}
+EXPERT_OUTPUT_SCHEMA: dict[str, Any] = DECISION_SCHEMA
 
 _JSON_FORMAT_RULE = (
     "你必须只输出一个 JSON 对象，不要输出任何其他内容。"

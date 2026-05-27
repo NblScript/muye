@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from modules.decision.agents.consultation import ExpertConsultation
     from modules.decision.router import DecisionRouter
 
-from modules.infra.common import log_event, strip_code_fence
+from modules.infra.common import log_event, safe_float, strip_code_fence
 from modules.decision.compliance import PesticideComplianceChecker
 from modules.decision.decision_context import DecisionContextProvider
 from modules.decision.router import DecisionRouter, RoutingSignals
@@ -759,12 +759,7 @@ class DecisionEngine:
         return str(value).strip()
 
     def _normalize_number(self, value: Any) -> float | None:
-        if value in (None, ""):
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
+        return safe_float(value)
 
     def _normalize_string_list(self, value: Any) -> list[str]:
         if isinstance(value, list):

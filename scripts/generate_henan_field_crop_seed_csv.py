@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from modules.infra.common import METERS_PER_DEGREE_LAT
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "data" / "seeds" / "henan" / "field_crop_seed"
@@ -36,8 +38,8 @@ HENAN_CITY_SEEDS = [
 def _build_square_geofence(latitude: float, longitude: float, area_mu: float) -> list[list[float]]:
     area_square_m = max(area_mu, 1.0) * 666.6667
     half_side_m = math.sqrt(area_square_m) / 2
-    lat_delta = half_side_m / 111_000
-    lon_delta = half_side_m / (111_000 * max(math.cos(math.radians(latitude)), 0.1))
+    lat_delta = half_side_m / METERS_PER_DEGREE_LAT
+    lon_delta = half_side_m / (METERS_PER_DEGREE_LAT * max(math.cos(math.radians(latitude)), 0.1))
     return [
         [round(longitude - lon_delta, 6), round(latitude - lat_delta, 6)],
         [round(longitude + lon_delta, 6), round(latitude - lat_delta, 6)],

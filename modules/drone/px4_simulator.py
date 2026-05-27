@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import subprocess
 import time
 from typing import Any, Callable
+
+from modules.infra.common import METERS_PER_DEGREE_LAT
 
 
 class PX4SimulationError(RuntimeError):
@@ -292,8 +295,8 @@ class PX4Simulator:
     ) -> float:
         current_lon, current_lat = float(current[0]), float(current[1])
         next_lon, next_lat = float(nxt[0]), float(nxt[1])
-        delta_lon = (next_lon - current_lon) * 111_000 * math.cos(math.radians((current_lat + next_lat) / 2))
-        delta_lat = (next_lat - current_lat) * 111_000
+        delta_lon = (next_lon - current_lon) * METERS_PER_DEGREE_LAT * math.cos(math.radians((current_lat + next_lat) / 2))
+        delta_lat = (next_lat - current_lat) * METERS_PER_DEGREE_LAT
         return math.hypot(delta_lon, delta_lat)
 
     def _update_gazebo_pose(
@@ -339,8 +342,8 @@ class PX4Simulator:
         location = demo_field.get("location", {})
         origin_lon = float(location.get("longitude", 8.545594))
         origin_lat = float(location.get("latitude", 47.397742))
-        x = (longitude - origin_lon) * 111_000 * math.cos(math.radians(origin_lat))
-        y = (latitude - origin_lat) * 111_000
+        x = (longitude - origin_lon) * METERS_PER_DEGREE_LAT * math.cos(math.radians(origin_lat))
+        y = (latitude - origin_lat) * METERS_PER_DEGREE_LAT
         return x, y
 
     def _set_world_paused(self, paused: bool) -> None:
@@ -381,8 +384,8 @@ class PX4Simulator:
     ) -> float:
         current_lon, current_lat = current
         next_lon, next_lat = nxt
-        delta_lon = (next_lon - current_lon) * 111_000 * math.cos(math.radians((current_lat + next_lat) / 2))
-        delta_lat = (next_lat - current_lat) * 111_000
+        delta_lon = (next_lon - current_lon) * METERS_PER_DEGREE_LAT * math.cos(math.radians((current_lat + next_lat) / 2))
+        delta_lat = (next_lat - current_lat) * METERS_PER_DEGREE_LAT
         if abs(delta_lon) < 1e-9 and abs(delta_lat) < 1e-9:
             return 0.0
         return math.degrees(math.atan2(delta_lon, delta_lat))
@@ -501,8 +504,8 @@ class PX4Simulator:
     ) -> float:
         current_lon, current_lat = float(current[0]), float(current[1])
         next_lon, next_lat = float(nxt[0]), float(nxt[1])
-        delta_lon = (next_lon - current_lon) * 111_000 * math.cos(math.radians((current_lat + next_lat) / 2))
-        delta_lat = (next_lat - current_lat) * 111_000
+        delta_lon = (next_lon - current_lon) * METERS_PER_DEGREE_LAT * math.cos(math.radians((current_lat + next_lat) / 2))
+        delta_lat = (next_lat - current_lat) * METERS_PER_DEGREE_LAT
         if abs(delta_lon) < 1e-9 and abs(delta_lat) < 1e-9:
             return 0.0
         return math.degrees(math.atan2(delta_lon, delta_lat))

@@ -5,6 +5,7 @@ import math
 from typing import Any
 
 from modules.drone.density_map import DensityMap
+from modules.infra.common import METERS_PER_DEGREE_LAT
 
 
 class MissionPlannerError(RuntimeError):
@@ -42,7 +43,7 @@ class MissionPlanner:
             presentation_profile=presentation_profile,
         )
         lat_span = (max(p[1] for p in geofence) - min(p[1] for p in geofence)) if geofence else 0
-        lat_span_m = lat_span * 111_000
+        lat_span_m = lat_span * METERS_PER_DEGREE_LAT
         lane_count = max(2, int(math.ceil(lat_span_m / lane_spacing_m)) + 1) if lat_span_m > 0 else 2
 
         spray_rate_range = self.flight_constraints.get("spray_rate_range_lpm", [0.3, 3.0])
@@ -165,7 +166,7 @@ class MissionPlanner:
                 crop_name=crop_name,
                 presentation_profile=None,
             )
-        lat_span_m = lat_span * 111_000
+        lat_span_m = lat_span * METERS_PER_DEGREE_LAT
         lane_count = max(2, int(math.ceil(lat_span_m / lane_spacing_m)) + 1)
 
         route: list[list[float]] = []

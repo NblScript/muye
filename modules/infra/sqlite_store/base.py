@@ -8,6 +8,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from modules.infra.common import METERS_PER_DEGREE_LAT, safe_float
+
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS tasks (
   request_id TEXT PRIMARY KEY,
@@ -468,12 +470,7 @@ class BaseMixin:
             return default
 
     def _to_float(self, value: Any) -> float | None:
-        if value in (None, "", "NA", "N/A", "null", "NULL"):
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
+        return safe_float(value)
 
     def _to_int(self, value: Any) -> int | None:
         if value in (None, "", "NA", "N/A", "null", "NULL"):
@@ -490,8 +487,8 @@ class BaseMixin:
         lat_b: float,
         lon_b: float,
     ) -> float:
-        lat_scale = 111_000
-        lon_scale = 111_000 * max(math.cos(math.radians((lat_a + lat_b) / 2)), 0.1)
+        lat_scale = METERS_PER_DEGREE_LAT
+        lon_scale = METERS_PER_DEGREE_LAT * max(math.cos(math.radians((lat_a + lat_b) / 2)), 0.1)
         dy = (lat_a - lat_b) * lat_scale
         dx = (lon_a - lon_b) * lon_scale
         return dx * dx + dy * dy
@@ -504,8 +501,8 @@ class BaseMixin:
     ) -> list[list[float]]:
         area_square_m = max(area_mu, 1.0) * 666.6667
         half_side_m = math.sqrt(area_square_m) / 2
-        lat_delta = half_side_m / 111_000
-        lon_delta = half_side_m / (111_000 * max(math.cos(math.radians(latitude)), 0.1))
+        lat_delta = half_side_m / METERS_PER_DEGREE_LAT
+        lon_delta = half_side_m / (METERS_PER_DEGREE_LAT * max(math.cos(math.radians(latitude)), 0.1))
         return [
             [round(longitude - lon_delta, 6), round(latitude - lat_delta, 6)],
             [round(longitude + lon_delta, 6), round(latitude - lat_delta, 6)],

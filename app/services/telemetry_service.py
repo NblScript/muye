@@ -9,6 +9,8 @@ from collections import deque
 from collections.abc import Callable
 from typing import Any
 
+from modules.infra.common import METERS_PER_DEGREE_LAT, safe_float
+
 from models.schemas import (
     BatteryState,
     DroneState,
@@ -169,8 +171,8 @@ class TelemetryService:
             # Frontend schema is GPS-shaped, but PX4 execution is local NED-only.
             # Use a tiny synthetic coordinate frame so the UI can draw local motion
             # without uploading or depending on real latitude/longitude waypoints.
-            latitude = local_north / 111_000
-            longitude = local_east / 111_000
+            latitude = local_north / METERS_PER_DEGREE_LAT
+            longitude = local_east / METERS_PER_DEGREE_LAT
         if latitude is None or longitude is None:
             return None
 
@@ -232,13 +234,7 @@ class TelemetryService:
         return status_map.get(str(status).strip().lower(), DroneStatusEnum.ERROR)
 
 
-def _to_float(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+_to_float = safe_float
 
 
 def _first_float(source: dict[str, Any], *keys: str) -> float | None:
