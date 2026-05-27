@@ -3,17 +3,9 @@ import { useEffect, useState } from 'react'
 import { fetchHealth } from '../api/health'
 import { fetchDashboardContext } from '../api/workflow'
 import { Button, Card, Tag, useToast } from '../components/ui'
+import { modeColor } from '../utils/dashboardUtils'
 import type { HealthCheck, HealthResponse } from '../types/health'
 import type { DashboardContextResponse } from '../types/workflow'
-
-const modeColor = (mode?: string): 'green' | 'red' | 'amber' | 'default' => {
-  if (!mode) return 'default'
-  const m = mode.toLowerCase()
-  if (m === 'online' || m === 'running') return 'green'
-  if (m === 'offline' || m === 'stopped') return 'red'
-  if (m === 'sim' || m === 'simulation') return 'amber'
-  return 'default'
-}
 
 const healthLabels: Record<string, string> = {
   sqlite: 'SQLite 数据库',
@@ -53,6 +45,12 @@ function formatHealthDetail(check: HealthCheck): string {
     .slice(0, 3)
     .map(([key, value]) => `${key}: ${String(value)}`)
   return flags.join(' · ') || '无附加信息'
+}
+
+function formatConfigValue(value: unknown): string {
+  if (typeof value === 'boolean') return value ? '开启' : '关闭'
+  if (value === null || value === undefined || value === '') return '-'
+  return String(value)
 }
 
 export default function Settings() {
@@ -100,6 +98,21 @@ export default function Settings() {
   }
 
   const healthChecks = health?.checks ? Object.entries(health.checks) : []
+  const runtimeConfig = health?.checks?.runtime_config
+  const runtimeConfigItems: Array<[string, unknown]> = runtimeConfig
+    ? [
+        ['起飞确认', runtimeConfig.takeoff_mode],
+        ['无人机后端', runtimeConfig.drone_backend],
+        ['PX4 执行', runtimeConfig.px4_execution_mode],
+        ['天气模式', runtimeConfig.weather_mode],
+        ['AI 模式', runtimeConfig.qwen_mode],
+        ['RAG', runtimeConfig.rag_enabled],
+        ['路由层', runtimeConfig.router_enabled],
+        ['多智能体', runtimeConfig.multi_agent_enabled],
+        ['YOLO 模型', runtimeConfig.yolo_active_model],
+        ['YOLO 设备', runtimeConfig.yolo_device],
+      ]
+    : []
 
   return (
     <div className="page-container">
@@ -132,6 +145,21 @@ export default function Settings() {
               </div>
             ))}
           </div>
+        )}
+      </Card>
+
+      <Card title="当前生效配置" className="settings-card">
+        {runtimeConfigItems.length > 0 ? (
+          <div className="settings-config-grid">
+            {runtimeConfigItems.map(([label, value]) => (
+              <div key={String(label)} className="settings-config-item">
+                <span className="settings-config-key">{label}</span>
+                <span className="settings-config-value">{formatConfigValue(value)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="color-muted">无法获取当前生效配置</span>
         )}
       </Card>
 

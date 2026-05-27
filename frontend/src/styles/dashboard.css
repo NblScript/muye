@@ -2179,6 +2179,38 @@
   letter-spacing: 0.08em;
 }
 
+.settings-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.settings-config-item {
+  display: grid;
+  gap: 6px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+
+.settings-config-key {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-config-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-health-list {
   display: grid;
   gap: 8px;
@@ -3204,4 +3236,56 @@
   display: flex;
   justify-content: center;
   margin: 16px 0;
+}
+
+/* ── Tag Row (Dashboard) ── */
+.tag-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-ml {
+  margin-left: 8px;
+}
+
+/* ── Alert Action Row ── */
+.alert-action-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Alert Description ── */
+.alert-description {
+  margin-top: 4px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* ── Drawer Section Title Colors ── */
+.drawer-section-title.is-red { color: var(--accent-red); }
+.drawer-section-title.is-purple { color: var(--accent-purple); }
+.drawer-section-title.is-cyan { color: var(--accent-cyan); }
+.drawer-section-title.is-green { color: var(--accent-green); }
+.drawer-section-title.is-amber { color: var(--accent-amber); }
+
+/* ── Map Legend Modifiers ── */
+.map-legend-dot.is-detection {
+  background: var(--accent-red);
+}
+
+.map-legend-item.is-interactive {
+  cursor: pointer;
+}
+
+.map-legend-swatch.is-active {
+  background: var(--accent-amber);
+  opacity: 0.5;
+}
+
+.map-legend-swatch.is-inactive {
+  background: var(--text-muted);
+  opacity: 0.5;
 }

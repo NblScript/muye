@@ -675,13 +675,13 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
             </div>
             {detectionMarkers.length > 0 && (
               <div className="map-legend-item">
-                <span className="map-legend-dot" style={{ background: 'var(--accent-red)' }} />
+                <span className="map-legend-dot is-detection" />
                 <span>检测点 ({detectionMarkers.length})</span>
               </div>
             )}
             {densityGrid && densityGrid.length > 0 && (
-              <div className="map-legend-item" style={{ cursor: 'pointer' }} onClick={() => setShowHeatmap(!showHeatmap)}>
-                <span className="map-legend-swatch" style={{ background: showHeatmap ? 'var(--accent-amber)' : 'var(--text-muted)', opacity: 0.5 }} />
+              <div className="map-legend-item is-interactive" onClick={() => setShowHeatmap(!showHeatmap)}>
+                <span className={`map-legend-swatch ${showHeatmap ? 'is-active' : 'is-inactive'}`} />
                 <span>{showHeatmap ? '隐藏热力图' : '显示热力图'}</span>
               </div>
             )}

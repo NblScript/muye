@@ -263,7 +263,7 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
       <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="AI 决策链路详情" width={460}>
         {/* 害虫检测 */}
         <section className="drawer-section">
-          <h4 className="drawer-section-title" style={{ color: 'var(--accent-red)' }}>🔍 害虫检测</h4>
+          <h4 className="drawer-section-title is-red">🔍 害虫检测</h4>
           {task?.detections && task.detections.length > 0 ? (
             <div className="drawer-detection-list">
               {task.detections.map((d, i) => (
@@ -283,7 +283,7 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
         {/* RAG 知识检索 */}
         {rag && hasRagContext(rag) && (
           <section className="drawer-section">
-            <h4 className="drawer-section-title" style={{ color: 'var(--accent-purple)' }}>📚 RAG 知识检索</h4>
+            <h4 className="drawer-section-title is-purple">📚 RAG 知识检索</h4>
             {rag.crop_name && (
               <div className="drawer-crop-context">
                 作物: {rag.crop_name}
@@ -320,7 +320,7 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
           }
           return (
             <section className="drawer-section">
-              <h4 className="drawer-section-title" style={{ color: 'var(--accent-cyan)' }}>🧑‍⚕️ 多智能体专家会诊</h4>
+              <h4 className="drawer-section-title is-cyan">🧑‍⚕️ 多智能体专家会诊</h4>
               <div className="drawer-metric-pair">
                 <div className="drawer-metric-item">
                   <div className="drawer-metric-value">{(confidence * 100).toFixed(0)}%</div>
@@ -370,7 +370,7 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
         {/* 决策结果 */}
         {Object.keys(decision).length > 0 && (
           <section className="drawer-section">
-            <h4 className="drawer-section-title" style={{ color: 'var(--accent-green)' }}>💊 用药方案</h4>
+            <h4 className="drawer-section-title is-green">💊 用药方案</h4>
             {Boolean(medication['农药名称']) && (
               <div className="medication-highlight">
                 <div className="medication-highlight-name">{String(medication['农药名称'])}</div>
@@ -395,7 +395,7 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
         {/* 农事建议 */}
         {agronomyTips.length > 0 && (
           <section className="drawer-section">
-            <h4 className="drawer-section-title" style={{ color: 'var(--accent-amber)' }}>🌾 农事建议</h4>
+            <h4 className="drawer-section-title is-amber">🌾 农事建议</h4>
             <div className="agronomy-tips-list">
               {agronomyTips.map((tip, i) => (
                 <div key={i} className="agronomy-tip-item">{tip}</div>

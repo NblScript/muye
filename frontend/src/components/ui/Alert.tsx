@@ -13,7 +13,7 @@ export default function Alert({ type, message, description, className = '' }: Al
   return (
     <div className={`alert alert-${type} ${className}`}>
       <div>{message}</div>
-      {description && <div style={{ marginTop: 4, fontSize: 13, opacity: 0.85 }}>{description}</div>}
+      {description && <div className="alert-description">{description}</div>}
     </div>
   )
 }

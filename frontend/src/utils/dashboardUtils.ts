@@ -92,15 +92,15 @@ export function statusColor(status: TaskStatus): TagColor {
   return 'blue'
 }
 
-/** Get color for mode tag */
+/** Get color for mode/status tag */
 export function modeColor(value?: string): TagColor {
-  if (value === 'mock') {
-    return 'amber'
-  }
-  if (value === 'px4') {
-    return 'cyan'
-  }
-  return 'green'
+  if (!value) return 'green'
+  const v = value.toLowerCase()
+  if (v === 'online' || v === 'running' || v === 'ok' || v === 'live') return 'green'
+  if (v === 'offline' || v === 'stopped' || v === 'error') return 'red'
+  if (v === 'mock' || v === 'sim' || v === 'simulation') return 'amber'
+  if (v === 'px4') return 'cyan'
+  return 'default'
 }
 
 /** Format pest labels for judge-friendly Chinese display */
