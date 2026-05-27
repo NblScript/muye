@@ -31,13 +31,25 @@ PX4_DEMO_HOME_ALT = "0"
 class RotatingLogFile:
     """File-like wrapper that truncates and rewinds when size limit is reached."""
 
-    def __init__(self, path: Path, max_bytes: int = 4 * 1024 * 1024 * 1024):
+    def __init__(self, path: Path, max_bytes: int = 4 * 1024 * 1024 * 1024) -> None:
         self._path = path
         self._max_bytes = max_bytes
         self._file = open(path, "w")
         self._size = 0
+        self._closed = False
+
+    def __del__(self) -> None:
+        self.close()
+
+    def __enter__(self) -> RotatingLogFile:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
 
     def write(self, data: str) -> int:
+        if self._closed:
+            return 0
         n = self._file.write(data)
         self._size += n
         if self._size >= self._max_bytes:
@@ -47,13 +59,16 @@ class RotatingLogFile:
         return n
 
     def flush(self) -> None:
-        self._file.flush()
+        if not self._closed:
+            self._file.flush()
 
     def fileno(self) -> int:
         return self._file.fileno()
 
     def close(self) -> None:
-        self._file.close()
+        if not self._closed:
+            self._file.close()
+            self._closed = True
 
 
 class Px4StartRequest(BaseModel):

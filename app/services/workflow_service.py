@@ -26,17 +26,16 @@ from app.deps import iso_utc_offset
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-
-@lru_cache(maxsize=1)
-def _get_sqlite_path() -> Path:
-    """Get the SQLite path (cached)."""
-    return Path(os.getenv("MUYE_SQLITE_PATH", str(Path.home() / ".muye" / "data" / "muye.db")))
+_SQLITE_PATH = Path(os.getenv("MUYE_SQLITE_PATH", str(Path.home() / ".muye" / "data" / "muye.db")))
+_SQLITE_STORE: SqliteStore | None = None
 
 
-@lru_cache(maxsize=1)
 def get_sqlite_store() -> SqliteStore:
     """Get the shared SqliteStore instance (singleton)."""
-    return SqliteStore(_get_sqlite_path())
+    global _SQLITE_STORE
+    if _SQLITE_STORE is None:
+        _SQLITE_STORE = SqliteStore(_SQLITE_PATH)
+    return _SQLITE_STORE
 
 
 @lru_cache(maxsize=1)

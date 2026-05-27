@@ -70,8 +70,13 @@ async def enhanced_state_ws(websocket: WebSocket) -> None:
                 _sync_telemetry_from_workflow(telemetry_service, workflow)
                 mission_state = _build_mission_state(workflow)
                 field_state = _build_field_state(workflow)
+            except (OSError, ValueError) as exc:
+                logger.warning("Transient error building workflow state: %s", exc)
+                workflow = None
+                mission_state = MissionState(status="unknown")
+                field_state = None
             except Exception:
-                logger.exception("Failed to build workflow state for websocket push")
+                logger.exception("Unexpected error building workflow state for websocket push")
                 workflow = None
                 mission_state = MissionState(status="unknown")
                 field_state = None

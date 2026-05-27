@@ -52,6 +52,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 - 日志：结构化 JSON 格式，写入 `data/logs/`
 - 配置：`app/config.py` 统一加载，`config/` 目录存放配置文件
 - 人工确认起飞：`app/services/takeoff_confirmation_service.py` 负责 SQLite `pending_actions` 状态与旧文件标记兼容，路由层不直接操作确认状态细节
+- 主处理链辅助服务：`app/services/pipeline_policy_service.py` 解析合规执行策略，`app/services/pipeline_planning_service.py` 选择变量喷洒或均匀喷洒规划，`app/main.py` 保留流程编排职责
 
 ## 领域模型
 

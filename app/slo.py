@@ -53,6 +53,16 @@ class SLOMetrics:
         self._ws_connects = 0
         self._ws_disconnects = 0
 
+    def reset(self) -> None:
+        """Reset all cumulative counters (useful for long-running processes)."""
+        with self._lock:
+            self._start_time = time.time()
+            self._pipeline_total = 0
+            self._pipeline_completed = 0
+            self._pipeline_errored = 0
+            self._ws_connects = 0
+            self._ws_disconnects = 0
+
     # -- API request tracking (called from middleware) --
 
     def record_request(self, status_code: int) -> None:

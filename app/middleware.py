@@ -24,6 +24,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.limit_per_minute = max(limit_per_minute, 1)
         self._records: dict[str, deque[float]] = {}
+        self._max_ips = 10_000
 
     def _client_ip(self, request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")
@@ -44,6 +45,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Evict stale entries
         while bucket and bucket[0] < window_start:
             bucket.popleft()
+
+        # Evict empty buckets when IP count exceeds limit
+        if len(self._records) > self._max_ips:
+            self._records = {
+                k: v for k, v in self._records.items() if v
+            }
 
         if len(bucket) >= self.limit_per_minute:
             retry_after = int(bucket[0] - window_start) + 1
