@@ -181,15 +181,15 @@ def check_rag_config_health() -> dict[str, Any]:
 def check_px4_runtime_health() -> dict[str, Any]:
     """Check PX4 runtime state without starting or stopping PX4."""
     try:
-        from app.routes import drone as drone_routes
+        from app.services import px4_process_service
 
-        info = drone_routes._read_pid_file()
+        info = px4_process_service.read_pid_file()
         if info is None:
             return {"status": "skipped", "running": False, "ready": False}
 
         pid = int(info["pid"])
-        running = drone_routes._is_process_alive(pid)
-        ready = running and drone_routes._is_port_open(drone_routes.PX4_MAVLINK_PORT)
+        running = px4_process_service.is_process_alive(pid)
+        ready = running and px4_process_service.is_port_open(px4_process_service.PX4_MAVLINK_PORT)
         return {
             "status": "ok" if ready else "skipped",
             "running": running,
@@ -303,6 +303,11 @@ async def api_health() -> Any:
     return JSONResponse(status_code=503, content=payload)
 
 
+async def api_live() -> dict[str, str]:
+    """Cheap liveness probe that does not touch external dependencies."""
+    return {"status": "ok"}
+
+
 async def api_slo() -> Any:
     """SLO metrics endpoint."""
     from app.slo import get_slo_metrics
@@ -311,6 +316,8 @@ async def api_slo() -> Any:
 
 def register_health_routes(app: FastAPI) -> None:
     """Register health check and SLO routes."""
+    app.get("/live", response_model=None)(api_live)
+    app.get("/api/live", include_in_schema=False, response_model=None)(api_live)
     app.get("/health", response_model=None)(api_health)
     app.get("/api/health", include_in_schema=False, response_model=None)(api_health)
     app.get("/slo", response_model=None)(api_slo)

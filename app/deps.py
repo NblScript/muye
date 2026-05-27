@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from modules.infra.common import DATA_DIR, ensure_runtime_dirs
+from modules.infra.common import DATA_DIR
 
 if TYPE_CHECKING:
     from app.services.map_simulator import Px4MapStateSimulator
@@ -27,7 +25,6 @@ TAKEOFF_STATE_DIR = DATA_DIR / "runtime" / "takeoff"
 TAKEOFF_PENDING_REQUEST_PATH = TAKEOFF_STATE_DIR / "pending_request.json"
 TAKEOFF_CONFIRMATION_FLAG_PATH = TAKEOFF_STATE_DIR / "confirmed.flag"
 
-
 def get_simulator() -> Px4MapStateSimulator:
     """Get the map state simulator instance."""
     global simulator
@@ -43,54 +40,52 @@ def get_embedded_yolo_runner() -> Any:
     return embedded_yolo_runner_for_health
 
 
-def _ensure_takeoff_state_dir() -> None:
-    ensure_runtime_dirs()
-    TAKEOFF_STATE_DIR.mkdir(parents=True, exist_ok=True)
-
-
 def clear_takeoff_confirmation_state() -> None:
     """Clear shared takeoff confirmation state."""
-    for path in (TAKEOFF_PENDING_REQUEST_PATH, TAKEOFF_CONFIRMATION_FLAG_PATH):
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+    from app.services.takeoff_confirmation_service import clear_takeoff_confirmation_state as clear_state
+    clear_state(
+        pending_path=TAKEOFF_PENDING_REQUEST_PATH,
+        flag_path=TAKEOFF_CONFIRMATION_FLAG_PATH,
+    )
+    if takeoff_confirmation_event is not None:
+        takeoff_confirmation_event.clear()
 
 
 def set_pending_takeoff_request(request_id: str) -> None:
     """Persist the currently pending takeoff request for cross-process confirmation."""
-    _ensure_takeoff_state_dir()
-    clear_takeoff_confirmation_state()
-    TAKEOFF_PENDING_REQUEST_PATH.write_text(
-        json.dumps({"request_id": request_id}, ensure_ascii=False),
-        encoding="utf-8",
+    from app.services.takeoff_confirmation_service import set_pending_takeoff_request as set_pending
+    set_pending(
+        request_id,
+        pending_path=TAKEOFF_PENDING_REQUEST_PATH,
+        flag_path=TAKEOFF_CONFIRMATION_FLAG_PATH,
     )
 
 
 def get_pending_takeoff_request_id() -> str | None:
     """Return the pending takeoff request id from shared state."""
-    if not TAKEOFF_PENDING_REQUEST_PATH.exists():
-        return None
-    try:
-        payload = json.loads(TAKEOFF_PENDING_REQUEST_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    request_id = payload.get("request_id")
-    return request_id if isinstance(request_id, str) and request_id else None
+    from app.services.takeoff_confirmation_service import get_pending_takeoff_request_id as get_pending
+    return get_pending(pending_path=TAKEOFF_PENDING_REQUEST_PATH)
 
 
 def is_takeoff_confirmed() -> bool:
     """Check whether takeoff was confirmed in-process or via shared state."""
+    from app.services.takeoff_confirmation_service import is_takeoff_confirmed as is_confirmed
     return bool(
         (takeoff_confirmation_event is not None and takeoff_confirmation_event.is_set())
-        or TAKEOFF_CONFIRMATION_FLAG_PATH.exists()
+        or is_confirmed(
+            pending_path=TAKEOFF_PENDING_REQUEST_PATH,
+            flag_path=TAKEOFF_CONFIRMATION_FLAG_PATH,
+        )
     )
 
 
 def mark_takeoff_confirmed() -> None:
     """Mark pending takeoff as confirmed for both local and external processes."""
-    _ensure_takeoff_state_dir()
-    TAKEOFF_CONFIRMATION_FLAG_PATH.write_text("confirmed\n", encoding="utf-8")
+    from app.services.takeoff_confirmation_service import mark_takeoff_confirmed as mark_confirmed
+    mark_confirmed(
+        pending_path=TAKEOFF_PENDING_REQUEST_PATH,
+        flag_path=TAKEOFF_CONFIRMATION_FLAG_PATH,
+    )
     if takeoff_confirmation_event is not None:
         takeoff_confirmation_event.set()
 
@@ -100,15 +95,20 @@ async def wait_for_takeoff_confirmation(
     timeout_seconds: float = 300.0,
 ) -> None:
     """Wait until takeoff confirmation arrives from local or shared state."""
+    from app.services.takeoff_confirmation_service import expire_pending_takeoff_request
+
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if takeoff_confirmation_event is not None and takeoff_confirmation_event.is_set():
             return
-        if TAKEOFF_CONFIRMATION_FLAG_PATH.exists():
+        if is_takeoff_confirmed():
             if takeoff_confirmation_event is not None:
                 takeoff_confirmation_event.set()
             return
         await asyncio.sleep(poll_interval_seconds)
+    expire_pending_takeoff_request(
+        pending_path=TAKEOFF_PENDING_REQUEST_PATH,
+    )
     raise asyncio.TimeoutError(
         f"起飞确认超时（{timeout_seconds}s），请在前端确认起飞"
     )

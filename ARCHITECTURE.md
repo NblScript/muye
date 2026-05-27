@@ -51,6 +51,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 - 通过 `modules/infra/common.py` 提供统一接口
 - 日志：结构化 JSON 格式，写入 `data/logs/`
 - 配置：`app/config.py` 统一加载，`config/` 目录存放配置文件
+- 人工确认起飞：`app/services/takeoff_confirmation_service.py` 负责 SQLite `pending_actions` 状态与旧文件标记兼容，路由层不直接操作确认状态细节
 
 ## 领域模型
 
@@ -85,6 +86,8 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 ### 3. drone（无人机域）
 
 - **入口**：`app/routes/drone.py` — PX4 启停、确认起飞、DJI 无人机接口
+- **应用服务**：`app/services/takeoff_confirmation_service.py` — 管理人工起飞确认的 pending/confirmed/expired 状态，SQLite 为主、文件标记为兼容层
+- **应用服务**：`app/services/px4_process_service.py` — 管理 PX4 SITL PID 文件、端口探测、已有进程识别、日志文件和进程终止等低层运行时能力
 - **核心**：`modules/drone/`
   - `controller.py` — DroneController，编排任务执行（通过后端抽象层）
   - `mission_planner.py` — 航线生成 + 喷洒参数

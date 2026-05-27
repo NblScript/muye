@@ -181,6 +181,17 @@ class BaseMixin:
                   FOREIGN KEY (request_id) REFERENCES tasks(request_id)
                 );
 
+                CREATE TABLE IF NOT EXISTS pending_actions (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  request_id TEXT NOT NULL,
+                  action_type TEXT NOT NULL,
+                  status TEXT CHECK(status IN ('pending', 'confirmed', 'expired', 'cancelled')) NOT NULL,
+                  created_at DATETIME NOT NULL,
+                  confirmed_at DATETIME,
+                  expires_at DATETIME,
+                  UNIQUE(request_id, action_type)
+                );
+
                 CREATE TABLE IF NOT EXISTS fields (
                   field_id TEXT PRIMARY KEY,
                   field_code TEXT UNIQUE,
@@ -375,6 +386,9 @@ class BaseMixin:
 
                 CREATE INDEX IF NOT EXISTS idx_drone_mission_updates_request_id
                 ON drone_mission_updates(request_id);
+
+                CREATE INDEX IF NOT EXISTS idx_pending_actions_type_status
+                ON pending_actions(action_type, status);
 
                 CREATE INDEX IF NOT EXISTS idx_fields_city_county
                 ON fields(city, county);

@@ -111,6 +111,9 @@ curl http://localhost:18000/slo
 ### 健康检查
 
 ```bash
+# API 存活检查（只证明进程在线，不检查依赖）
+curl http://localhost:18000/live
+
 # API 健康检查（含依赖状态与当前生效配置）
 curl http://localhost:18000/health
 
@@ -126,6 +129,12 @@ curl http://localhost:8010/health
 # 固定样例评测集清单与报告
 python scripts/eval_fixed_set.py --output data/eval/latest_report.md
 ```
+
+`/live` 用于快速判断 FastAPI 进程是否可响应；`/health` 用于 readiness 诊断，会检查 SQLite、YOLO、AI 配置、天气配置、事件流、RAG、PX4 和当前生效运行配置。
+
+人工确认起飞状态由 `app/services/takeoff_confirmation_service.py` 管理：SQLite `pending_actions` 表是跨进程确认状态的主记录，`data/runtime/takeoff/` 下的 pending/confirmed 文件保留为兼容层。
+
+PX4 SITL 进程状态由 `app/services/px4_process_service.py` 管理，负责 PID 文件、端口探测、已有 PX4 进程识别和进程终止；`app/routes/drone.py` 只保留 HTTP 入口和兼容 wrapper。
 
 ### 日志监控
 

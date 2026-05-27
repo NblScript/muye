@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "description": "牧野固定样例评测集：覆盖常规虫害、高湿、强风、合规警告和阻断场景。",
+  "cases": [
+    {
+      "id": "aphid-wheat-normal",
+      "image": "../samples/aphids_01.jpg",
+      "expected_pest": "aphid",
+      "crop": "wheat",
+      "weather_scenario": "normal",
+      "expected_compliance": "passed"
+    },
+    {
+      "id": "planthopper-rice-humid",
+      "image": "../samples/brown_planthopper_01.jpg",
+      "expected_pest": "brown_planthopper",
+      "crop": "rice",
+      "weather_scenario": "humid",
+      "expected_compliance": "warning"
+    },
+    {
+      "id": "rice-leaf-roller-wind-high",
+      "image": "../samples/rice_leaf_roller_01.jpg",
+      "expected_pest": "rice_leaf_roller",
+      "crop": "rice",
+      "weather_scenario": "wind_high",
+      "expected_compliance": "warning"
+    },
+    {
+      "id": "corn-borer-corn-normal",
+      "image": "../samples/corn_borer_01.jpg",
+      "expected_pest": "corn_borer",
+      "crop": "corn",
+      "weather_scenario": "normal",
+      "expected_compliance": "passed"
+    },
+    {
+      "id": "red-spider-cotton-hot",
+      "image": "../samples/red_spider_01.jpg",
+      "expected_pest": "red_spider",
+      "crop": "cotton",
+      "weather_scenario": "hot_dry",
+      "expected_compliance": "warning"
+    },
+    {
+      "id": "grub-wheat-blocked",
+      "image": "../samples/grub_01.jpg",
+      "expected_pest": "grub",
+      "crop": "wheat",
+      "weather_scenario": "normal",
+      "expected_compliance": "blocked"
+    }
+  ]
+}

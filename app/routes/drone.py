@@ -7,97 +7,72 @@ import fcntl
 import json
 import logging
 import os
-import socket
 import subprocess
 import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 
 import app.deps as deps
-from modules.infra.common import DATA_DIR, ensure_runtime_dirs
+from app.services import px4_process_service as px4_process
+from modules.infra.common import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-
-class RotatingLogFile:
-    """File-like wrapper that truncates and rewinds when size limit is reached."""
-
-    def __init__(self, path: Path, max_bytes: int = 4 * 1024 * 1024 * 1024):
-        self._path = path
-        self._max_bytes = max_bytes
-        self._file = open(path, "w")
-        self._size = 0
-
-    def write(self, data: str) -> int:
-        n = self._file.write(data)
-        self._size += n
-        if self._size >= self._max_bytes:
-            self._file.close()
-            self._file = open(self._path, "w")
-            self._size = 0
-        return n
-
-    def flush(self):
-        self._file.flush()
-
-    def fileno(self):
-        return self._file.fileno()
-
-    def close(self):
-        self._file.close()
-
-
-PX4_DEFAULT_DIR = Path.home() / "PX4-Autopilot"
-PX4_LOG_DIR = DATA_DIR / "logs"
-PX4_PID_FILE = DATA_DIR / "runtime" / "px4.pid"
-PX4_MAVSDK_PORT = 14540
-PX4_SIMULATOR_PORT = 14580
-PX4_MAVLINK_PORT = 18570
-PX4_READY_TIMEOUT = 90
-PX4_DEMO_HOME_LAT = "47.397742"
-PX4_DEMO_HOME_LON = "8.545594"
-PX4_DEMO_HOME_ALT = "0"
-
-
-class Px4StartRequest(BaseModel):
-    px4_dir: str | None = None
-    world: str | None = None
-    skip_px4: bool = False
-
-
-class Px4StatusResponse(BaseModel):
-    running: bool
-    ready: bool
-    pid: int | None = None
-    world: str | None = None
-    source: str | None = None
+RotatingLogFile = px4_process.RotatingLogFile
+Px4StartRequest = px4_process.Px4StartRequest
+Px4StatusResponse = px4_process.Px4StatusResponse
+PX4_DEFAULT_DIR = px4_process.PX4_DEFAULT_DIR
+PX4_LOG_DIR = px4_process.PX4_LOG_DIR
+PX4_PID_FILE = px4_process.PX4_PID_FILE
+PX4_MAVSDK_PORT = px4_process.PX4_MAVSDK_PORT
+PX4_SIMULATOR_PORT = px4_process.PX4_SIMULATOR_PORT
+PX4_MAVLINK_PORT = px4_process.PX4_MAVLINK_PORT
+PX4_READY_TIMEOUT = px4_process.PX4_READY_TIMEOUT
+PX4_DEMO_HOME_LAT = px4_process.PX4_DEMO_HOME_LAT
+PX4_DEMO_HOME_LON = px4_process.PX4_DEMO_HOME_LON
+PX4_DEMO_HOME_ALT = px4_process.PX4_DEMO_HOME_ALT
+_ensure_pid_dir = px4_process.ensure_pid_dir
+_write_pid_file = px4_process.write_pid_file
+_read_pid_file = px4_process.read_pid_file
+_clear_pid_file = px4_process.clear_pid_file
+_is_process_alive = px4_process.is_process_alive
+_is_port_open = px4_process.is_port_open
+_build_gz_resource_path = px4_process.build_gz_resource_path
+_read_proc_exe = px4_process.read_proc_exe
+_read_proc_cmdline = px4_process.read_proc_cmdline
+_is_px4_process = px4_process.is_px4_process
+_find_running_px4_pid = px4_process.find_running_px4_pid
 
 
 def _ensure_pid_dir() -> None:
-    ensure_runtime_dirs()
+    px4_process.ensure_runtime_dirs()
     PX4_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _write_pid_file(pid: int, world: str, source: str) -> None:
     _ensure_pid_dir()
-    with PX4_PID_FILE.open("w", encoding="utf-8") as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        f.write(json.dumps({"pid": pid, "world": world, "source": source, "ts": time.time()}, ensure_ascii=False))
-        f.flush()
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    with PX4_PID_FILE.open("w", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        handle.write(
+            json.dumps(
+                {"pid": pid, "world": world, "source": source, "ts": time.time()},
+                ensure_ascii=False,
+            )
+        )
+        handle.flush()
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
-def _read_pid_file() -> dict | None:
+def _read_pid_file() -> dict[str, Any] | None:
     if not PX4_PID_FILE.exists():
         return None
     try:
-        with PX4_PID_FILE.open("r", encoding="utf-8") as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
-            content = f.read()
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        with PX4_PID_FILE.open("r", encoding="utf-8") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            content = handle.read()
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         data = json.loads(content)
         pid = data.get("pid")
         if not isinstance(pid, int):
@@ -112,87 +87,6 @@ def _clear_pid_file() -> None:
         PX4_PID_FILE.unlink()
     except FileNotFoundError:
         pass
-
-
-def _is_process_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except (ProcessLookupError, PermissionError):
-        return False
-
-
-def _is_port_open(port: int, timeout: float = 0.5) -> bool:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.settimeout(timeout)
-            s.bind(("", port))
-            return False  # port is free → PX4 not listening
-    except OSError:
-        return True  # port in use → PX4 likely listening
-
-
-def _build_gz_resource_path(px4_dir: Path, existing_value: str = "") -> str:
-    """Build a Gazebo resource path compatible with PX4's nested model repo layout."""
-    candidates = [
-        px4_dir / "Tools" / "simulation" / "gz" / "models" / "models",
-        px4_dir / "Tools" / "simulation" / "gz" / "models" / "worlds",
-        px4_dir / "Tools" / "simulation" / "gz" / "models",
-        px4_dir / "Tools" / "simulation" / "gz" / "worlds",
-    ]
-    merged: list[str] = []
-    for value in [str(path) for path in candidates] + existing_value.split(":"):
-        normalized = value.strip()
-        if normalized and normalized not in merged:
-            merged.append(normalized)
-    return ":".join(merged)
-
-
-def _read_proc_exe(pid: int) -> str | None:
-    try:
-        return os.readlink(f"/proc/{pid}/exe")
-    except OSError:
-        return None
-
-
-def _read_proc_cmdline(pid: int) -> str:
-    try:
-        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
-    except OSError:
-        return ""
-    return raw.replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip()
-
-
-def _is_px4_process(pid: int, px4_dir: Path | None = None) -> bool:
-    exe = _read_proc_exe(pid)
-    expected_exe = str(px4_dir / "build" / "px4_sitl_default" / "bin" / "px4") if px4_dir else None
-
-    if exe:
-        if expected_exe and exe == expected_exe:
-            return True
-        if Path(exe).name == "px4" and "px4_sitl_default" in exe:
-            return True
-
-    cmdline = _read_proc_cmdline(pid)
-    if expected_exe and expected_exe in cmdline:
-        return True
-    return "px4_sitl_default/bin/px4" in cmdline
-
-
-def _find_running_px4_pid(px4_dir: Path | None = None) -> int | None:
-    pids: list[int] = []
-    try:
-        proc_entries = sorted(Path("/proc").iterdir(), key=lambda entry: entry.name, reverse=True)
-    except OSError:
-        return None
-
-    for entry in proc_entries:
-        if not entry.name.isdigit():
-            continue
-        pid = int(entry.name)
-        if _is_px4_process(pid, px4_dir=px4_dir):
-            pids.append(pid)
-    return pids[0] if pids else None
 
 
 def _adopt_existing_px4(*, px4_dir: Path, world: str) -> dict[str, Any] | None:
@@ -232,11 +126,10 @@ def _kill_px4_process(pid: int) -> None:
     """Kill PX4 process group."""
     try:
         pgid = os.getpgid(pid)
-        os.killpg(pgid, 15)  # SIGTERM
+        os.killpg(pgid, 15)
     except (ProcessLookupError, PermissionError):
         pass
 
-    # Wait up to 10s, then SIGKILL
     for _ in range(20):
         if not _is_process_alive(pid):
             break

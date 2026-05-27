@@ -31,6 +31,13 @@
 | YOLO API | 8010 | `app/yolo_api:app` |
 | 前端 | 5173 | Vite dev server |
 
+## 健康检查
+
+| 端点 | 用途 |
+|------|------|
+| `GET /live` | 只检查 FastAPI 进程存活，不触碰 SQLite/YOLO/PX4/RAG |
+| `GET /health` | readiness 诊断，检查依赖状态和当前生效配置 |
+
 ## 关键指导原则
 
 1. **演示优先**：稳定性 > 功能丰富度。任何改动必须通过 `./scripts/demo.sh` 验证。
@@ -58,6 +65,13 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 + 合规推理链 |
 | drone | `modules/drone/` | 无人机控制 + 任务规划 + 变量喷洒（DensityMap）+ 后端抽象（PX4/DJI OSDK） |
 | infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 |
+
+## 后端应用服务
+
+| 服务 | 职责 |
+|------|------|
+| `app/services/takeoff_confirmation_service.py` | SQLite-backed 起飞确认状态机，兼容旧文件标记 |
+| `app/services/px4_process_service.py` | PX4 SITL 进程管理 helper：PID 文件、端口探测、进程识别、日志与停止 |
 
 ## 演示脚本
 

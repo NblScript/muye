@@ -20,7 +20,7 @@ from app.main import MuyeApplication, parse_args
 from app.routes.workflow import get_workflow_history, get_workflow_state
 from app.routes.demo import upload_demo_image, reset_demo_events, MAX_UPLOAD_BYTES
 from app.routes.drone import confirm_drone_takeoff
-from app.routes.health import api_health, check_sqlite_health, check_data_dir_health, check_embedded_yolo_health, collect_health_status
+from app.routes.health import api_health, api_live, check_sqlite_health, check_data_dir_health, check_embedded_yolo_health, collect_health_status
 from app.routes.tasks import get_task_annotated_image, get_task_original_image, annotate_image
 from app.routes.sim import get_sim_map_state
 from app.routes.dashboard import get_dashboard_context
@@ -567,6 +567,18 @@ def test_health_status_collects_check_results(monkeypatch) -> None:
     assert healthy is True
     assert payload["status"] == "ok"
     assert payload["checks"]["embedded_yolo"]["status"] == "skipped"
+
+
+def test_live_route_returns_ok_without_dependency_checks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        health_routes,
+        "collect_health_status",
+        lambda: (_ for _ in ()).throw(RuntimeError("should_not_run")),
+    )
+
+    payload = asyncio.run(api_live())
+
+    assert payload == {"status": "ok"}
 
 
 def test_runtime_config_health_exposes_effective_demo_switches(monkeypatch) -> None:

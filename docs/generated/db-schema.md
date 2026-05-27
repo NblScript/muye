@@ -70,6 +70,20 @@
 | progress | REAL | | 进度百分比 |
 | updated_at | TIMESTAMP | | 更新时间 |
 
+#### pending_actions
+
+用于记录需要人工确认的跨进程运行时动作，当前主要承载起飞确认。
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| id | INTEGER | PK, AUTOINCREMENT | 记录 ID |
+| request_id | TEXT | NOT NULL | 关联请求 |
+| action_type | TEXT | NOT NULL | 动作类型，如 `takeoff_confirmation` |
+| status | TEXT | CHECK(pending/confirmed/expired/cancelled) | 动作状态 |
+| created_at | DATETIME | NOT NULL | 创建时间 |
+| confirmed_at | DATETIME | | 确认时间 |
+| expires_at | DATETIME | | 过期时间 |
+
 ### 2. 农业基础/参考表
 
 #### fields

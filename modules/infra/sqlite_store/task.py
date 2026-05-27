@@ -153,6 +153,81 @@ class TaskMixin:
             )
             self._connection.commit()
 
+    def create_pending_action(
+        self,
+        *,
+        request_id: str,
+        action_type: str,
+        expires_at: str | None = None,
+    ) -> None:
+        with self._lock:
+            self._connection.execute(
+                """
+                INSERT INTO pending_actions (
+                  request_id, action_type, status, created_at, confirmed_at, expires_at
+                )
+                VALUES (?, ?, 'pending', ?, NULL, ?)
+                ON CONFLICT(request_id, action_type) DO UPDATE SET
+                  status = 'pending',
+                  created_at = excluded.created_at,
+                  confirmed_at = NULL,
+                  expires_at = excluded.expires_at
+                """,
+                (request_id, action_type, utc_now_iso(), expires_at),
+            )
+            self._connection.commit()
+
+    def get_pending_action(self, action_type: str) -> dict[str, Any] | None:
+        return self.fetch_one(
+            """
+            SELECT request_id, action_type, status, created_at, confirmed_at, expires_at
+            FROM pending_actions
+            WHERE action_type = ? AND status = 'pending'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (action_type,),
+        )
+
+    def confirm_pending_action(self, request_id: str, action_type: str) -> bool:
+        with self._lock:
+            cursor = self._connection.execute(
+                """
+                UPDATE pending_actions
+                SET status = 'confirmed', confirmed_at = ?
+                WHERE request_id = ? AND action_type = ? AND status = 'pending'
+                """,
+                (utc_now_iso(), request_id, action_type),
+            )
+            self._connection.commit()
+            return cursor.rowcount > 0
+
+    def expire_pending_action(self, request_id: str, action_type: str) -> bool:
+        with self._lock:
+            cursor = self._connection.execute(
+                """
+                UPDATE pending_actions
+                SET status = 'expired'
+                WHERE request_id = ? AND action_type = ? AND status = 'pending'
+                """,
+                (request_id, action_type),
+            )
+            self._connection.commit()
+            return cursor.rowcount > 0
+
+    def clear_pending_actions(self, action_type: str | None = None) -> None:
+        with self._lock:
+            if action_type:
+                self._connection.execute(
+                    "UPDATE pending_actions SET status = 'cancelled' WHERE action_type = ? AND status = 'pending'",
+                    (action_type,),
+                )
+            else:
+                self._connection.execute(
+                    "UPDATE pending_actions SET status = 'cancelled' WHERE status = 'pending'"
+                )
+            self._connection.commit()
+
     def _build_task_filter_clause(
         self,
         *,
