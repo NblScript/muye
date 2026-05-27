@@ -73,6 +73,7 @@ class DecisionEngine:
         transport: httpx.AsyncBaseTransport | None = None,
         consultation: ExpertConsultation | None = None,
         router: DecisionRouter | None = None,
+        temperature: float = 0.1,
     ) -> None:
         self.api_url = api_url
         self.api_key = api_key
@@ -82,6 +83,7 @@ class DecisionEngine:
         self.logger = logger or logging.getLogger("muye.decision")
         self.event_bus = event_bus
         self.decision_context_provider = decision_context_provider
+        self.temperature = temperature
         self.rag_retriever = rag_retriever
         self.consultation = consultation
         self.router = router
@@ -604,7 +606,7 @@ class DecisionEngine:
             },
             json={
                 "model": self.model,
-                "temperature": 0.1,
+                "temperature": self.temperature,
                 "response_format": {"type": "json_object"},
                 "messages": messages,
             },

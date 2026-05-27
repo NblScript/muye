@@ -6,9 +6,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import fcntl
-
 from modules.infra.common import LOGS_DIR, ensure_runtime_dirs
+from modules.infra.locks import flock_ex as _flock_ex, flock_sh as _flock_sh, flock_un as _flock_un
 
 
 EVENTS_FILE = LOGS_DIR / "demo_events.jsonl"
@@ -86,7 +85,7 @@ class FileEventBus:
         }
         file = self.path.open("a", encoding="utf-8")
         try:
-            fcntl.flock(file.fileno(), fcntl.LOCK_EX)
+            _flock_ex(file)
             if self._should_rotate():
                 file.close()
                 self._rotate_log()
@@ -95,7 +94,7 @@ class FileEventBus:
             file.flush()
         finally:
             try:
-                fcntl.flock(file.fileno(), fcntl.LOCK_UN)
+                _flock_un(file)
             except (ValueError, OSError):
                 pass
             file.close()
@@ -103,10 +102,10 @@ class FileEventBus:
 
     def clear(self) -> None:
         with self.path.open("w", encoding="utf-8") as file:
-            fcntl.flock(file.fileno(), fcntl.LOCK_EX)
+            _flock_ex(file)
             file.truncate(0)
             file.flush()
-            fcntl.flock(file.fileno(), fcntl.LOCK_UN)
+            _flock_un(file)
 
 
 def load_events(path: Path | None = None, limit: int | None = None) -> list[dict[str, Any]]:
@@ -115,9 +114,9 @@ def load_events(path: Path | None = None, limit: int | None = None) -> list[dict
         return []
 
     with target.open("r", encoding="utf-8") as file:
-        fcntl.flock(file.fileno(), fcntl.LOCK_SH)
+        _flock_sh(file)
         lines = file.readlines()
-        fcntl.flock(file.fileno(), fcntl.LOCK_UN)
+        _flock_un(file)
 
     parsed: list[dict[str, Any]] = []
     for line in lines:
@@ -157,6 +156,7 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "events": [],
                 "error": None,
                 "evaluation": {},
+                "mission": {},
             }
             order.append(request_id)
 
@@ -216,6 +216,14 @@ def build_task_views(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if event.get("stage") == "evaluation":
             task["evaluation"] = {
                 **task.get("evaluation", {}),
+                **payload,
+                "status": event.get("status"),
+                "message": event.get("message"),
+            }
+
+        if event.get("stage") == "mission":
+            task["mission"] = {
+                **task.get("mission", {}),
                 **payload,
                 "status": event.get("status"),
                 "message": event.get("message"),

@@ -223,24 +223,44 @@ PX4 工作流程包含连接、定位等待、原生 Mission 准备、解锁、�
 
 ### 6. 系统运行方式
 
-当前项目推荐使用统一脚本启动，而不是手工分别拉起多个服务。
+当前项目有两个启动入口：**演示入口**（竞赛评审）和**生产入口**（24h 自动巡检）。
 
-主要脚本包括：
+#### 演示入口（demo.sh）
 
-- `scripts/prepare.sh`  
-  环境准备脚本，检查 Python/Node 依赖、巡检图片和 RAG 知识库
-- `scripts/demo.sh`  
-  一键运行主入口，负责启动主 API、YOLO API、前端开发服务器，并只投喂一张巡检图片
-- `scripts/precheck.sh`  
-  启动前预检函数库
+```bash
+./scripts/prepare.sh   # 环境准备
+./scripts/demo.sh      # 演示主入口
+```
 
-`demo.sh` 固定走“单张图片 → AI 决策 → 人工确认起飞 → PX4 喷洒”流程，支持：
+`demo.sh` 固定走”单张图片 → AI 决策 → 人工确认起飞 → PX4 喷洒”流程，支持：
 
 - `--image <path>`
 - `--api-port`
 - `--frontend-port`
 - `--skip-precheck`
 - `--skip-inject`
+
+#### 生产入口（run.sh）
+
+```bash
+./scripts/prepare.sh --production  # 环境准备 + 生产检查
+./scripts/run.sh                   # 24h 自动巡检循环
+```
+
+`run.sh` 启动即采集、自动起飞、PX4 SITL 真实仿真、任务闭环自动重试至杀灭率达标，支持：
+
+- `--api-port`
+- `--frontend-port`
+- `--no-frontend`（无头运行）
+- `--skip-precheck`
+
+| 配置项 | demo.sh | run.sh |
+|--------|---------|--------|
+| 起飞模式 | manual（人工确认） | auto（自动起飞） |
+| PX4 模式 | animated_demo | sitl |
+| 图片采集 | 手动注入单张 | 启动即采集，每 24h 循环 |
+| 前端 | 必须启动 | 可选 |
+| 环境配置 | mock | `.env.production` |
 
 当前默认部署拓扑为：
 
@@ -604,7 +624,7 @@ SERVICE_CLIENT_IP="127.0.0.1"
 - `MUYE_SQLITE_PATH` 默认是 `~/.muye/data/muye.db`，主处理链会把任务、检测、天气和决策摘要同步写入该库。
 - `MUYE_ACTIVE_FIELD_ID` 可指定当前作业链路优先使用的数据库地块 ID。
 - `drone_config.json` 中 `simulate_capture=true` 时，系统会自动生成一张最小 JPEG 作为采图结果，便于本地联调。
-- `DRONE_BACKEND=px4` 是当前唯一对外运行链路，项目会走 PX4 SITL / MAVSDK 执行。
+- `DRONE_BACKEND` 环境变量控制无人机后端选择（`px4` PX4 SITL 仿真 | `dji_osdk` DJI OSDK 真实无人机），默认 `px4`。
 - 本地 PX4 运行默认使用 `px4.execution_mode=native_mission` 和 `px4.use_existing_mission=true`；后端会先读取 PX4 中已有 Mission，确认存在航点后才调用 `start_mission()`。
 - 前端地图大屏不绑定 PX4 航线，继续只做任务动画演示；PX4 中的真实 SITL 飞机按 QGroundControl/PX4 中规划并上传的 Mission 飞行。
 - 如 PX4 中没有已上传 Mission，系统会直接提示先在 QGroundControl 中规划航线并 Upload 到飞机，不再由牧野临时生成或上传航点。
@@ -624,17 +644,17 @@ cd /home/qingking/muye
 
 检查 Python/Node.js 依赖、准备巡检图片、确认 YOLO 模型。
 
-### 一键运行（PX4 工作流程）
+### 演示模式（竞赛评审）
 
 ```bash
 cd /home/qingking/muye
 ./scripts/demo.sh
 ```
 
-脚本会启动主 API、后台处理链、YOLO API 和 React 前端，然后只投喂一张巡检图片。  
-决策完成后前端显示“确认起飞”，操作人员点击确认后，系统自动启动 PX4 SITL 并执行喷洒航线。
+脚本会启动主 API、后台处理链、YOLO API 和 React 前端，然后只投喂一张巡检图片。
+决策完成后前端显示”确认起飞”，操作人员点击确认后，系统自动启动 PX4 SITL 并执行喷洒航线。
 
-### 常用参数
+**demo.sh 参数**：
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -644,12 +664,52 @@ cd /home/qingking/muye
 | `--skip-precheck` | - | 跳过环境检查 |
 | `--skip-inject` | - | 跳过图片投喂 |
 
+### 生产模式（24h 自动巡检）
+
+```bash
+cd /home/qingking/muye
+./scripts/run.sh
+```
+
+启动后自动采集图片 → YOLO 检测 → AI 决策 → 自动喷洒 → 自动复检 → 多轮循环至杀灭率达标，每 24 小时重复一次。
+
+**run.sh 参数**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--api-port <port>` | `18000` | API 端口 |
+| `--frontend-port <port>` | `5173` | 前端端口 |
+| `--no-frontend` | - | 不启动前端（无头运行） |
+| `--skip-precheck` | - | 跳过环境检查 |
+
+生产模式需先配置 `.env.production`（API Key、PX4 SITL 等），详见 `scripts/run.sh --help`。
+
 ### 默认启动后
 
 - 主 API 监听 `127.0.0.1:18000`
 - YOLO API 监听 `127.0.0.1:8010`
 - React 前端监听 `127.0.0.1:5173`
 - 按 `Ctrl+C` 会一起停止所有服务
+
+### 接入真实无人机
+
+系统支持通过 DJI OSDK 后端对接 Matrice 系列行业级无人机（M300 / M350 / 30T）。接入步骤：
+
+1. 配置环境变量（`.env.production`）：
+
+   ```bash
+   DRONE_BACKEND=dji_osdk
+   DJI_OSDK_EXECUTION_MODE=osdk_real
+   DJI_OSDK_SERIAL_PORT=/dev/ttyACM0
+   DJI_OSDK_BAUD_RATE=921600
+   DJI_OSDK_DRONE_MODEL=Matrice 30T
+   ```
+
+2. 确认无人机已通过串口连接（默认 `/dev/ttyACM0`）
+
+3. 启动系统：`./scripts/run.sh`
+
+无真实硬件时，可使用 `DJI_OSDK_EXECUTION_MODE=osdk_sim` 进行仿真测试，无需任何物理设备。
 
 ## 河南参考数据导入
 
@@ -777,6 +837,8 @@ QWEN_USE_MOCK="false"
 cd /home/qingking/muye
 python -m app.main --with-yolo-api --drone-backend px4
 ```
+
+可通过 `--drone-backend dji_osdk` 或设置 `DRONE_BACKEND=dji_osdk` 切换到 DJI OSDK 真实无人机。
 
 执行一次完整链路后退出：
 

@@ -43,7 +43,7 @@ frontend/src/
 │   ├── dashboard.types.ts
 │   ├── health.ts
 │   ├── simMap.ts
-│   └── workflow.ts    # 含 DJITelemetry, DJIStatus 类型
+│   └── workflow.ts    # 含 DJITelemetry, DJIStatus, MissionIteration, MissionDetail, WorkflowTaskState 类型
 ├── styles/            # 样式
 │   ├── dashboard.css  # 主样式表（组件类、动画、响应式）
 │   └── px4-viewer.css
@@ -72,9 +72,13 @@ frontend/src/
 interface FieldMapProps {
   droneStatus?: string;
   detections?: WorkflowDetectionEntry[];
+  spraySchedule?: number[] | null;
+  densityGrid?: DensityGridCell[] | null;
+  instructionRoute?: [number, number][] | null;
+  instructionCoverage?: [number, number][] | null;
 }
 
-export function FieldMap({ droneStatus, detections }: FieldMapProps) {
+export function FieldMap({ droneStatus, detections, spraySchedule, densityGrid, instructionRoute, instructionCoverage }: FieldMapProps) {
   // 3. Hooks 在组件顶部
   // 4. 颜色常量语义化命名
   const C = { fieldActive: '#089cc5', fieldCompleted: '#16875a', ... };
@@ -177,10 +181,52 @@ npx vitest run                  # 运行前端测试（52 个用例）
 
 ## 闭环评估组件
 
+### 类型定义（`types/workflow.ts`）
+
+- **`MissionIteration`**：单次迭代记录。字段：`iteration_id`、`iteration_number`、`spray_request_id`、`status`、`pre_pest_count`、`post_pest_count`、`kill_rate` 等
+- **`MissionDetail`**：任务闭环详情。字段：`mission_row_id`、`mission_uuid`、`original_request_id`、`status`、`kill_rate_threshold`、`max_iterations`、`current_iteration`、`final_kill_rate`、`pest_types`、`iterations`（`MissionIteration[]`）
+- **`WorkflowTaskState`**：新增可选字段 `mission?: MissionDetail`，关联任务闭环数据
+
+### API 函数（`api/workflow.ts`）
+
+| 函数 | 签名 | 说明 |
+|------|------|------|
+| `fetchMission` | `(requestId: string) => MissionDetail` | 根据 requestId 获取任务闭环详情 |
+| `fetchMissions` | `({ status, limit, offset }) => MissionListResponse` | 分页查询任务列表，支持按状态过滤 |
+| `cancelMission` | `(missionUuid: string) => void` | 取消指定任务闭环 |
+
 ### EvaluationCard
 
-位于 `components/dashboard/`，展示农药喷洒效果评估状态。显示评估结论（effective/partial/ineffective）、效果评分、喷洒前后害虫数量对比。支持取消待执行评估的操作按钮（仅 `scheduled` 状态可见）。
+位于 `components/dashboard/`，支持两种渲染模式：
+
+- **MissionTimeline**（`WorkflowTaskState.mission` 存在时）：展示任务闭环时间线
+  - 任务状态徽章（status badge）
+  - 阈值信息（kill_rate_threshold / max_iterations）
+  - 总体杀虫率进度条（kill rate bar）
+  - 垂直时间线（vertical timeline），每轮迭代显示：迭代编号、状态、喷洒前后害虫数量、该轮杀虫率
+- **SingleEvaluation**（fallback，兼容旧数据）：显示评估结论（effective/partial/ineffective）、效果评分、喷洒前后害虫数量对比
+
+新增 CSS 类：`.mission-timeline`、`.mission-iteration-row`、`.mission-iteration-header` 等（定义在 `styles/dashboard.css`）。
 
 ### PipelineStepper
 
 已扩展新增「效果评估」阶段（`evaluation`）。管线步骤顺序为：upload → detection → weather → decision → drone → evaluation。评估阶段根据 `WorkflowTaskState.evaluation` 字段渲染状态（scheduled/evaluated/cancelled）。
+
+## 密度热力图与变量喷洒可视化
+
+### 数据流
+
+密度数据（`density_grid`）和喷洒速率表（`spray_schedule`）由后端 `MissionPlanner.plan_variable_rate_mission()` 产出，存储在 `drone_mission_updates.instruction` JSON 中。前端通过 workflow state 中的 `latest_task.drone.instruction` 提取，无需单独 API 调用。
+
+### 类型定义（`types/workflow.ts`）
+
+- **`DensityGridCell`**：密度网格单元。字段：`row`、`col`、`density`（0–1 归一化）、`bounds`（GPS 坐标对 `[lon, lat][]`）
+- **`WorkflowDroneInstruction`**：扩展了 `density_grid`、`spray_schedule`、`source` 字段
+
+### FieldMap 渲染逻辑
+
+1. **GPS→SVG 投影**：后端密度网格使用 GPS 坐标（`density_grid[].bounds`），通过 `projectGpsToSvg()` 投影到 SVG 抽象坐标空间。投影基准为 `instructionCoverage`（覆盖区域 GPS 坐标）→ `primaryFieldPlot.boundary`（SVG 坐标）
+2. **密度网格**：优先使用后端 `densityGrid` prop（真实 GPS 坐标投影），无后端数据时降级为本地 `localDensityGrid`（从检测点位置计算 6×8 网格）
+3. **变量喷洒航线**：当 `spraySchedule` 可用时，每条航线段按归一化速率着色（高密度红、中密度琥珀、低密度绿）和变粗细（1.4–3.0 SVG 单位）。无数据时使用标准虚线样式
+4. **图例**：增加三级密度喷洒量图例和密度热力图开关
+5. **密度统计卡片**：侧边栏显示网格数、最高密度、喷洒速率范围

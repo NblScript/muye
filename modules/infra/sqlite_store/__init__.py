@@ -4,10 +4,11 @@ from modules.infra.sqlite_store.base import BaseMixin
 from modules.infra.sqlite_store.catalog import CatalogMixin
 from modules.infra.sqlite_store.evaluation import EvaluationMixin
 from modules.infra.sqlite_store.field import FieldMixin
+from modules.infra.sqlite_store.mission import MissionMixin
 from modules.infra.sqlite_store.task import TaskMixin
 
 
-class SqliteStore(EvaluationMixin, CatalogMixin, AgriDataMixin, FieldMixin, TaskMixin, BaseMixin):
+class SqliteStore(MissionMixin, EvaluationMixin, CatalogMixin, AgriDataMixin, FieldMixin, TaskMixin, BaseMixin):
     pass
 
 

@@ -29,6 +29,7 @@ Options:
   --images-only    仅准备演示图片
   --check-only     仅检查环境
   --rag            构建 RAG 知识库
+  --production     额外检查生产模式依赖
   -h, --help       显示帮助信息
 EOF
 }
@@ -36,6 +37,7 @@ EOF
 IMAGES_ONLY="false"
 CHECK_ONLY="false"
 BUILD_RAG="false"
+PRODUCTION="false"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -115,6 +117,58 @@ print(','.join(missing))
         print_success "YOLO 模型 ($MODEL_SIZE)"
     else
         print_warn "YOLO 模型不存在，将使用 mock 模式"
+    fi
+
+    # ── 5b. 生产模式额外检查 ──
+    if [[ "$PRODUCTION" == "true" ]]; then
+        echo ""
+        print_info "生产模式额外检查..."
+
+        PRODUCTION_ENV="${ROOT_DIR}/.env.production"
+        if [[ -f "$PRODUCTION_ENV" ]]; then
+            print_success ".env.production 已配置"
+        else
+            print_error "缺少 .env.production"
+            echo "  请复制模板并填入真实配置: cp .env.production.example .env.production"
+            exit 1
+        fi
+
+        # 检查 Qwen API Key 是否已配置
+        if grep -qP '^QWEN_API_KEY=\S' "$PRODUCTION_ENV" 2>/dev/null; then
+            print_success "Qwen API Key 已配置"
+        else
+            print_warn "Qwen API Key 未配置，将使用 mock 决策"
+        fi
+
+        # 检查天气 API Key 是否已配置
+        if grep -qP '^QWEATHER_API_KEY=\S' "$PRODUCTION_ENV" 2>/dev/null; then
+            print_success "和风天气 API Key 已配置"
+        else
+            print_warn "和风天气 API Key 未配置，将使用 mock 天气"
+        fi
+
+        # 检查 PX4 SITL
+        if command -v px4 >/dev/null 2>&1; then
+            print_success "PX4 SITL: $(px4 --version 2>&1 | head -1)"
+        else
+            print_warn "PX4 命令未找到，请确保 PX4 SITL 已安装并加入 PATH"
+        fi
+
+        # 检查 YOLO 模型（生产模式必须）
+        if [[ -f "${ROOT_DIR}/models/best.pt" ]]; then
+            print_success "YOLO 模型已就绪（生产模式必需）"
+        else
+            print_error "生产模式需要 YOLO 模型: models/best.pt"
+            exit 1
+        fi
+
+        # 检查 run.sh 是否可执行
+        if [[ -f "${ROOT_DIR}/scripts/run.sh" ]]; then
+            print_success "run.sh 生产入口脚本"
+        else
+            print_error "缺少 scripts/run.sh"
+            exit 1
+        fi
     fi
 fi
 

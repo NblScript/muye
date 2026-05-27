@@ -125,6 +125,54 @@ class DroneController:
         )
         return result
 
+    async def execute_inspection_mission(
+        self,
+        request_id: str,
+        execution_plan: dict[str, Any] | None = None,
+        field_context: dict[str, Any] | None = None,
+        current_weather: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Execute an inspection flight (fly route without spraying, capture images)."""
+        plan = execution_plan or self.plan_inspection_mission(
+            field_context=field_context or self.drone_config.get("field", {}),
+            current_weather=current_weather or {},
+        )
+        try:
+            result = await self.backend.execute_inspection_mission(
+                request_id=request_id,
+                execution_plan=plan,
+                on_status=lambda status, message, progress, current_waypoint_index, position=None: self._publish_drone_update(
+                    request_id=request_id,
+                    task_id=f"inspect-{request_id[:8]}",
+                    status=status,
+                    message=message,
+                    progress=progress,
+                    instruction=plan,
+                    medication={},
+                    current_waypoint_index=current_waypoint_index,
+                    position=position,
+                ),
+            )
+        except PX4SimulationError as exc:
+            raise DroneExecutionError(str(exc)) from exc
+
+        result["last_known_status"] = str(result.get("last_known_status") or "submitted")
+        result["final_status"] = self._map_drone_status_to_spray_result(
+            result["last_known_status"]
+        )
+        return result
+
+    def plan_inspection_mission(
+        self,
+        *,
+        field_context: dict[str, Any],
+        current_weather: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self.planner.plan_inspection_mission(
+            field_context=field_context,
+            current_weather=current_weather,
+        )
+
     def plan_spray_mission(
         self,
         *,

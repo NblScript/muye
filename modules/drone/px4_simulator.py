@@ -8,7 +8,10 @@ import subprocess
 import time
 from typing import Any, Callable
 
-from modules.infra.common import METERS_PER_DEGREE_LAT
+from pathlib import Path
+
+from modules.infra.common import IMAGES_DIR, METERS_PER_DEGREE_LAT, ensure_runtime_dirs
+from modules.detection.data_collector import MINIMAL_JPEG
 
 
 class PX4SimulationError(RuntimeError):
@@ -134,6 +137,125 @@ class PX4Simulator:
             "final_status": "completed",
             "last_known_status": "completed",
         }
+
+    async def execute_inspection_mission(
+        self,
+        *,
+        request_id: str,
+        execution_plan: dict[str, Any],
+        on_status: Callable[[str, str, int, int, dict[str, float] | None], None] | None = None,
+    ) -> dict[str, Any]:
+        """Execute an inspection flight (fly route without spraying, capture images)."""
+        route = self._normalize_route(execution_plan.get("飞行路径"))
+        if len(route) < 2:
+            raise PX4SimulationError("巡检航线至少需要两个航点")
+
+        mission_id = f"px4-inspect-{request_id[:8]}"
+        altitude_m = float(execution_plan.get("高度", 2.5))
+        speed_m_s = float(execution_plan.get("速度", 2.0))
+        battery_start = 92.0
+        total_waypoints = len(route)
+        step_delay_seconds = self._resolve_step_delay_seconds(
+            route=route, speed_m_s=speed_m_s,
+        )
+
+        captured_images: list[str] = []
+
+        self._set_world_paused(True)
+        try:
+            self._emit_status(on_status, "connecting", "连接 PX4 巡检", 5, 0, None)
+            await asyncio.sleep(0.6)
+            self._emit_status(on_status, "connected", "已连接", 15, 0, None)
+            await asyncio.sleep(0.5)
+            self._emit_status(on_status, "ready", "巡检定位就绪", 20, 0, None)
+            await asyncio.sleep(0.5)
+            self._emit_status(on_status, "uploaded", f"巡检航线已上传 {total_waypoints} 点", 30, 0, None)
+            await asyncio.sleep(0.5)
+            self._emit_status(on_status, "armed", "PX4 巡检已解锁电机", 40, 0, None)
+            await asyncio.sleep(0.5)
+
+            initial_heading = self._heading_between(route[0], route[1])
+            await self._animate_takeoff(
+                point=route[0],
+                target_altitude_m=altitude_m,
+                heading_deg=initial_heading,
+                battery_remaining=battery_start,
+                on_status=on_status,
+            )
+
+            for index, point in enumerate(route):
+                prev_point = route[index - 1] if index > 0 else point
+                next_point = route[index + 1] if index + 1 < len(route) else point
+                heading_deg = self._heading_between(prev_point, next_point)
+                progress = min(99, max(55, int(round(55 + (index / max(total_waypoints - 1, 1)) * 40))))
+                battery_remaining = max(48.0, battery_start - index * 1.4)
+                position = self._build_position(
+                    longitude=point[0],
+                    latitude=point[1],
+                    relative_altitude_m=altitude_m,
+                    heading_deg=heading_deg,
+                    speed_m_s=speed_m_s,
+                    battery_remaining=battery_remaining,
+                )
+                self._emit_status(
+                    on_status,
+                    "inspecting",
+                    f"巡检航点 {index + 1}/{total_waypoints}",
+                    progress,
+                    index,
+                    position,
+                )
+                self._update_gazebo_pose(point, altitude_m, heading_deg)
+
+                # Capture image at this waypoint
+                image_path = await self._capture_waypoint_image(request_id, index)
+                if image_path:
+                    captured_images.append(str(image_path))
+
+                if index + 1 < len(route):
+                    await self._animate_segment(
+                        start_point=point,
+                        end_point=route[index + 1],
+                        altitude_m=altitude_m,
+                        speed_m_s=speed_m_s,
+                        start_heading_deg=heading_deg,
+                        end_heading_deg=self._heading_between(point, route[index + 1]),
+                    )
+                else:
+                    await asyncio.sleep(min(step_delay_seconds, 0.5))
+
+            final_position = self._build_position(
+                longitude=route[-1][0],
+                latitude=route[-1][1],
+                relative_altitude_m=altitude_m,
+                heading_deg=self._heading_between(route[-2], route[-1]),
+                speed_m_s=0.0,
+                battery_remaining=max(42.0, battery_start - total_waypoints * 1.4),
+            )
+            self._update_gazebo_pose(route[-1], altitude_m, final_position["heading"])
+            self._emit_status(on_status, "completed", "PX4 巡检任务完成", 100, total_waypoints, final_position)
+        finally:
+            self._set_world_paused(False)
+
+        return {
+            "status": "submitted",
+            "task_id": mission_id,
+            "accepted": True,
+            "backend": "px4",
+            "execution_mode": "animated_demo",
+            "final_status": "completed",
+            "last_known_status": "completed",
+            "captured_images": captured_images,
+        }
+
+    async def _capture_waypoint_image(self, request_id: str, waypoint_index: int) -> Path | None:
+        """Capture an image at a waypoint during inspection."""
+        ensure_runtime_dirs()
+        filename = f"reinspect-{request_id[:12]}-wp{waypoint_index}_{time.strftime('%Y%m%d-%H%M%S')}.jpg"
+        path = IMAGES_DIR / filename
+        # Write minimal JPEG placeholder (simulates camera capture)
+        path.write_bytes(MINIMAL_JPEG)
+        return path
 
     def _resolve_step_delay_seconds(
         self,

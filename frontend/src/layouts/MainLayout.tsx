@@ -2,7 +2,6 @@ import { NavLink, Outlet } from 'react-router-dom'
 
 const navItems = [
   { path: '/', label: '指挥台', icon: '⊞' },
-  { path: '/px4-viewer', label: 'PX4 观察', icon: '◉' },
   { path: '/history', label: '历史报表', icon: '≡' },
   { path: '/settings', label: '设置', icon: '⚙' },
 ]

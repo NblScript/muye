@@ -6,7 +6,7 @@
 
 牧野（muye）是一个端到端智慧农业害虫防治演示系统，用于大学竞赛（挑战杯、计算机设计大赛）。
 
-**核心管线**：害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 效果评估 → 大屏展示
+**核心管线**：害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 效果评估 → **任务闭环（喷洒+复检循环至杀灭率 ≥ 90%）** → 大屏展示
 
 **成功标准**：
 - 竞赛演示全程稳定，无中断
@@ -64,7 +64,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | detection | `modules/detection/` | YOLO 推理 + 图像处理 |
 | decision | `modules/decision/` | AI 决策 + RAG 知识增强 + 路由（Router）+ 多智能体会诊 + 合规推理链 |
 | drone | `modules/drone/` | 无人机控制 + 任务规划 + 变量喷洒（DensityMap）+ 后端抽象（PX4/DJI OSDK） |
-| infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 + 效果评估（EvaluationMixin） |
+| infra | `modules/infra/` | 事件总线 + SQLite + 天气 + 公共工具 + 效果评估（EvaluationMixin）+ 任务生命周期（MissionMixin） |
 
 ## 后端应用服务
 
@@ -78,12 +78,46 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | `app/services/map_simulator.py` | 模拟 PX4 地图状态用于演示大屏 |
 | `app/services/telemetry_service.py` | PX4 遥测状态管理、轨迹缓冲 |
 | `app/main.py`（评估编排） | `_schedule_reinspection`、`_run_reinspection`、`_evaluate_effectiveness` 闭环评估管线阶段 |
+| `app/routes/mission.py` | 任务 API 端点：按请求查询任务、任务列表、取消任务 |
 
-## 演示脚本
+## 启动入口
+
+系统有两个入口，分别服务于不同场景：
+
+### 演示入口（竞赛/评审）
 
 ```bash
 ./scripts/prepare.sh   # 环境准备（依赖检查、演示图片、RAG 知识库）
-./scripts/demo.sh      # 一键演示主入口（通过 env var 注入配置，不修改 config 文件）
+./scripts/demo.sh      # 演示主入口：手动投图 → 人工确认起飞 → PX4 动画演示
+```
+
+**demo.sh 参数**：`--mode virtual|px4` · `--takeoff manual|auto` · `--api-port` · `--frontend-port`
+
+演示模式特点：单张图片手动注入、人工确认起飞、PX4 animated_demo 模式、mock 天气/AI。
+
+### 生产入口（24h 自动巡检）
+
+```bash
+./scripts/prepare.sh --production  # 环境准备 + 生产模式检查
+./scripts/run.sh                   # 生产主入口：24h 自动巡检循环
+```
+
+**run.sh 参数**：`--api-port` · `--frontend-port` · `--no-frontend` · `--skip-precheck`
+
+生产模式特点：启动即采集、自动起飞、PX4 SITL 真实仿真、任务闭环自动重试至杀灭率 ≥ 90%、可选无头运行。
+
+| 配置项 | demo.sh（演示） | run.sh（生产） |
+|--------|----------------|---------------|
+| `MUYE_TAKEOFF_MODE` | `manual` | `auto` |
+| 启动采集 | `--no-capture-on-startup` | 启动即采集 |
+| `PX4_EXECUTION_MODE` | `animated_demo` | `sitl` |
+| 图片注入 | 单张手动注入 | 依赖定时采集（24h） |
+| 前端 | 必须启动 | 可选（`--no-frontend`） |
+| 环境配置 | mock | `.env.production`（真实 API Key） |
+
+### 辅助脚本
+
+```bash
 ./scripts/demo_scenario.sh <场景名> # 预设演示场景（aphid_normal|planthopper_humid|wind_high|rag_down|px4_down）
 ./scripts/demo_smoke.sh # 烟雾测试（验证 API + mock 链路，不依赖 PX4）
 ./scripts/demo_doctor.sh # 现场诊断报告（health/SLO/workflow/事件流/错误日志）
@@ -91,8 +125,6 @@ python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样
 ./scripts/check.sh     # 竞赛总验证（关键路径测试 + 前端构建 + 文档校验；MUYE_FULL_CHECK=1 开启全量回归）
 ./scripts/precheck.sh  # 可 source 的环境检查工具库
 ```
-
-**demo.sh 参数**：`--mode virtual|px4` · `--takeoff manual|auto` · `--api-port` · `--frontend-port`
 
 ## 文档导航
 
@@ -130,10 +162,11 @@ python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样
 | 小米 MiMo | AI 决策（植保专家） | `XIAOMI_API_KEY` / `XIAOMI_API_URL` / `XIAOMI_MODEL` |
 | DashScope | RAG 文本向量化 | `DASHSCOPE_API_KEY` |
 | PX4 SITL | 无人机仿真 | 自动启动 |
-| DJI OSDK | 行业级无人机对接（Matrice/M300/M350） | `config/drone_config.json` → `dji_osdk` 节 |
+| DJI OSDK | 行业级无人机对接（Matrice/M300/M350） | `DRONE_BACKEND` 环境变量 | `config/drone_config.json` → `execution.backend` |
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
 | DecisionRouter | 路由决策路径（专家/多智能体） | `MUYE_ROUTER_ENABLED`（bool，默认 false）· `MUYE_ROUTER_FAMILIARITY_THRESHOLD`（float，默认 0.6） |
 | 模型切换 | 检测模型热切换 + 决策 provider 映射 | `config/yolo_config.yaml` → `models` + `active_model`；`config/model_config.yaml` → `expert_providers` |
+| 任务闭环评估 | 喷洒+复检多轮循环至杀灭率达标 | `evaluation_kill_rate_threshold`（float，默认 0.9）· `evaluation_max_retries`（int，默认 3）· `evaluation_auto_retry`（bool，默认 True） |
 
 ## 农药安全合规推理链
 
@@ -177,6 +210,29 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 **前端展示**：`EvaluationCard` 组件 + `PipelineStepper` 新增评估阶段
 
 **`WorkflowTaskState` 扩展**：新增可选 `evaluation` 字段，携带评估状态和评分
+
+## 任务生命周期闭环
+
+在效果评估基础上，支持多轮喷洒+复检循环，直到害虫杀灭率达到目标阈值。
+
+**流程**：首次喷洒 → 评估杀灭率 → 未达标则自动发起下一轮喷洒+复检 → 循环至达标或达到最大重试次数
+
+**核心逻辑**：
+- 每次迭代记录到 `mission_iterations` 表（轮次、喷洒参数、评估结果、杀灭率）
+- 杀灭率 ≥ `evaluation_kill_rate_threshold`（默认 0.9）时标记任务完成
+- 超过 `evaluation_max_retries`（默认 3）轮次时强制结束
+- `evaluation_auto_retry=True` 时自动进入下一轮，否则等待人工确认
+
+**害虫去重**：新检测任务提交时，若其害虫类型与当前活跃任务相同，自动跳过（避免重复喷洒同一害虫）。
+
+**RAG 知识积累**：已完成的任务自动索引为 `mission_summary` 类型文档，供后续 RAG 检索参考历史经验。
+
+**API 端点**：
+- `GET /api/mission/by-request/{id}` — 按检测请求 ID 查询关联任务
+- `GET /api/missions` — 获取全部任务列表
+- `POST /api/mission/{uuid}/cancel` — 取消活跃任务
+
+**数据存储**：`missions` + `mission_iterations` 表（SQLite），由 `MissionMixin`（`modules/infra/sqlite_store/mission.py`）管理
 
 ## 遇到无法解决的问题
 

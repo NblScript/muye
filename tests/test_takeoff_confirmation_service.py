@@ -6,6 +6,7 @@ import pytest
 
 import app.deps as deps
 from app.services import takeoff_confirmation_service as service
+from app.services.workflow_service import reset_sqlite_store
 from modules.infra.sqlite_store import SqliteStore
 
 
@@ -65,6 +66,7 @@ def test_sqlite_store_expires_pending_takeoff_action(tmp_path: Path) -> None:
 
 
 def test_takeoff_service_uses_sqlite_for_cross_process_confirmation(monkeypatch, tmp_path: Path) -> None:
+    reset_sqlite_store()
     db_path = tmp_path / "muye.db"
     monkeypatch.setenv("MUYE_SQLITE_PATH", str(db_path))
 
@@ -90,6 +92,7 @@ def test_takeoff_service_uses_sqlite_for_cross_process_confirmation(monkeypatch,
 
 @pytest.mark.asyncio
 async def test_takeoff_service_wait_marks_pending_action_expired(monkeypatch, tmp_path: Path) -> None:
+    reset_sqlite_store()
     db_path = tmp_path / "muye.db"
     monkeypatch.setenv("MUYE_SQLITE_PATH", str(db_path))
     service.set_pending_takeoff_request("req-4")
@@ -114,6 +117,7 @@ async def test_takeoff_service_wait_marks_pending_action_expired(monkeypatch, tm
 
 @pytest.mark.asyncio
 async def test_deps_wait_preserves_timeout_message_and_expires_action(monkeypatch, tmp_path: Path) -> None:
+    reset_sqlite_store()
     db_path = tmp_path / "muye.db"
     pending_path = tmp_path / "pending_request.json"
     flag_path = tmp_path / "confirmed.flag"

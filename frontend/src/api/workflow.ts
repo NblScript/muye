@@ -1,6 +1,8 @@
 import { apiClient } from './client'
 import type {
   DashboardContextResponse,
+  DemoReadinessResponse,
+  MissionDetail,
   WorkflowHistoryResponse,
   WorkflowStateResponse,
 } from '../types/workflow'
@@ -23,6 +25,11 @@ export async function fetchWorkflowHistory(params: {
 
 export async function fetchDashboardContext() {
   const response = await apiClient.get<DashboardContextResponse>('/dashboard/context')
+  return response.data
+}
+
+export async function fetchDemoReadiness() {
+  const response = await apiClient.get<DemoReadinessResponse>('/demo/readiness')
   return response.data
 }
 
@@ -78,5 +85,20 @@ export async function fetchEvaluation(requestId: string) {
 
 export async function cancelEvaluation(requestId: string) {
   const response = await apiClient.post(`/evaluation/${requestId}/cancel`)
+  return response.data
+}
+
+export async function fetchMission(requestId: string) {
+  const response = await apiClient.get<MissionDetail>(`/mission/by-request/${requestId}`)
+  return response.data
+}
+
+export async function fetchMissions(params?: { status?: string; limit?: number; offset?: number }) {
+  const response = await apiClient.get<{ total: number; items: MissionDetail[] }>('/missions', { params })
+  return response.data
+}
+
+export async function cancelMission(missionUuid: string) {
+  const response = await apiClient.post(`/mission/${missionUuid}/cancel`)
   return response.data
 }

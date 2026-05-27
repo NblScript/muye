@@ -90,6 +90,7 @@ class MuyeConfig:
 
     # RAG 配置
     rag_enabled: bool = True
+    rag_top_k: int = 5
     qwen_embedding_api_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     qwen_embedding_model: str = "text-embedding-v3"
     qwen_embedding_dimensions: int = 1024
@@ -99,6 +100,9 @@ class MuyeConfig:
     multi_agent_enabled: bool = False
     multi_agent_timeout_seconds: float = 60.0
 
+    # AI 模型参数
+    ai_temperature: float = 0.1
+
     # API 限流配置
     api_rate_limit_per_minute: int = 120
 
@@ -106,8 +110,9 @@ class MuyeConfig:
     evaluation_enabled: bool = True
     evaluation_default_action_time_hours: float = 24.0
     evaluation_demo_delay_seconds: float = 60.0
-    evaluation_kill_rate_threshold: float = 0.7
-    evaluation_max_retries: int = 2
+    evaluation_kill_rate_threshold: float = 0.9
+    evaluation_max_retries: int = 3
+    evaluation_auto_retry: bool = True
     evaluation_simulated_kill_rate_min: float = 0.6
     evaluation_simulated_kill_rate_max: float = 0.95
 
@@ -195,7 +200,10 @@ class MuyeConfig:
             qwen_model=os.getenv("QWEN_MODEL", "qwen-max"),
             qwen_use_mock=_parse_env_bool(os.getenv("QWEN_USE_MOCK"), False),
             # 无人机配置
-            drone_backend="px4",
+            drone_backend=os.getenv(
+                "DRONE_BACKEND",
+                drone_config.get("execution", {}).get("backend", "px4") if drone_config else "px4",
+            ),
             takeoff_mode=os.getenv(
                 "MUYE_TAKEOFF_MODE",
                 os.getenv(
@@ -302,6 +310,7 @@ class MuyeConfig:
             ),
             # RAG 配置
             rag_enabled=_parse_env_bool(os.getenv("RAG_ENABLED"), True),
+            rag_top_k=int(os.getenv("RAG_TOP_K", "5")),
             qwen_embedding_api_url=os.getenv(
                 "QWEN_EMBEDDING_API_URL",
                 "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -312,6 +321,7 @@ class MuyeConfig:
             # 多智能体会诊配置
             multi_agent_enabled=_parse_env_bool(os.getenv("MUYE_MULTI_AGENT_ENABLED"), False),
             multi_agent_timeout_seconds=float(os.getenv("MUYE_MULTI_AGENT_TIMEOUT_SECONDS", "60")),
+            ai_temperature=float(os.getenv("MUYE_AI_TEMPERATURE", "0.1")),
             # API 限流配置
             api_rate_limit_per_minute=int(os.getenv("MUYE_API_RATE_LIMIT_PER_MINUTE", "120")),
             # 闭环评估配置
@@ -323,9 +333,10 @@ class MuyeConfig:
                 os.getenv("MUYE_EVALUATION_DEMO_DELAY_SECONDS", "60.0")
             ),
             evaluation_kill_rate_threshold=float(
-                os.getenv("MUYE_EVALUATION_KILL_RATE_THRESHOLD", "0.7")
+                os.getenv("MUYE_EVALUATION_KILL_RATE_THRESHOLD", "0.9")
             ),
-            evaluation_max_retries=int(os.getenv("MUYE_EVALUATION_MAX_RETRIES", "2")),
+            evaluation_max_retries=int(os.getenv("MUYE_EVALUATION_MAX_RETRIES", "3")),
+            evaluation_auto_retry=_parse_env_bool(os.getenv("MUYE_EVALUATION_AUTO_RETRY"), True),
             evaluation_simulated_kill_rate_min=float(
                 os.getenv("MUYE_EVALUATION_SIM_KILL_RATE_MIN", "0.6")
             ),

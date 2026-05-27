@@ -126,6 +126,37 @@ class MissionPlanner:
             },
         }
 
+    def plan_inspection_mission(
+        self,
+        *,
+        field_context: dict[str, Any],
+        current_weather: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Generate an inspection flight plan (lower altitude/speed, no spray)."""
+        spray_plan = self.plan_spray_mission(
+            field_context=field_context,
+            current_weather=current_weather,
+        )
+        altitude_range = self.flight_constraints.get("altitude_range_m", [2.0, 8.0])
+        speed_range = self.flight_constraints.get("speed_range_mps", [1.0, 6.0])
+
+        inspection_altitude = self._clamp(
+            spray_plan["高度"] * 0.65,
+            altitude_range,
+        )
+        inspection_speed = self._clamp(
+            spray_plan["速度"] * 0.5,
+            speed_range,
+        )
+
+        return {
+            **spray_plan,
+            "source": "system_planner_inspection",
+            "高度": round(inspection_altitude, 2),
+            "速度": round(inspection_speed, 2),
+            "喷洒速率": 0.0,
+        }
+
     def _normalize_geofence(self, geofence: Any) -> list[list[float]]:
         if not isinstance(geofence, list):
             return []

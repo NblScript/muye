@@ -25,12 +25,16 @@ class ExpertConsultation:
         event_bus: FileEventBus | None = None,
         logger: logging.Logger | None = None,
         timeout_seconds: float = 60.0,
+        temperature: float = 0.1,
+        rag_top_k: int = 5,
     ) -> None:
         self.providers = providers
         self.rag_retriever = rag_retriever
         self.event_bus = event_bus
         self.logger = logger or logging.getLogger(__name__)
         self.timeout_seconds = timeout_seconds
+        self.temperature = temperature
+        self.rag_top_k = rag_top_k
         self._client = httpx.AsyncClient(timeout=timeout_seconds)
 
     def _get_provider(self, provider_name: str) -> dict[str, str]:
@@ -209,30 +213,40 @@ class ExpertConsultation:
         crop_name: str,
         weather_data: dict[str, Any],
     ) -> dict[str, str]:
-        """为每个角色检索 RAG 知识。"""
+        """为每个角色并行检索 RAG 知识。"""
         if not self.rag_retriever:
             return {}
 
+        loop = asyncio.get_running_loop()
+
+        async def _retrieve_one(role: str, config: dict[str, Any]) -> tuple[str, str]:
+            query = config["retrieval_query_template"].format(
+                pest_names=pest_names, crop_name=crop_name,
+            )
+            docs_scores = await loop.run_in_executor(
+                None, lambda: self.rag_retriever.retrieve_by_query(query, k=self.rag_top_k)
+            )
+            if not docs_scores:
+                return role, ""
+            lines = [f"=== {config['retrieval_focus']}（RAG 检索）==="]
+            for i, (doc, score) in enumerate(docs_scores, 1):
+                lines.append(f"\n{i}. {doc.page_content}")
+                lines.append(f"   参考值：{score:.2f}")
+            return role, "\n".join(lines)
+
+        roles = list(EXPERT_ROLES.keys())
+        results = await asyncio.gather(
+            *(_retrieve_one(role, EXPERT_ROLES[role]) for role in roles),
+            return_exceptions=True,
+        )
+
         role_knowledge: dict[str, str] = {}
-        for role, config in EXPERT_ROLES.items():
-            try:
-                query = config["retrieval_query_template"].format(
-                    pest_names=pest_names, crop_name=crop_name,
-                )
-                docs_scores = self.rag_retriever.retrieve_by_query(query, k=5)
-                if not docs_scores:
-                    role_knowledge[role] = ""
-                    continue
-                lines = [f"=== {config['retrieval_focus']}（RAG 检索）==="]
-                for i, (doc, score) in enumerate(docs_scores, 1):
-                    lines.append(f"\n{i}. {doc.page_content}")
-                    lines.append(f"   参考值：{score:.2f}")
-                role_knowledge[role] = "\n".join(lines)
-            except Exception as e:
-                self.logger.warning(
-                    "角色 %s RAG 检索失败: %s", config["name"], e
-                )
-                role_knowledge[role] = ""
+        for role, result in zip(roles, results):
+            if isinstance(result, Exception):
+                self.logger.warning("角色 %s RAG 检索失败: %s", role, result)
+                continue
+            _, knowledge = result
+            role_knowledge[role] = knowledge
 
         return role_knowledge
 
@@ -323,7 +337,7 @@ class ExpertConsultation:
                     },
                     json={
                         "model": model,
-                        "temperature": 0.1,
+                        "temperature": self.temperature,
                         "response_format": {"type": "json_object"},
                         "messages": messages,
                     },

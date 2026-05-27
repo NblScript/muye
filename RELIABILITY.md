@@ -60,7 +60,7 @@ DJI OSDK 真机不可用 → 使用 osdk_sim 仿真模式
 PX4 也可用 → 回退到 PX4 后端
 ```
 
-- **触发条件**：`execution.backend` 设为 `dji_osdk` 但无硬件
+- **触发条件**：`DRONE_BACKEND=dji_osdk`（或 `execution.backend` 设为 `dji_osdk`）但无硬件
 - **行为**：`osdk_sim` 模式用 GPS 坐标插值模拟飞行，接口与真机一致
 - **影响**：无物理飞行，但任务流程完整可演示
 

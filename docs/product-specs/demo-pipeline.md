@@ -165,3 +165,65 @@
 | RAG 检索失败 | 降级到无上下文决策 |
 | PX4 连接失败 | 切换到动画演示模式 |
 | WebSocket 断开 | 自动重连 + HTTP 轮询降级 |
+
+## 生产模式
+
+除演示入口 `demo.sh` 外，系统还提供生产入口 `run.sh`，用于 24 小时自动巡检作业。
+
+### 启动方式
+
+```bash
+./scripts/prepare.sh --production  # 环境准备 + 生产检查
+./scripts/run.sh                   # 启动 24h 自动巡检
+```
+
+### 与演示模式的差异
+
+| 配置项 | demo.sh（演示） | run.sh（生产） |
+|--------|----------------|---------------|
+| 起飞模式 | `manual`（前端确认） | `auto`（自动起飞） |
+| 图片采集 | `--no-capture-on-startup`（手动注入） | 启动即采集，每 24h 循环 |
+| PX4 模式 | `animated_demo` | `sitl`（真实 SITL 仿真） |
+| 任务闭环 | 单次喷洒 | 自动重试至杀灭率 ≥ 90% |
+| 前端 | 必须启动 | 可选（`--no-frontend` 无头运行） |
+| AI/天气 | mock 模式 | 真实 API（需配置 `.env.production`） |
+| RAG 索引 | 不自动索引 | 完成任务自动索引到 RAG |
+
+### run.sh 参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--api-port <port>` | `18000` | API 端口 |
+| `--frontend-port <port>` | `5173` | 前端端口 |
+| `--no-frontend` | - | 不启动前端（无头运行） |
+| `--skip-precheck` | - | 跳过环境检查 |
+
+### 生产配置
+
+生产模式需在 `.env.production` 中配置真实 API Key：
+
+```bash
+MUYE_TAKEOFF_MODE=auto
+MUYE_EVALUATION_AUTO_RETRY=true
+MUYE_EVALUATION_KILL_RATE_THRESHOLD=0.9
+PX4_EXECUTION_MODE=sitl
+# QWEN_API_KEY=<your-key>
+# QWEATHER_API_KEY=<your-key>
+
+# 无人机后端选择
+# DRONE_BACKEND=px4    # PX4 SITL 仿真（默认）
+# DRONE_BACKEND=dji_osdk  # DJI OSDK 真实无人机
+
+# DJI OSDK 配置（仅 DRONE_BACKEND=dji_osdk 时需要）
+# DJI_OSDK_EXECUTION_MODE=osdk_real
+# DJI_OSDK_SERIAL_PORT=/dev/ttyACM0
+```
+
+### 接入真实无人机
+
+系统支持通过 DJI OSDK 接入真实 DJI 无人机（Matrice M300 / M350 / 30T 等），步骤如下：
+
+1. 在 `.env.production` 中设置 `DRONE_BACKEND=dji_osdk` 和 `DJI_OSDK_EXECUTION_MODE=osdk_real`
+2. 配置串口路径，默认为 `/dev/ttyACM0`（根据实际连接修改）
+3. 重启 `run.sh` 即可切换到真实无人机执行
+4. 如需在无硬件环境下测试 DJI OSDK 链路，可使用 `DJI_OSDK_EXECUTION_MODE=osdk_sim`

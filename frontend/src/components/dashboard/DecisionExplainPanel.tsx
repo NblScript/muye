@@ -46,7 +46,7 @@ export default function DecisionExplainPanel({ task }: Props) {
   const complianceDisplay = complianceStatus(compliance?.status)
 
   return (
-    <Card className="dashboard-card">
+    <Card className="dashboard-card decision-explain-card">
       <span className="label-uppercase">决策依据</span>
       <div className="explain-root">
 

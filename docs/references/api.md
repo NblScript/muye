@@ -177,13 +177,29 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### POST /demo/reset-events
 
-重置事件流（清空 `data/logs/demo_events.jsonl`）。
+重置事件流（清空 `data/logs/demo_events.jsonl`）。需 `?confirm=true` 查询参数。
 
 **响应**：
 ```json
 {
-  "status": "reset",
-  "message": "Events cleared"
+  "status": "cleared"
+}
+```
+
+### GET /demo/readiness
+
+获取演示就绪状态（前端 DemoReadinessBar 使用）。
+
+**响应**：
+```json
+{
+  "ready": true,
+  "checks": {
+    "backend": {"status": "ok"},
+    "frontend": {"status": "ok"},
+    "demo_data": {"status": "ok"},
+    "px4": {"status": "ok", "running": true}
+  }
 }
 ```
 
@@ -272,6 +288,40 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 ### GET /drone/px4-status
 
 获取 PX4 SITL 运行状态。
+
+**响应**：
+```json
+{
+  "running": true,
+  "ready": true,
+  "pid": 12345
+}
+```
+
+### POST /drone/start-px4-demo
+
+启动 PX4 SITL 演示环境。
+
+**响应**：
+```json
+{
+  "status": "started",
+  "pid": 12345,
+  "world": "default",
+  "log": "/path/to/px4.log"
+}
+```
+
+### POST /drone/stop-px4-demo
+
+停止 PX4 SITL 演示环境。
+
+**响应**：
+```json
+{
+  "status": "stopped"
+}
+```
 
 ### GET /drone/dji/status
 
@@ -383,7 +433,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 获取所有效果评估记录列表。
 
 **查询参数**：
-- `status` (str, 可选): 按状态过滤（scheduled/reinspection/evaluated/cancelled）
+- `status` (str, 可选): 按状态过滤（scheduled/inspecting/evaluated/retry_scheduled/passed/cancelled）
 - `limit` (int, 可选): 返回条数，默认 50
 
 **响应**：
@@ -411,6 +461,117 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
   "message": "Evaluation cancelled"
 }
 ```
+
+## 任务闭环
+
+### GET /api/mission/by-request/{request_id}
+
+通过原始请求 ID 获取任务闭环详情（含所有迭代记录）。
+
+**响应**：`MissionDetailResponse`
+```json
+{
+  "mission_id": "mission_abc123",
+  "original_request_id": "req_abc123",
+  "field_id": "field_001",
+  "status": "completed",
+  "kill_rate_threshold": 0.9,
+  "max_iterations": 3,
+  "current_iteration": 2,
+  "final_kill_rate": 0.95,
+  "total_pre_pest_count": 12,
+  "total_post_pest_count": 1,
+  "pest_types": ["蚜虫", "红蜘蛛"],
+  "pesticide_name": "吡虫啉",
+  "crop_name": "小麦",
+  "created_at": "2026-05-27T10:00:00Z",
+  "completed_at": "2026-05-27T11:30:00Z",
+  "notes": null,
+  "iterations": [
+    {
+      "iteration_number": 1,
+      "status": "passed",
+      "pre_pest_count": 12,
+      "post_pest_count": 2,
+      "kill_rate": 0.83,
+      "created_at": "2026-05-27T10:00:00Z",
+      "spray_completed_at": "2026-05-27T10:20:00Z",
+      "inspected_at": "2026-05-27T10:40:00Z",
+      "evaluated_at": "2026-05-27T10:45:00Z",
+      "notes": null
+    },
+    {
+      "iteration_number": 2,
+      "status": "passed",
+      "pre_pest_count": 2,
+      "post_pest_count": 1,
+      "kill_rate": 0.95,
+      "created_at": "2026-05-27T10:45:00Z",
+      "spray_completed_at": "2026-05-27T11:00:00Z",
+      "inspected_at": "2026-05-27T11:15:00Z",
+      "evaluated_at": "2026-05-27T11:20:00Z",
+      "notes": null
+    }
+  ]
+}
+```
+
+### GET /api/mission/{mission_uuid}
+
+通过任务闭环 UUID 获取任务闭环详情（含所有迭代记录）。
+
+**响应**：`MissionDetailResponse`（同上）
+
+### GET /api/missions
+
+获取任务闭环列表，支持按状态过滤和分页。
+
+**查询参数**：
+- `status` (str, 可选): 按状态过滤（active/completed/failed/cancelled）
+- `limit` (int, 可选): 返回条数，默认 50
+- `offset` (int, 可选): 偏移量，默认 0
+
+**响应**：`MissionListResponse`
+```json
+{
+  "missions": [
+    {
+      "mission_id": "mission_abc123",
+      "original_request_id": "req_abc123",
+      "field_id": "field_001",
+      "status": "completed",
+      "current_iteration": 2,
+      "max_iterations": 3,
+      "final_kill_rate": 0.95,
+      "pesticide_name": "吡虫啉",
+      "crop_name": "小麦",
+      "created_at": "2026-05-27T10:00:00Z",
+      "completed_at": "2026-05-27T11:30:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### POST /api/mission/{mission_uuid}/cancel
+
+取消正在执行的任务闭环（仅 active 状态可取消）。
+
+**响应**：
+```json
+{
+  "status": "cancelled",
+  "message": "Mission cancelled"
+}
+```
+
+### 响应 Schema 说明
+
+**MissionIterationResult**：单次喷洒-复检迭代的完整记录。包含迭代序号 (`iteration_number`)、状态 (`status`: pending/spraying/inspecting/evaluated/passed/failed)、喷洒前后害虫计数、杀灭率、各阶段时间戳（`created_at`、`spray_completed_at`、`inspected_at`、`evaluated_at`）及备注。
+
+**MissionDetailResponse**：任务闭环的完整视图。包含任务元信息（地块、作物、农药、阈值配置）、汇总统计（总害虫数、最终杀灭率）以及 `iterations` 数组（所有 `MissionIterationResult` 迭代记录，按迭代序号排列）。
 
 ## SLO 监控
 

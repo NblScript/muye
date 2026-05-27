@@ -41,3 +41,16 @@ class PX4Backend(DroneBackend):
             current_weather=current_weather,
             on_status=on_status,
         )
+
+    async def execute_inspection_mission(
+        self,
+        *,
+        request_id: str,
+        execution_plan: dict[str, Any],
+        on_status: StatusCallback | None = None,
+    ) -> dict[str, Any]:
+        return await self._simulator.execute_inspection_mission(
+            request_id=request_id,
+            execution_plan=execution_plan,
+            on_status=on_status,
+        )

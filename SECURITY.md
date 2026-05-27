@@ -16,7 +16,9 @@
 | 密钥 | 用途 | 配置项 |
 |------|------|--------|
 | 和风天气 API Key | 气象数据 | `QWEATHER_API_KEY` |
-| DashScope API Key | Qwen 决策 + RAG 向量化 | `DASHSCOPE_API_KEY` |
+| Qwen API Key | Qwen 决策 + RAG 向量化 | `QWEN_API_KEY` |
+| DeepSeek API Key | 多智能体会诊 | `DEEPSEEK_API_KEY` |
+| Xiaomi API Key | 多智能体会诊 | `XIAOMI_API_KEY` |
 | YOLO API 端点 | 检测服务 | `YOLO_API_URL` |
 
 ### 密钥轮换
@@ -29,7 +31,7 @@
 
 ### API 输入
 
-- **文件上传**：限制文件类型（`.jpg`, `.png`, `.bmp`）、大小（< 10MB）
+- **文件上传**：限制文件类型（`.jpg`, `.png`, `.bmp`）、大小（主 API < 10MB / YOLO API < 20MB）
 - **查询参数**：类型校验 + 范围限制
 - **请求体**：Pydantic 模型自动校验
 
@@ -59,7 +61,7 @@
 - **Nginx 反向代理**：`deploy/nginx.conf`
 - **无 CORS 开放**：前端和 API 同源
 - **无认证**：竞赛演示系统，无需用户认证
-- **速率限制**：待实现（TD-002）
+- **速率限制**：已实现，滑动窗口 per-IP 限流（默认 120 次/分钟），见 `app/middleware.py`
 
 ## 依赖安全
 

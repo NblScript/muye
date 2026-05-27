@@ -12,16 +12,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import concurrent.futures
 import logging
 import os
 import time
-from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Callable
 
-import httpx
-import uvicorn
 from fastapi import FastAPI
 
 from modules.decision.ai_decision import DecisionEngine
@@ -53,7 +49,6 @@ from modules.decision.rag import (
     DecisionRAGRetriever,
     QwenEmbeddings,
     VectorStoreManager,
-    build_historical_decision_document,
     load_pesticide_from_json,
     load_pesticide_from_sqlite,
 )
@@ -63,9 +58,11 @@ from modules.infra.weather import WeatherClient
 # Import route registration functions
 from app.routes.dashboard import register_dashboard_routes
 from app.routes.demo import register_demo_routes
+from app.routes.demo_readiness import register_demo_readiness_routes
 from app.routes.drone import ensure_px4_ready, register_drone_routes
 from app.routes.evaluation import register_evaluation_routes
 from app.routes.health import register_health_routes
+from app.routes.mission import register_mission_routes
 from app.routes.sim import register_sim_routes
 from app.routes.tasks import register_tasks_routes
 from app.routes.workflow import register_workflow_routes
@@ -83,6 +80,10 @@ from app.config import build_local_yolo_urls
 from app.config_types import MuyeConfig
 import app.deps as deps
 from app.deps import embedded_yolo_runner_for_health
+from app.embedded_runners import EmbeddedApiRunner, EmbeddedYoloApiRunner
+from app.mission_manager import MissionManager
+from app.rag_indexing import RagIndexer
+from app.utils import safe_sqlite_write
 
 
 # ============================================================================
@@ -106,154 +107,12 @@ register_health_routes(api_app)
 register_workflow_routes(api_app)
 register_dashboard_routes(api_app)
 register_demo_routes(api_app)
+register_demo_readiness_routes(api_app)
 register_drone_routes(api_app)
 register_tasks_routes(api_app)
 register_evaluation_routes(api_app)
+register_mission_routes(api_app)
 register_sim_routes(api_app, simulator)
-
-
-# ============================================================================
-# Embedded API Runners
-# ============================================================================
-
-
-class EmbeddedApiRunner(ABC):
-    """Abstract base class for embedded API runners."""
-
-    def __init__(self, logger: logging.Logger) -> None:
-        self.logger = logger
-        self.settings = self._load_settings()
-        self.server: uvicorn.Server | None = None
-        self.server_task: asyncio.Task[None] | None = None
-
-    @abstractmethod
-    def _load_settings(self) -> Any:
-        """Load and return the settings object for this runner."""
-        ...
-
-    @abstractmethod
-    def _create_app(self) -> FastAPI:
-        """Create and return the FastAPI application."""
-        ...
-
-    @abstractmethod
-    def _get_health_url(self) -> str:
-        """Return the health check URL for this API."""
-        ...
-
-    @abstractmethod
-    def _get_startup_message(self) -> str:
-        """Return the startup success log message."""
-        ...
-
-    @abstractmethod
-    def _get_startup_error_prefix(self) -> str:
-        """Return the prefix for startup error messages."""
-        ...
-
-    @abstractmethod
-    def _get_log_extra(self) -> dict[str, Any]:
-        """Return extra fields for the startup log message."""
-        ...
-
-    async def start(self) -> None:
-        started = time.perf_counter()
-        request_id = generate_request_id()
-        app = self._create_app()
-        config = uvicorn.Config(
-            app=app,
-            host=self.settings.host,
-            port=self.settings.port,
-            log_level="info",
-            access_log=False,
-        )
-        server = uvicorn.Server(config)
-        server.install_signal_handlers = lambda: None
-        self.server = server
-        self.server_task = asyncio.create_task(server.serve())
-
-        try:
-            await self._wait_until_ready()
-            log_event(
-                self.logger,
-                logging.INFO,
-                self._get_startup_message(),
-                request_id=request_id,
-                duration_ms=(time.perf_counter() - started) * 1000,
-                **self._get_log_extra(),
-            )
-        except Exception:
-            await self.stop()
-            raise
-
-    async def stop(self) -> None:
-        if not self.server_task:
-            return
-
-        self.server.should_exit = True  # type: ignore[union-attr]
-        try:
-            await asyncio.wait_for(self.server_task, timeout=5)
-        except asyncio.TimeoutError:
-            self.server_task.cancel()
-            await asyncio.gather(self.server_task, return_exceptions=True)
-        finally:
-            self.server_task = None
-            self.server = None
-
-    async def _wait_until_ready(self, timeout_seconds: float = 30, interval_seconds: float = 0.2) -> None:
-        deadline = time.monotonic() + timeout_seconds
-        health_url = self._get_health_url()
-        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
-            while time.monotonic() < deadline:
-                if self.server_task and self.server_task.done():
-                    error = self.server_task.exception()
-                    if error:
-                        raise RuntimeError(f"{self._get_startup_error_prefix()}启动失败: {error}") from error
-                    raise RuntimeError(f"{self._get_startup_error_prefix()}意外退出")
-                try:
-                    response = await client.get(health_url)
-                    if response.status_code == 200:
-                        return
-                except httpx.HTTPError:
-                    pass
-                await asyncio.sleep(interval_seconds)
-        raise TimeoutError(f"等待 {self._get_startup_error_prefix()}就绪超时: {health_url}")
-
-
-class EmbeddedYoloApiRunner(EmbeddedApiRunner):
-    """Runner for embedded YOLO API server."""
-
-    def _load_settings(self) -> Any:
-        return load_local_yolo_settings()
-
-    def _create_app(self) -> FastAPI:
-        return create_local_yolo_app(settings=self.settings, logger=self.logger)
-
-    def _get_health_url(self) -> str:
-        _, health_url = build_local_yolo_urls(self.settings.host, self.settings.port)
-        return health_url
-
-    def _get_startup_message(self) -> str:
-        return "内嵌 YOLO API 已启动"
-
-    def _get_startup_error_prefix(self) -> str:
-        return "内嵌 YOLO API"
-
-    def _get_log_extra(self) -> dict[str, Any]:
-        detect_url, health_url = build_local_yolo_urls(self.settings.host, self.settings.port)
-        return {"detect_url": detect_url, "health_url": health_url}
-
-    @property
-    def detect_url(self) -> str:
-        """Return the detect API URL."""
-        detect_url, _ = build_local_yolo_urls(self.settings.host, self.settings.port)
-        return detect_url
-
-    @property
-    def health_url(self) -> str:
-        """Return the health check URL."""
-        _, health_url = build_local_yolo_urls(self.settings.host, self.settings.port)
-        return health_url
 
 
 # ============================================================================
@@ -283,7 +142,6 @@ class MuyeApplication:
         self.rag_vector_store: VectorStoreManager | None = None
         self.rag_retriever: DecisionRAGRetriever | None = None
         self._background_tasks: set[asyncio.Task[None]] = set()
-        self._evaluation_contexts: dict[str, dict[str, Any]] = {}
 
         self.queue: asyncio.Queue[tuple[str, Path, dict[str, Any]]] = asyncio.Queue()
         self.pending_images: set[str] = set()
@@ -360,6 +218,8 @@ class MuyeApplication:
                 event_bus=self.event_bus,
                 logger=self.logger,
                 timeout_seconds=self.config.multi_agent_timeout_seconds,
+                temperature=self.config.ai_temperature,
+                rag_top_k=self.config.rag_top_k,
             )
             self.logger.info("多智能体会诊模式已启用，providers: %s", list(providers.keys()))
         router = None
@@ -381,6 +241,7 @@ class MuyeApplication:
             rag_retriever=self.rag_retriever,
             consultation=consultation,
             router=router,
+            temperature=self.config.ai_temperature,
         )
         self.drone_controller = DroneController(
             drone_config=self.drone_config,
@@ -393,6 +254,25 @@ class MuyeApplication:
             drone_config=self.drone_config,
             on_new_image=self.enqueue_image,
             logger=self.logger,
+        )
+        self._rag_indexer = RagIndexer(
+            rag_vector_store=self.rag_vector_store,
+            sqlite_store=self.sqlite_store,
+            logger=self.logger,
+            client_ip=self.client_ip,
+            background_tasks=self._background_tasks,
+        )
+        self._mission_manager = MissionManager(
+            config=self.config,
+            sqlite_store=self.sqlite_store,
+            event_bus=self.event_bus,
+            drone_controller=self.drone_controller,
+            image_processor=self.image_processor,
+            logger=self.logger,
+            client_ip=self.client_ip,
+            background_tasks=self._background_tasks,
+            detect_pests_fn=self._detect_pests,
+            rag_index_callback=self._rag_indexer.schedule_mission_rag_index,
         )
 
     def _initialize_rag(self) -> DecisionRAGRetriever | None:
@@ -469,7 +349,6 @@ class MuyeApplication:
         if self.config.drone_backend:
             execution["backend"] = self.config.drone_backend.strip().lower()
 
-        execution["backend"] = "px4"
         execution["simulate_only"] = False
         execution["takeoff_mode"] = self.config.takeoff_mode.strip().lower()
 
@@ -504,14 +383,22 @@ class MuyeApplication:
             self.config.px4_mission_emergency_max_altitude_m
         )
 
+        # DJI OSDK 运行时覆盖
+        dji_osdk_config = self.drone_config.setdefault("dji_osdk", {})
+        dji_osdk_config["execution_mode"] = self.config.dji_osdk_execution_mode
+        dji_osdk_config["serial_port"] = self.config.dji_osdk_serial_port
+        dji_osdk_config["baud_rate"] = self.config.dji_osdk_baud_rate
+        dji_osdk_config["drone_model"] = self.config.dji_osdk_drone_model
+
     def configure_embedded_yolo_api(self, detect_url: str) -> None:
         self.yolo_api_url = detect_url
         self.image_processor.api_url = detect_url
 
     def configure_drone_backend(self, backend: str) -> None:
         normalized = backend.strip().lower()
-        if normalized != "px4":
-            raise ValueError("无人机执行后端已固定为 px4")
+        from modules.drone.backends import BACKEND_REGISTRY
+        if normalized not in BACKEND_REGISTRY:
+            raise ValueError(f"未知的无人机后端: {normalized}，可选: {list(BACKEND_REGISTRY.keys())}")
         self.drone_config.setdefault("execution", {})["backend"] = normalized
         self.drone_config["execution"]["simulate_only"] = False
 
@@ -691,6 +578,11 @@ class MuyeApplication:
                 self._finish_pipeline_no_pests(request_id, image_path, worker_id, started)
                 return
 
+            # Check for active missions with the same pest types
+            if self._has_active_mission_with_same_pests(request_id, detections, field_context):
+                self._finish_pipeline_duplicate_pest(request_id, image_path, worker_id, started, detections)
+                return
+
             # Stage 2: Decision + Compliance
             bundle = await self.decision_engine.generate_decision(
                 pest_detections=detections,
@@ -709,7 +601,7 @@ class MuyeApplication:
                 current_weather=bundle["weather"],
                 detections=detections,
             )
-            self._schedule_incremental_rag_index(
+            self._rag_indexer.schedule_incremental_rag_index(
                 request_id=request_id,
                 decision=bundle["decision"],
                 pest_detections=detections,
@@ -730,26 +622,30 @@ class MuyeApplication:
 
     # ── Pipeline Stage Methods ──
 
-    async def _detect_pests(self, request_id: str, image_path: Path) -> list[dict[str, Any]]:
-        self.event_bus.publish(
-            request_id=request_id,
-            stage="yolo",
-            status="running",
-            message="正在执行 YOLO 识别",
-            payload={"image_path": str(image_path)},
-        )
+    async def _detect_pests(
+        self, request_id: str, image_path: Path, *, publish_events: bool = True,
+    ) -> list[dict[str, Any]]:
+        if publish_events:
+            self.event_bus.publish(
+                request_id=request_id,
+                stage="yolo",
+                status="running",
+                message="正在执行 YOLO 识别",
+                payload={"image_path": str(image_path)},
+            )
         detections = await self.image_processor.detect_pests(
             image_path=image_path,
             request_id=request_id,
             client_ip=self.client_ip,
         )
-        self.event_bus.publish(
-            request_id=request_id,
-            stage="yolo",
-            status="completed",
-            message="YOLO 识别完成",
-            payload={"image_path": str(image_path), "detections": detections},
-        )
+        if publish_events:
+            self.event_bus.publish(
+                request_id=request_id,
+                stage="yolo",
+                status="completed",
+                message="YOLO 识别完成",
+                payload={"image_path": str(image_path), "detections": detections},
+            )
         return detections
 
     def _finish_pipeline_no_pests(
@@ -774,6 +670,78 @@ class MuyeApplication:
             request_id=request_id, client_ip=self.client_ip,
             duration_ms=(time.perf_counter() - started) * 1000,
             image_path=str(image_path), worker_id=worker_id,
+        )
+
+    def _has_active_mission_with_same_pests(
+        self,
+        request_id: str,
+        detections: list[dict[str, Any]],
+        field_context: dict[str, Any],
+    ) -> bool:
+        """Check if there's an active mission targeting the same pest types on the same field."""
+        new_pest_types = set()
+        for det in detections:
+            pt = str(det.get("pest_type") or det.get("label") or "").strip()
+            if pt:
+                new_pest_types.add(pt)
+        if not new_pest_types:
+            return False
+
+        field_id = str(field_context.get("field_id") or "").strip()
+        active_missions = self.sqlite_store.fetch_active_missions()
+
+        for mission in active_missions:
+            if mission.get("original_request_id") == request_id:
+                continue
+            if field_id and mission.get("field_id") != field_id:
+                continue
+
+            mission_pests = mission.get("pest_types", [])
+            if isinstance(mission_pests, str):
+                import json
+                try:
+                    mission_pests = json.loads(mission_pests)
+                except (json.JSONDecodeError, TypeError):
+                    mission_pests = [mission_pests]
+            if not isinstance(mission_pests, list):
+                mission_pests = []
+
+            mission_pest_set = {str(p).strip() for p in mission_pests if p}
+            if new_pest_types & mission_pest_set:
+                return True
+
+        return False
+
+    def _finish_pipeline_duplicate_pest(
+        self,
+        request_id: str,
+        image_path: Path,
+        worker_id: int,
+        started: float,
+        detections: list[dict[str, Any]],
+    ) -> None:
+        """Finish pipeline early because an active mission already handles these pests."""
+        from app.slo import get_slo_metrics
+        pest_labels = [str(d.get("pest_type") or d.get("label") or "") for d in detections]
+        self._sqlite_write(
+            request_id,
+            "mark_task_finished_duplicate",
+            lambda: self.sqlite_store.mark_task_finished(request_id, "completed"),
+        )
+        get_slo_metrics().record_pipeline_complete()
+        self.event_bus.publish(
+            request_id=request_id,
+            stage="pipeline",
+            status="completed",
+            message=f"检测到 {', '.join(pest_labels)}，已有相同害虫的任务正在处理，自动跳过",
+            payload={"image_path": str(image_path), "detections": detections, "skipped_reason": "duplicate_active_mission"},
+        )
+        log_event(
+            self.logger, logging.INFO, "跳过重复害虫任务",
+            request_id=request_id, client_ip=self.client_ip,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            image_path=str(image_path), worker_id=worker_id,
+            pests=pest_labels,
         )
 
     def _persist_decision(self, request_id: str, bundle: dict[str, Any]) -> None:
@@ -922,8 +890,9 @@ class MuyeApplication:
 
         # Stage 6: Schedule re-inspection for effectiveness evaluation
         if self.config.evaluation_enabled:
-            self._schedule_reinspection(
+            self._mission_manager.schedule_reinspection(
                 request_id, bundle["decision"], detections, field_context, image_path,
+                weather=bundle["weather"],
             )
 
     def _handle_pipeline_error(
@@ -953,203 +922,7 @@ class MuyeApplication:
             error=str(exc),
         )
 
-    # ── Evaluation (Closed-loop Re-inspection) ──
-
-    def _schedule_reinspection(
-        self,
-        request_id: str,
-        decision: dict[str, Any],
-        detections: list[dict[str, Any]],
-        field_context: dict[str, Any],
-        image_path: Path,
-    ) -> None:
-        """Schedule a re-inspection after pesticide action time elapses."""
-        import random
-        from datetime import datetime, timedelta, timezone
-
-        medication = decision.get("用药", {})
-        action_time_str = medication.get("预计见效时间", "")
-        action_hours = self._parse_action_time(action_time_str)
-        if action_hours is None:
-            action_hours = self.config.evaluation_default_action_time_hours
-
-        # In demo mode, use a short delay instead of real hours
-        delay_seconds = self.config.evaluation_demo_delay_seconds
-
-        scheduled_at = (datetime.now(timezone.utc) + timedelta(hours=action_hours)).isoformat()
-        pre_pest_count = len(detections)
-
-        evaluation_id = self.sqlite_store.create_evaluation(
-            original_request_id=request_id,
-            scheduled_at=scheduled_at,
-            action_time_hours=action_hours,
-            pre_pest_count=pre_pest_count,
-            kill_rate_threshold=self.config.evaluation_kill_rate_threshold,
-        )
-
-        self.event_bus.publish(
-            request_id=request_id,
-            stage="evaluation",
-            status="scheduled",
-            message=f"已安排药效复检（预计 {action_hours}h 后）",
-            payload={
-                "evaluation_id": evaluation_id,
-                "action_time_hours": action_hours,
-                "pre_pest_count": pre_pest_count,
-                "demo_delay_seconds": delay_seconds,
-            },
-        )
-        log_event(
-            self.logger, logging.INFO, "已安排药效复检",
-            request_id=request_id, client_ip=self.client_ip,
-            evaluation_id=evaluation_id, action_time_hours=action_hours,
-            demo_delay_seconds=delay_seconds,
-        )
-
-        # Store context for re-inspection
-        self._evaluation_contexts[request_id] = {
-            "image_path": image_path,
-            "field_context": field_context,
-            "decision": decision,
-            "detections": detections,
-            "evaluation_id": evaluation_id,
-        }
-
-        asyncio.create_task(self._run_reinspection(evaluation_id, request_id, delay_seconds))
-
-    async def _run_reinspection(
-        self, evaluation_id: int, request_id: str, delay_seconds: float,
-    ) -> None:
-        """Wait for action time, then re-inspect and evaluate effectiveness."""
-        import random
-        from modules.infra.sqlite_store._private import utc_now_iso
-
-        try:
-            await asyncio.sleep(delay_seconds)
-
-            ctx = self._evaluation_contexts.get(request_id)
-            if ctx is None:
-                self.logger.warning("Evaluation context lost for %s", request_id)
-                return
-
-            # Check evaluation wasn't cancelled
-            eval_row = self.sqlite_store.fetch_one(
-                "SELECT status FROM task_evaluations WHERE id = ?", (evaluation_id,)
-            )
-            if not eval_row or eval_row["status"] != "scheduled":
-                self.logger.info("Evaluation %d no longer scheduled, skipping", evaluation_id)
-                return
-
-            # Update status to inspecting
-            self.sqlite_store.update_evaluation(
-                evaluation_id, status="inspecting", inspected_at=utc_now_iso(),
-            )
-            self.event_bus.publish(
-                request_id=request_id,
-                stage="evaluation",
-                status="inspecting",
-                message="无人机正在复检巡飞...",
-                payload={"evaluation_id": evaluation_id},
-            )
-
-            # Run YOLO re-detection on original image
-            detections_after = await self._detect_pests(request_id, ctx["image_path"])
-
-            # Simulate kill rate: reduce detections by a random percentage
-            min_rate = self.config.evaluation_simulated_kill_rate_min
-            max_rate = self.config.evaluation_simulated_kill_rate_max
-            simulated_kill_rate = random.uniform(min_rate, max_rate)
-            pre_count = ctx["detections"].__len__()
-            post_count = max(0, round(pre_count * (1 - simulated_kill_rate)))
-
-            kill_rate, eval_status = self._evaluate_effectiveness(
-                pre_count, post_count, self.config.evaluation_kill_rate_threshold,
-            )
-
-            self.sqlite_store.update_evaluation(
-                evaluation_id,
-                status="evaluated",
-                post_pest_count=post_count,
-                kill_rate=round(kill_rate, 4),
-                evaluated_at=utc_now_iso(),
-                notes=f"模拟杀灭率: {simulated_kill_rate:.0%}, YOLO原始检测: {len(detections_after)}",
-            )
-
-            if eval_status == "passed":
-                self.sqlite_store.update_evaluation(evaluation_id, status="passed")
-                self.event_bus.publish(
-                    request_id=request_id,
-                    stage="evaluation",
-                    status="passed",
-                    message=f"药效评估通过，杀灭率 {kill_rate:.0%}",
-                    payload={
-                        "evaluation_id": evaluation_id,
-                        "kill_rate": kill_rate,
-                        "pre_pest_count": pre_count,
-                        "post_pest_count": post_count,
-                        "threshold": self.config.evaluation_kill_rate_threshold,
-                    },
-                )
-                log_event(
-                    self.logger, logging.INFO, "药效评估通过",
-                    request_id=request_id, client_ip=self.client_ip,
-                    kill_rate=kill_rate, pre=pre_count, post=post_count,
-                )
-            else:
-                self.sqlite_store.update_evaluation(evaluation_id, status="retry_scheduled")
-                self.event_bus.publish(
-                    request_id=request_id,
-                    stage="evaluation",
-                    status="retry_scheduled",
-                    message=f"杀灭率 {kill_rate:.0%} 未达标（阈值 {self.config.evaluation_kill_rate_threshold:.0%}），等待人工确认二次打药",
-                    payload={
-                        "evaluation_id": evaluation_id,
-                        "kill_rate": kill_rate,
-                        "pre_pest_count": pre_count,
-                        "post_pest_count": post_count,
-                        "threshold": self.config.evaluation_kill_rate_threshold,
-                        "needs_confirmation": True,
-                    },
-                )
-                log_event(
-                    self.logger, logging.WARNING, "杀灭率未达标，等待人工确认二次打药",
-                    request_id=request_id, client_ip=self.client_ip,
-                    kill_rate=kill_rate, threshold=self.config.evaluation_kill_rate_threshold,
-                )
-
-        except Exception as exc:
-            self.logger.exception("Re-inspection failed for %s: %s", request_id, exc)
-            self.sqlite_store.update_evaluation(
-                evaluation_id, status="evaluated", notes=f"复检失败: {exc}",
-            )
-
-    @staticmethod
-    def _evaluate_effectiveness(
-        pre_count: int, post_count: int, threshold: float,
-    ) -> tuple[float, str]:
-        """Calculate kill rate and determine if threshold is met."""
-        if pre_count <= 0:
-            return 1.0, "passed"
-        kill_rate = (pre_count - post_count) / pre_count
-        status = "passed" if kill_rate >= threshold else "retry_scheduled"
-        return kill_rate, status
-
-    @staticmethod
-    def _parse_action_time(text: str) -> float | None:
-        """Parse Chinese action time expressions like '24小时', '48-72小时' to hours."""
-        if not text:
-            return None
-        import re
-        match = re.search(r"(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)\s*小时", text)
-        if match:
-            return float(match.group(2))  # use the upper bound
-        match = re.search(r"(\d+(?:\.\d+)?)\s*小时", text)
-        if match:
-            return float(match.group(1))
-        match = re.search(r"(\d+(?:\.\d+)?)\s*天", text)
-        if match:
-            return float(match.group(1)) * 24
-        return None
+    # ── Delegation to MissionManager and RagIndexer ──
 
     def _plan_spray_mission(
         self,
@@ -1186,41 +959,10 @@ class MuyeApplication:
         operation: str,
         callback: Callable[[], None],
     ) -> None:
-        try:
-            callback()
-        except Exception as exc:
-            log_event(
-                self.logger,
-                logging.WARNING,
-                "SQLite 写入失败",
-                request_id=request_id,
-                client_ip=self.client_ip,
-                operation=operation,
-                sqlite_path=str(self.sqlite_store.db_path),
-                error=str(exc),
-            )
-
-    def _schedule_incremental_rag_index(
-        self,
-        *,
-        request_id: str,
-        decision: dict[str, Any],
-        pest_detections: list[dict[str, Any]],
-        field_context: dict[str, Any],
-    ) -> None:
-        if self.rag_vector_store is None:
-            return
-
-        task = asyncio.create_task(
-            self._index_decision_into_rag(
-                request_id=request_id,
-                decision=decision,
-                pest_detections=pest_detections,
-                field_context=field_context,
-            )
+        safe_sqlite_write(
+            self.logger, request_id, self.client_ip,
+            str(self.sqlite_store.db_path), operation, callback,
         )
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
 
     async def _ensure_px4_ready_for_spray(self, request_id: str) -> None:
         execution = self.drone_config.get("execution", {})
@@ -1265,67 +1007,6 @@ class MuyeApplication:
             client_ip=self.client_ip,
             px4=px4_info,
         )
-
-    async def _index_decision_into_rag(
-        self,
-        *,
-        request_id: str,
-        decision: dict[str, Any],
-        pest_detections: list[dict[str, Any]],
-        field_context: dict[str, Any],
-    ) -> None:
-        if self.rag_vector_store is None:
-            return
-
-        pest_types = [
-            str(item.get("pest_type", "")).strip()
-            for item in pest_detections
-            if str(item.get("pest_type", "")).strip()
-        ]
-        crop_cycle = field_context.get("crop_cycle")
-        crop_name = None
-        if isinstance(crop_cycle, dict):
-            candidate = crop_cycle.get("crop_name")
-            if isinstance(candidate, str) and candidate.strip():
-                crop_name = candidate.strip()
-
-        document = build_historical_decision_document(
-            request_id=request_id,
-            decision=decision,
-            pest_types=pest_types,
-            field_id=str(field_context.get("field_id") or ""),
-            crop_name=crop_name,
-        )
-        if document is None:
-            return
-
-        try:
-            loop = asyncio.get_running_loop()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                await loop.run_in_executor(
-                    executor,
-                    self.rag_vector_store.add_documents,
-                    COLLECTION_DECISIONS,
-                    [document],
-                )
-            log_event(
-                self.logger,
-                logging.INFO,
-                "RAG 历史决策增量索引完成",
-                request_id=request_id,
-                client_ip=self.client_ip,
-                pest_types=pest_types,
-                crop_name=crop_name or "",
-            )
-        except Exception as exc:
-            log_event(
-                self.logger,
-                logging.WARNING,
-                "RAG 历史决策增量索引失败",
-                request_id=request_id,
-                client_ip=self.client_ip,
-                error=str(exc),
-            )
 
     async def _wait_until_ready(
         self,
@@ -1393,9 +1074,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--drone-backend",
-        choices=["px4"],
         default="px4",
-        help="无人机执行后端固定为 px4",
+        help="无人机执行后端: px4（PX4 SITL）| dji_osdk（DJI OSDK，支持 Matrice 系列）",
     )
     parser.add_argument(
         "--no-capture-on-startup",

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
+
+from modules.infra.locks import flock_ex as _flock_ex, flock_sh as _flock_sh, flock_un as _flock_un
 import socket
 import subprocess
 import time
@@ -93,7 +94,7 @@ def ensure_pid_dir() -> None:
 def write_pid_file(pid: int, world: str, source: str) -> None:
     ensure_pid_dir()
     with PX4_PID_FILE.open("w", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        _flock_ex(handle)
         handle.write(
             json.dumps(
                 {"pid": pid, "world": world, "source": source, "ts": time.time()},
@@ -101,7 +102,7 @@ def write_pid_file(pid: int, world: str, source: str) -> None:
             )
         )
         handle.flush()
-        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        _flock_un(handle)
 
 
 def read_pid_file() -> dict[str, Any] | None:
@@ -109,9 +110,9 @@ def read_pid_file() -> dict[str, Any] | None:
         return None
     try:
         with PX4_PID_FILE.open("r", encoding="utf-8") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+            _flock_sh(handle)
             content = handle.read()
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            _flock_un(handle)
         data = json.loads(content)
         pid = data.get("pid")
         if not isinstance(pid, int):

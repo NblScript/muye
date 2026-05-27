@@ -75,6 +75,7 @@ class WorkflowTaskState(BaseModel):
     recent_events: list[WorkflowEventEntry]
     error: str | None = None
     evaluation: dict[str, Any] = {}
+    mission: dict[str, Any] = {}
 
 
 class DashboardTaskEntry(BaseModel):
@@ -255,3 +256,47 @@ class EvaluationListResponse(BaseModel):
 
     total: int
     items: list[EvaluationResult]
+
+
+class MissionIterationResult(BaseModel):
+    """One spray+inspect iteration within a mission."""
+
+    iteration_id: int
+    iteration_number: int
+    spray_request_id: str | None = None
+    status: str
+    pre_pest_count: int | None = None
+    post_pest_count: int | None = None
+    kill_rate: float | None = None
+    spray_completed_at: str | None = None
+    inspected_at: str | None = None
+    evaluated_at: str | None = None
+    notes: str | None = None
+
+
+class MissionDetailResponse(BaseModel):
+    """Full mission detail with all iterations."""
+
+    mission_row_id: int
+    mission_uuid: str
+    original_request_id: str
+    field_id: str | None = None
+    status: str
+    kill_rate_threshold: float = 0.9
+    max_iterations: int = 3
+    current_iteration: int = 0
+    final_kill_rate: float | None = None
+    pest_types: list[str] = []
+    pesticide_name: str | None = None
+    crop_name: str | None = None
+    created_at: str | None = None
+    completed_at: str | None = None
+    notes: str | None = None
+    iterations: list[MissionIterationResult] = []
+
+
+class MissionListResponse(BaseModel):
+    """Paginated mission list."""
+
+    total: int
+    items: list[MissionDetailResponse]

@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "smoke:frontend": "vitest run tests/DashboardOverview.test.tsx tests/dashboardLayout.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

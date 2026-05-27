@@ -268,3 +268,66 @@ def load_knowledge_from_docs(docs_dir: Path) -> list[Document]:
             )
 
     return documents
+
+
+def build_mission_summary_document(
+    *,
+    mission: dict[str, object],
+    iterations: list[dict[str, object]] | None = None,
+) -> Document | None:
+    """Build a comprehensive RAG document summarizing a completed mission."""
+    if not mission:
+        return None
+
+    iterations = iterations or []
+    mission_uuid = str(mission.get("mission_id", ""))
+    field_id = str(mission.get("field_id", ""))
+    crop_name = str(mission.get("crop_name", ""))
+    pesticide_name = str(mission.get("pesticide_name", ""))
+    pest_types = mission.get("pest_types")
+    if isinstance(pest_types, str):
+        try:
+            pest_types = json.loads(pest_types)
+        except (json.JSONDecodeError, TypeError):
+            pest_types = [pest_types]
+    if not isinstance(pest_types, list):
+        pest_types = []
+    pest_types_str = ", ".join(str(p) for p in pest_types if p)
+
+    status = str(mission.get("status", ""))
+    final_kill_rate = mission.get("final_kill_rate")
+    threshold = mission.get("kill_rate_threshold", 0.9)
+
+    content_parts = [
+        f"历史任务案例：{mission_uuid}",
+        f"地块：{field_id}",
+        f"作物：{crop_name}",
+        f"害虫：{pest_types_str}",
+        f"用药：{pesticide_name}",
+        f"总轮次：{len(iterations)}",
+        f"目标杀灭率：{float(threshold):.0%}",
+        f"最终杀灭率：{float(final_kill_rate):.0%}" if final_kill_rate is not None else "最终杀灭率：未知",
+        f"任务结果：{'达标' if status == 'completed' else '未达标'}",
+    ]
+
+    for i, it in enumerate(iterations, 1):
+        pre = it.get("pre_pest_count", "-")
+        post = it.get("post_pest_count", "-")
+        kr = it.get("kill_rate")
+        kr_str = f"{float(kr):.0%}" if kr is not None else "-"
+        content_parts.append(f"  第{i}轮: 喷洒前 {pre} 只, 喷洒后 {post} 只, 杀灭率 {kr_str}")
+
+    return Document(
+        page_content="\n".join(content_parts),
+        metadata={
+            "source": "mission_summary",
+            "mission_id": mission_uuid,
+            "field_id": field_id,
+            "pest_types": pest_types_str,
+            "pesticide_name": pesticide_name,
+            "crop_name": crop_name,
+            "final_kill_rate": float(final_kill_rate) if final_kill_rate is not None else 0.0,
+            "iterations_count": len(iterations),
+            "mission_status": status,
+        },
+    )

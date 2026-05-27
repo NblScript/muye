@@ -92,6 +92,7 @@ describe('ExpertPanel', () => {
     const ragContext = {
       confidence: 0.85,
       agreement: 'majority',
+      decision_path: 'multi_agent' as const,
       consultation_detail: {
         active_count: 3,
         experts: {
@@ -110,8 +111,40 @@ describe('ExpertPanel', () => {
     expect(screen.getByText('昆虫学家')).toBeInTheDocument()
     expect(screen.getByText('农学家')).toBeInTheDocument()
     expect(screen.getByText('植保专家')).toBeInTheDocument()
-    expect(screen.getByText('多数通过')).toBeInTheDocument()
+    expect(screen.getAllByText('多数通过').length).toBeGreaterThan(0)
     expect(screen.getByText('会诊结论')).toBeInTheDocument()
+  })
+
+  it('renders detailed consultation metadata for each expert', () => {
+    const ragContext = {
+      confidence: 0.65,
+      agreement: 'majority',
+      decision_path: 'multi_agent' as const,
+      consultation_detail: {
+        active_count: 3,
+        experts: {
+          entomologist: { name: '昆虫学家', weight: 0.4, '农药名称': '吡虫啉', '总量': '1.2 L' },
+          agronomist: { name: '农学家', weight: 0.35, '农药名称': '噻虫嗪', '总量': '1.0 L' },
+          pesticide_specialist: { name: '植保专家', weight: 0.25, '农药名称': '吡虫啉', '总量': '1.1 L' },
+        },
+        failed_roles: [],
+        vote_distribution: { '吡虫啉': 0.65, '噻虫嗪': 0.35 },
+      },
+    }
+
+    render(<ExpertPanel ragContext={ragContext} />)
+
+    expect(screen.getByText('决策路径')).toBeInTheDocument()
+    expect(screen.getByText('失败专家')).toBeInTheDocument()
+    expect(screen.getByText('昆虫分类与危害评估')).toBeInTheDocument()
+    expect(screen.getByText('作物阶段与农艺约束')).toBeInTheDocument()
+    expect(screen.getByText('药剂安全与合规复核')).toBeInTheDocument()
+    expect(screen.getByText('模型 Qwen')).toBeInTheDocument()
+    expect(screen.getByText('权重 40%')).toBeInTheDocument()
+    expect(screen.getByText('总量 1.2 L')).toBeInTheDocument()
+    expect(screen.getAllByText('采用').length).toBeGreaterThan(0)
+    expect(screen.getByText('最终采用')).toBeInTheDocument()
+    expect(screen.getByText('由昆虫学家方案进入执行')).toBeInTheDocument()
   })
 
   it('renders failed expert status', () => {

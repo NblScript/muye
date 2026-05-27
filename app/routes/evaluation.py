@@ -70,7 +70,7 @@ async def cancel_evaluation(request_id: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="未找到评估记录")
     if row["status"] not in ("scheduled", "retry_scheduled"):
         raise HTTPException(status_code=400, detail="当前状态不允许取消")
-    store.update_evaluation(row["id"], status="evaluated", notes="用户手动取消")
+    store.update_evaluation(row["id"], status="cancelled", notes="用户手动取消")
     return {"status": "cancelled", "request_id": request_id}
 
 

@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -869,8 +870,9 @@ def test_main_incrementally_indexes_decision_into_rag(tmp_path) -> None:
 
         fake_store = FakeVectorStore()
         app.rag_vector_store = fake_store  # type: ignore[assignment]
+        app._rag_indexer.rag_vector_store = fake_store
         try:
-            await app._index_decision_into_rag(
+            await app._rag_indexer._index_decision_into_rag(
                 request_id="req-rag-1",
                 decision={
                     "用药": {
@@ -1783,7 +1785,7 @@ def test_stop_px4_stops_running_process(monkeypatch, tmp_path) -> None:
     _write_pid_file(pid_file, pid=33333, source="api")
 
     monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: True)
-    monkeypatch.setattr(drone_mod, "_kill_px4_process", lambda pid: None)
+    monkeypatch.setattr(drone_mod, "_kill_px4_process", AsyncMock())
 
     result = asyncio.run(stop_px4_demo())
     assert result == {"status": "stopped", "pid": "33333", "source": "api"}
@@ -1912,7 +1914,7 @@ def test_start_px4_timeout_returns_504(monkeypatch, tmp_path) -> None:
     _setup_px4_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
     monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
-    monkeypatch.setattr(drone_mod, "_kill_px4_process", lambda pid: None)
+    monkeypatch.setattr(drone_mod, "_kill_px4_process", AsyncMock())
 
     px4_dir = tmp_path / "px4"
     px4_dir.mkdir()

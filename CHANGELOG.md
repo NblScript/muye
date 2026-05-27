@@ -1,5 +1,42 @@
 # Changelog
 
+## [最新]
+
+### 密度热力图 + 变量喷洒可视化
+
+- **前端密度热力图渲染**：后端 `density_grid` 数据通过 workflow state 传递到前端，GPS→SVG 投影渲染
+- **变量喷洒航线着色**：每条航线段按喷洒速率差异化着色（高密度红/中密度琥珀/低密度绿）+ 粗细变化
+- **图例与统计**：地图图例增加三级密度标注，侧边栏增加密度统计卡片（网格数、最高密度、喷洒速率范围）
+- **无人机转弯加速**：直线速度不变，转弯区域（靠近航点）速度提高至 4 倍
+- **Bug 修复**：`GET /drone/density-map` 端点 SQL 查询错误（`tasks.drone_instruction` 列不存在，改为 `drone_mission_updates.instruction`）
+- **Demo seed 数据**：注入模拟密度网格（8×10 格，中心高密度梯度分布）和差异化喷洒速率
+
+### 文档全面更新
+
+- **db-schema.md**：从实际 DDL 重写，补齐 8 个缺失表，修正全部列定义
+- **api.md**：补齐 `/demo/readiness`、`/drone/start-px4-demo`、`/drone/stop-px4-demo` 端点
+- **索引文件**：新增 `docs/knowledge/index.md`、`docs/superpowers/index.md`
+- **测试数据**：更新 DESIGN.md/QUALITY_SCORE.md 测试数量（347+ 后端，60 前端）
+- **PRODUCT_SENSE.md**：暗色主题→暖色主题
+- **PLANS.md**：补齐多智能体会诊、合规推理链、密度热力图等已完成项
+
+### Bug 修复（6 项）
+
+- **PX4 进程未被终止**：`app/routes/drone.py` 中 `_kill_px4_process` 是 async 函数但调用处缺少 `await`，导致 PX4 进程无法被终止。修复：添加 `await`，测试改用 `AsyncMock`
+- **评估取消状态不一致**：`cancel_evaluation` 写入 DB 状态为 `evaluated` 但 API 返回 `cancelled`，且 CHECK 约束不含 `cancelled`。修复：CHECK 约束添加 `cancelled`，写入改为 `cancelled`，文档同步
+- **任务循环未跟踪**：`_run_mission_loop` 的 `asyncio.create_task` 未加入 `_background_tasks`，关闭时无法取消。修复：添加到 `_background_tasks` 并注册 done callback
+- **评估上下文内存泄漏**：`_evaluation_contexts` 字典只增不减。修复：在 `_run_mission_loop` 的 `finally` 块中清理
+- **复检产生虚假 YOLO 事件**：复检时 `_detect_pests` 向事件总线发布事件覆盖原始任务状态。修复：`_detect_pests` 新增 `publish_events` 参数，复检时传 `False`
+- **`get_sqlite_store` 线程不安全**：手动单例无锁保护，且 `_SQLITE_PATH` 在模块导入时求值导致测试隔离失效。修复：添加 `threading.Lock`，路径改为惰性计算，新增 `reset_sqlite_store()` 供测试使用
+
+### 无人机后端配置化
+
+- 解除 `--drone-backend` 的 px4 硬编码限制，支持通过 `DRONE_BACKEND` 环境变量切换后端
+- `app/main.py` 删除 `execution["backend"] = "px4"` 硬覆盖，改为从配置和环境变量读取
+- `configure_drone_backend()` 改为基于 `BACKEND_REGISTRY` 注册表校验
+- `run.sh` 从 `DRONE_BACKEND` 环境变量读取后端（默认 `px4`），支持 `DRONE_BACKEND=dji_osdk` 切换到 DJI OSDK
+- `.env.production` 添加无人机后端和 DJI OSDK 配置项
+
 ## Unreleased
 
 - 演示天气固定：

@@ -293,7 +293,7 @@ CREATE TABLE IF NOT EXISTS task_evaluations (
   original_request_id TEXT NOT NULL REFERENCES tasks(request_id),
   reinspect_request_id TEXT REFERENCES tasks(request_id),
   status TEXT NOT NULL DEFAULT 'scheduled'
-    CHECK(status IN ('scheduled','inspecting','evaluated','retry_scheduled','passed')),
+    CHECK(status IN ('scheduled','inspecting','evaluated','retry_scheduled','passed','cancelled')),
   scheduled_at DATETIME NOT NULL,
   inspected_at DATETIME,
   evaluated_at DATETIME,
@@ -310,6 +310,55 @@ CREATE INDEX IF NOT EXISTS idx_eval_original
 ON task_evaluations(original_request_id);
 CREATE INDEX IF NOT EXISTS idx_eval_status
 ON task_evaluations(status);
+
+CREATE TABLE IF NOT EXISTS missions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mission_id TEXT UNIQUE NOT NULL,
+  original_request_id TEXT NOT NULL,
+  field_id TEXT,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK(status IN ('active','completed','failed','cancelled')),
+  kill_rate_threshold REAL NOT NULL DEFAULT 0.9,
+  max_iterations INTEGER NOT NULL DEFAULT 3,
+  current_iteration INTEGER NOT NULL DEFAULT 0,
+  final_kill_rate REAL,
+  total_pre_pest_count INTEGER,
+  total_post_pest_count INTEGER,
+  pest_types TEXT,
+  pesticide_name TEXT,
+  crop_name TEXT,
+  created_at DATETIME NOT NULL,
+  completed_at DATETIME,
+  notes TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_missions_mission_id
+ON missions(mission_id);
+CREATE INDEX IF NOT EXISTS idx_missions_original_request_id
+ON missions(original_request_id);
+CREATE INDEX IF NOT EXISTS idx_missions_status
+ON missions(status);
+
+CREATE TABLE IF NOT EXISTS mission_iterations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mission_id TEXT NOT NULL,
+  iteration_number INTEGER NOT NULL,
+  spray_request_id TEXT,
+  evaluation_id INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK(status IN ('pending','spraying','inspecting','evaluated','passed','failed')),
+  pre_pest_count INTEGER,
+  post_pest_count INTEGER,
+  kill_rate REAL,
+  captured_images TEXT,
+  created_at DATETIME NOT NULL,
+  spray_completed_at DATETIME,
+  inspected_at DATETIME,
+  evaluated_at DATETIME,
+  notes TEXT,
+  UNIQUE(mission_id, iteration_number)
+);
+CREATE INDEX IF NOT EXISTS idx_mission_iter_mission_id
+ON mission_iterations(mission_id);
 """
 
 from modules.infra.sqlite_store._private import utc_now_iso

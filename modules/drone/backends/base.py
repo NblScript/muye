@@ -47,3 +47,13 @@ class DroneBackend(ABC):
     async def get_status(self) -> dict[str, Any]:
         """获取后端状态（连接状态、无人机型号等）。"""
         return {}
+
+    @abstractmethod
+    async def execute_inspection_mission(
+        self,
+        *,
+        request_id: str,
+        execution_plan: dict[str, Any],
+        on_status: StatusCallback | None = None,
+    ) -> dict[str, Any]:
+        """执行巡检任务（飞行但不喷洒，在每个航点采集图片）。"""

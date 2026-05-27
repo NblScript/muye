@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -26,16 +27,33 @@ from app.deps import iso_utc_offset
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-_SQLITE_PATH = Path(os.getenv("MUYE_SQLITE_PATH", str(Path.home() / ".muye" / "data" / "muye.db")))
 _SQLITE_STORE: SqliteStore | None = None
+_SQLITE_STORE_LOCK = threading.Lock()
+
+
+def _get_sqlite_path() -> Path:
+    """Resolve SQLite path lazily (supports monkeypatch after import)."""
+    return Path(os.getenv("MUYE_SQLITE_PATH", str(Path.home() / ".muye" / "data" / "muye.db")))
 
 
 def get_sqlite_store() -> SqliteStore:
-    """Get the shared SqliteStore instance (singleton)."""
+    """Get the shared SqliteStore instance (thread-safe singleton)."""
     global _SQLITE_STORE
-    if _SQLITE_STORE is None:
-        _SQLITE_STORE = SqliteStore(_SQLITE_PATH)
-    return _SQLITE_STORE
+    if _SQLITE_STORE is not None:
+        return _SQLITE_STORE
+    with _SQLITE_STORE_LOCK:
+        if _SQLITE_STORE is None:
+            _SQLITE_STORE = SqliteStore(_get_sqlite_path())
+        return _SQLITE_STORE
+
+
+def reset_sqlite_store() -> None:
+    """Reset the singleton (for testing)."""
+    global _SQLITE_STORE
+    with _SQLITE_STORE_LOCK:
+        if _SQLITE_STORE is not None:
+            _SQLITE_STORE.close()
+            _SQLITE_STORE = None
 
 
 @lru_cache(maxsize=1)
@@ -176,6 +194,7 @@ def merge_sqlite_tasks_with_events(
             merged_task["events"] = event_task.get("events", [])
             merged_task["error"] = event_task.get("error") or sqlite_task.get("error")
             merged_task["evaluation"] = event_task.get("evaluation") or {}
+            merged_task["mission"] = event_task.get("mission") or {}
         merged_task["field"] = merge_runtime_field_hints(
             merged_task.get("field", {}) or {},
             merged_task.get("drone", {}) or {},
@@ -438,6 +457,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
                 "compliance": latest_structured.get("compliance", {}) or {},
                 "error": latest_structured.get("error"),
                 "evaluation": latest_structured.get("evaluation") or {},
+                "mission": latest_structured.get("mission") or {},
             }
         )
         fallback.recent_tasks = build_recent_task_entries(tasks, current_request_id=fallback.latest_task.request_id)
@@ -483,6 +503,7 @@ def build_workflow_state_response() -> WorkflowStateResponse:
         recent_events=recent_events,
         error=latest.get("error"),
         evaluation=latest.get("evaluation") or {},
+        mission=latest.get("mission") or {},
     )
     return WorkflowStateResponse(
         source="event_bus",

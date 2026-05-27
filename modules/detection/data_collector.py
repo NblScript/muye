@@ -190,3 +190,33 @@ class DataCollectorService:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=interval_seconds)
             except asyncio.TimeoutError:
                 await self.capture_image()
+
+    async def capture_inspection_image(
+        self,
+        request_id: str,
+        waypoint_index: int,
+    ) -> Path:
+        """Capture an image during inspection flight.
+
+        Unlike capture_image(), this writes to a predictable filename
+        containing request_id and waypoint index, and does NOT trigger
+        the watchdog pipeline.
+        """
+        self.images_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"reinspect-{request_id[:12]}-wp{waypoint_index}_{time.strftime('%Y%m%d-%H%M%S')}.jpg"
+        target = self.images_dir / filename
+
+        if self.simulate_capture or not self.capture_endpoint:
+            target.write_bytes(MINIMAL_JPEG)
+        else:
+            if self.capture_method == "POST":
+                response = await self._client.post(self.capture_endpoint)
+            else:
+                response = await self._client.get(self.capture_endpoint)
+            response.raise_for_status()
+            content = response.content
+            if not content:
+                raise CollectorError("巡检拍照返回空图像内容")
+            target.write_bytes(content)
+
+        return target
