@@ -41,21 +41,12 @@ export default function ModelSwitcher() {
   return (
     <Card className="dashboard-card">
       <span className="label-uppercase">检测模型</span>
-      <div style={{ marginTop: 12 }}>
+      <div className="model-switcher">
         <select
           value={activeModel}
           onChange={(e) => handleSwitch(e.target.value)}
           disabled={switching}
-          style={{
-            width: '100%',
-            padding: '6px 8px',
-            background: 'var(--bg-elevated)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 12,
-            cursor: switching ? 'wait' : 'pointer',
-          }}
+          className={`model-switcher-select ${switching ? 'is-switching' : ''}`}
         >
           {models.map((m) => (
             <option key={m.name} value={m.name} disabled={!m.available}>
@@ -65,13 +56,11 @@ export default function ModelSwitcher() {
         </select>
 
         {error && (
-          <div style={{ marginTop: 8, fontSize: 11, color: 'var(--accent-terracotta)' }}>
-            {error}
-          </div>
+          <div className="model-switcher-error">{error}</div>
         )}
 
         {models.map((m) => m.name === activeModel && (
-          <div key={m.name} style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+          <div key={m.name} className="model-switcher-info">
             设备: {m.device} · 路径: {m.path.split('/').pop()}
           </div>
         ))}

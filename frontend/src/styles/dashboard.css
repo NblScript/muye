@@ -3037,3 +3037,171 @@
   padding: 6px 18px;
   cursor: pointer;
 }
+
+/* ── DJI Status Card ── */
+.dji-card {
+  margin-top: 12px;
+}
+
+.dji-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dji-model-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.dji-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dji-badge.connected {
+  background: rgba(90, 138, 106, 0.15);
+  color: var(--accent-green);
+}
+
+.dji-badge.disconnected {
+  background: rgba(184, 112, 90, 0.15);
+  color: var(--accent-terracotta);
+}
+
+.dji-mode-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.dji-telemetry-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.dji-metric {
+  padding: 6px 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.dji-metric-label {
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.dji-metric-value {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* ── Model Switcher ── */
+.model-switcher {
+  margin-top: 12px;
+}
+
+.model-switcher-select {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.model-switcher-select.is-switching {
+  cursor: wait;
+}
+
+.model-switcher-error {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--accent-terracotta);
+}
+
+.model-switcher-info {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ── History Page Responsive ── */
+.history-stats-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .history-stats-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* ── Health Pulse Indicator ── */
+.health-pulse-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  margin-right: 6px;
+  animation: health-pulse 2s ease-in-out infinite;
+}
+
+@keyframes health-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Task List Item ── */
+.task-item-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+/* ── Doc List (DecisionFlow Drawer) ── */
+.doc-list-section {
+  margin-bottom: 20px;
+}
+
+/* ── Agronomy Tips List ── */
+.agronomy-tips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── History Trend Card ── */
+.history-trend-card {
+  margin-bottom: 24px;
+}
+
+/* ── Settings Page ── */
+.settings-card {
+  margin-bottom: 24px;
+}
+
+.settings-submit-btn {
+  margin-top: 16px;
+}
+
+/* ── Workflow Panel ── */
+.workflow-center-actions {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+}

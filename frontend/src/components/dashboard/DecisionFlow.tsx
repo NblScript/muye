@@ -126,7 +126,7 @@ function hasRagContext(ctx: RagContext | undefined): boolean {
 function DocList({ title, docs, color }: { title: string; docs: RagDocument[]; color: string }) {
   if (docs.length === 0) return null
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div className="doc-list-section">
       <h4 className="drawer-doc-title" style={{ color }}>{title}</h4>
       <div className="drawer-doc-list">
         {docs.map((doc, i) => (
@@ -396,7 +396,7 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
         {agronomyTips.length > 0 && (
           <section className="drawer-section">
             <h4 className="drawer-section-title" style={{ color: 'var(--accent-amber)' }}>🌾 农事建议</h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="agronomy-tips-list">
               {agronomyTips.map((tip, i) => (
                 <div key={i} className="agronomy-tip-item">{tip}</div>
               ))}

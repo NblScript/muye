@@ -89,10 +89,10 @@ export default function History() {
   const innerH = chartH - padY * 2
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 24, fontWeight: 600 }}>喷洒历史报表</h2>
+    <div className="page-container-lg">
+      <h2 className="page-title">喷洒历史报表</h2>
 
-      <div style={{ display: 'flex', gap: 24, marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className="history-stats-row">
         <Card className="history-stat-card">
           <div className="history-stat-label">总任务数</div>
           <div className="history-stat-value">{stats.total}</div>
@@ -110,8 +110,8 @@ export default function History() {
       </div>
 
       {trend && (
-        <Card title="任务趋势" style={{ marginBottom: 24 }}>
-          <svg width={chartW} height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
+        <Card title="任务趋势" className="history-trend-card">
+          <svg width="100%" height={chartH} viewBox={`0 0 ${chartW} ${chartH}`}>
             {/* Y-axis line */}
             <line x1={padX} y1={padY} x2={padX} y2={chartH - padY} stroke="var(--border-default)" strokeWidth="0.5" />
             <line x1={padX} y1={chartH - padY} x2={chartW - padX} y2={chartH - padY} stroke="var(--border-default)" strokeWidth="0.5" />

@@ -41,24 +41,20 @@ export default function DJIStatusCard() {
   return (
     <Card className="dashboard-card">
       <span className="label-uppercase">DJI 无人机</span>
-      <div style={{ marginTop: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>{status.drone_model}</span>
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-            background: connected ? 'rgba(90, 138, 106, 0.15)' : 'rgba(184, 112, 90, 0.15)',
-            color: connected ? 'var(--accent-green)' : 'var(--accent-terracotta)',
-          }}>
+      <div className="dji-card">
+        <div className="dji-header">
+          <span className="dji-model-name">{status.drone_model}</span>
+          <span className={`dji-badge ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? '已连接' : '未连接'}
           </span>
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
+        <div className="dji-mode-label">
           {modeLabel} · {status.backend}
         </div>
 
         {telemetry && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div className="dji-telemetry-grid">
             <MetricItem label="电量" value={`${telemetry.battery_percent.toFixed(0)}%`} />
             <MetricItem label="高度" value={`${telemetry.altitude.toFixed(1)} m`} />
             <MetricItem
@@ -78,14 +74,9 @@ export default function DJIStatusCard() {
 
 function MetricItem({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{
-      padding: '6px 8px',
-      background: 'var(--bg-elevated)',
-      borderRadius: 'var(--radius-sm)',
-      fontSize: 11,
-    }}>
-      <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{value}</div>
+    <div className="dji-metric">
+      <div className="dji-metric-label">{label}</div>
+      <div className="dji-metric-value">{value}</div>
     </div>
   )
 }

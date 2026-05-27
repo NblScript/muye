@@ -5,6 +5,42 @@ import type { WorkflowDetectionEntry } from '../../types/workflow'
 import { mapCenter, type FieldPlot, type FieldStatus } from './mapData'
 import { computeCommandPoint } from './commandPoint'
 
+const C = {
+  fieldActive: '#089cc5',
+  fieldCompleted: '#16875a',
+  fieldIdle: '#6f63d9',
+  droneActive: '#089cc5',
+  droneReturningStroke: '#6f63d9',
+  droneReturningFill: '#8a7cf0',
+  trajectoryStart: '#089cc5',
+  trajectoryMid: '#6f63d9',
+  trajectoryEnd: '#d96d2d',
+  mapBg: '#f6f9ff',
+  text: '#102033',
+  textStroke: 'rgba(255, 255, 255, 0.85)',
+  textStrokeLight: 'rgba(255, 255, 255, 0.88)',
+  textStrokeLight2: 'rgba(255, 255, 255, 0.84)',
+  coverage: '#d96d2d',
+  plannedRoute: '#0f766e',
+  waypointStart: '#42d392',
+  detection: '#c73758',
+  commandPoint: '#d78d1f',
+  heatmapHigh: 'rgba(192, 96, 90, 0.35)',
+  heatmapMedium: 'rgba(196, 138, 42, 0.30)',
+  heatmapLow: 'rgba(90, 138, 106, 0.25)',
+  heatmapMinimal: 'rgba(90, 138, 106, 0.12)',
+  gridStroke: 'rgba(32, 91, 154, 0.10)',
+  overlayFill: 'rgba(255, 255, 255, 0.46)',
+  overlayStroke: 'rgba(32, 91, 154, 0.12)',
+  routeOutline: 'rgba(255, 255, 255, 0.92)',
+  waypointStroke: 'rgba(255, 255, 255, 0.72)',
+  sprayingBg: 'rgba(22, 135, 90, 0.08)',
+  sprayingBorder: 'rgba(22, 135, 90, 0.2)',
+  waitingBg: 'rgba(215, 141, 31, 0.08)',
+  waitingBorder: 'rgba(215, 141, 31, 0.2)',
+  commandRing: 'rgba(215, 141, 31, 0.25)',
+}
+
 type FieldMapProps = {
   droneStatus?: string
   detections?: WorkflowDetectionEntry[]
@@ -13,47 +49,26 @@ type FieldMapProps = {
 
 function fieldStatusStyle(status: FieldStatus) {
   if (status === '作业中') {
-    return {
-      stroke: '#089cc5',
-      fill: '#089cc5',
-      fillOpacity: 0.12,
-    }
+    return { stroke: C.fieldActive, fill: C.fieldActive, fillOpacity: 0.12 }
   }
 
   if (status === '已完成') {
-    return {
-      stroke: '#16875a',
-      fill: '#16875a',
-      fillOpacity: 0.12,
-    }
+    return { stroke: C.fieldCompleted, fill: C.fieldCompleted, fillOpacity: 0.12 }
   }
 
-  return {
-    stroke: '#6f63d9',
-    fill: '#6f63d9',
-    fillOpacity: 0.12,
-  }
+  return { stroke: C.fieldIdle, fill: C.fieldIdle, fillOpacity: 0.12 }
 }
 
 function droneStatusStyle(status: SimDroneState['status']) {
   if (status === '作业中') {
-    return {
-      stroke: '#089cc5',
-      fill: '#089cc5',
-    }
+    return { stroke: C.droneActive, fill: C.droneActive }
   }
 
   if (status === '返航') {
-    return {
-      stroke: '#6f63d9',
-      fill: '#8a7cf0',
-    }
+    return { stroke: C.droneReturningStroke, fill: C.droneReturningFill }
   }
 
-  return {
-    stroke: '#6f63d9',
-    fill: '#8a7cf0',
-  }
+  return { stroke: C.droneReturningStroke, fill: C.droneReturningFill }
 }
 
 function buildDemoFallbackField(): FieldPlot {
@@ -368,10 +383,10 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
   const viewBox = '0 0 160 100'
 
   const densityColor = (d: number) => {
-    if (d >= 0.8) return 'rgba(192, 96, 90, 0.35)'
-    if (d >= 0.6) return 'rgba(196, 138, 42, 0.30)'
-    if (d >= 0.3) return 'rgba(90, 138, 106, 0.25)'
-    return 'rgba(90, 138, 106, 0.12)'
+    if (d >= 0.8) return C.heatmapHigh
+    if (d >= 0.6) return C.heatmapMedium
+    if (d >= 0.3) return C.heatmapLow
+    return C.heatmapMinimal
   }
 
   return (
@@ -386,7 +401,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
         >
         <defs>
           <pattern id="map-grid" width="8" height="8" patternUnits="userSpaceOnUse">
-            <path d="M 8 0 L 0 0 0 8" fill="none" stroke="rgba(32, 91, 154, 0.10)" strokeWidth="0.35" />
+            <path d="M 8 0 L 0 0 0 8" fill="none" stroke={C.gridStroke} strokeWidth="0.35" />
           </pattern>
           <filter id="drone-glow">
             <feGaussianBlur stdDeviation="1.2" result="coloredBlur" />
@@ -396,21 +411,21 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
             </feMerge>
           </filter>
           <linearGradient id="trajectory-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#089cc5" />
-            <stop offset="50%" stopColor="#6f63d9" />
-            <stop offset="100%" stopColor="#d96d2d" />
+            <stop offset="0%" stopColor={C.trajectoryStart} />
+            <stop offset="50%" stopColor={C.trajectoryMid} />
+            <stop offset="100%" stopColor={C.trajectoryEnd} />
           </linearGradient>
         </defs>
 
-        <rect x="0" y="0" width="160" height="100" fill="#f6f9ff" />
+        <rect x="0" y="0" width="160" height="100" fill={C.mapBg} />
         <rect x="0" y="0" width="160" height="100" fill="url(#map-grid)" opacity="0.7" />
         <rect
           x="0"
           y="0"
           width="160"
           height="100"
-          fill="rgba(255, 255, 255, 0.46)"
-          stroke="rgba(32, 91, 154, 0.12)"
+          fill={C.overlayFill}
+          stroke={C.overlayStroke}
           strokeWidth="0.5"
         />
 
@@ -430,8 +445,8 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                 y={fieldItem.center[0]}
                 textAnchor="middle"
                 fontSize="4"
-                fill="#102033"
-                stroke="rgba(255, 255, 255, 0.85)"
+                fill={C.text}
+                stroke={C.textStroke}
                 strokeWidth="0.5"
                 paintOrder="stroke"
               >
@@ -460,9 +475,9 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
         {coveragePoints.length >= 3 ? (
           <polygon
             points={toSvgPoints(coveragePoints)}
-            fill="#d96d2d"
+            fill={C.coverage}
             fillOpacity="0.08"
-            stroke="#d96d2d"
+            stroke={C.coverage}
             strokeWidth="0.8"
             strokeDasharray="2 2"
           />
@@ -473,7 +488,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
             <polyline
               points={toSvgPoints(routePoints)}
               fill="none"
-              stroke="rgba(255, 255, 255, 0.92)"
+              stroke={C.routeOutline}
               strokeWidth="3.2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -481,7 +496,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
             <polyline
               points={toSvgPoints(routePoints)}
               fill="none"
-              stroke="#0f766e"
+              stroke={C.plannedRoute}
               strokeWidth="1.8"
               strokeDasharray="3 1.6"
               strokeLinecap="round"
@@ -495,7 +510,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                   cy={point[0]}
                   r={index === 0 ? 2 : 1.35}
                   fill={index === 0 ? '#42d392' : '#16875a'}
-                  stroke="rgba(255, 255, 255, 0.72)"
+                  stroke={C.waypointStroke}
                   strokeWidth="0.7"
                 />
                 {index === 0 ? (
@@ -503,8 +518,8 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                     x={point[1] + 1.8}
                     y={point[0] - 1.2}
                     fontSize="3"
-                    fill="#102033"
-                    stroke="rgba(255, 255, 255, 0.85)"
+                    fill={C.text}
+                    stroke={C.textStroke}
                     strokeWidth="0.4"
                     paintOrder="stroke"
                   >
@@ -536,7 +551,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
               <g opacity="0.86">
                 <path
                   d={`M ${drone.position.x} ${drone.position.y + 1.8} L ${drone.position.x - 4.6} ${drone.position.y + 8.2} L ${drone.position.x + 4.6} ${drone.position.y + 8.2} Z`}
-                  fill="#16875a"
+                  fill={C.fieldCompleted}
                   fillOpacity="0.12"
                 />
                 <ellipse
@@ -544,12 +559,12 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                   cy={drone.position.y + 8.2}
                   rx="5.2"
                   ry="1.35"
-                  fill="#16875a"
+                  fill={C.fieldCompleted}
                   fillOpacity="0.16"
                 />
-                <circle cx={drone.position.x - 2.8} cy={drone.position.y + 5.8} r="0.45" fill="#42d392" fillOpacity="0.52" />
-                <circle cx={drone.position.x} cy={drone.position.y + 6.9} r="0.38" fill="#42d392" fillOpacity="0.46" />
-                <circle cx={drone.position.x + 2.6} cy={drone.position.y + 5.5} r="0.42" fill="#42d392" fillOpacity="0.5" />
+                <circle cx={drone.position.x - 2.8} cy={drone.position.y + 5.8} r="0.45" fill={C.waypointStart} fillOpacity="0.52" />
+                <circle cx={drone.position.x} cy={drone.position.y + 6.9} r="0.38" fill={C.waypointStart} fillOpacity="0.46" />
+                <circle cx={drone.position.x + 2.6} cy={drone.position.y + 5.5} r="0.42" fill={C.waypointStart} fillOpacity="0.5" />
               </g>
               <circle
                 cx={drone.position.x}
@@ -565,7 +580,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                 cy={drone.position.y}
                 r="1.5"
                 fill={style.fill}
-                stroke="#102033"
+                stroke={C.text}
                 strokeWidth="0.4"
               />
               <text
@@ -573,8 +588,8 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
                 y={drone.position.y - 3.4}
                 textAnchor="middle"
                 fontSize="3.2"
-                fill="#102033"
-                stroke="rgba(255, 255, 255, 0.88)"
+                fill={C.text}
+                stroke={C.textStrokeLight}
                 strokeWidth="0.45"
                 paintOrder="stroke"
               >
@@ -590,29 +605,29 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
               cx={marker.point[1]}
               cy={marker.point[0]}
               r="1.8"
-              fill="#c73758"
+              fill={C.detection}
               fillOpacity="0.15"
-              stroke="#c73758"
+              stroke={C.detection}
               strokeWidth="0.5"
             />
             <circle
               cx={marker.point[1]}
               cy={marker.point[0]}
               r="0.8"
-              fill="#c73758"
+              fill={C.detection}
             />
           </g>
         ))}
 
         <g>
-          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="1.4" fill="#d78d1f" stroke="#102033" strokeWidth="0.4" />
-          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="2.8" fill="none" stroke="rgba(215, 141, 31, 0.25)" strokeWidth="0.7" />
+          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="1.4" fill={C.commandPoint} stroke={C.text} strokeWidth="0.4" />
+          <circle cx={commandPoint[1]} cy={commandPoint[0]} r="2.8" fill="none" stroke={C.commandRing} strokeWidth="0.7" />
           <text
             x={commandPoint[1] + 2.2}
             y={commandPoint[0] - 1.6}
             fontSize="3"
-            fill="#102033"
-            stroke="rgba(255, 255, 255, 0.84)"
+            fill={C.text}
+            stroke={C.textStrokeLight2}
             strokeWidth="0.4"
             paintOrder="stroke"
           >
@@ -633,8 +648,8 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule: 
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
             color: isSpraying ? 'var(--accent-green)' : 'var(--accent-amber)',
-            background: isSpraying ? 'rgba(22, 135, 90, 0.08)' : 'rgba(215, 141, 31, 0.08)',
-            borderColor: isSpraying ? 'rgba(22, 135, 90, 0.2)' : 'rgba(215, 141, 31, 0.2)',
+            background: isSpraying ? C.sprayingBg : C.waitingBg,
+            borderColor: isSpraying ? C.sprayingBorder : C.waitingBorder,
           }}
         >
           {isSpraying ? 'PX4 喷洒中' : '等待任务'}

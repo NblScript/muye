@@ -181,7 +181,7 @@ export default function WorkflowPanel({ data, loading = false, error = null }: W
       )}
 
       {isPendingConfirmation && (
-        <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0' }}>
+        <div className="workflow-center-actions">
           <Button
             variant="primary"
             size="lg"

@@ -102,12 +102,12 @@ export default function Settings() {
   const healthChecks = health?.checks ? Object.entries(health.checks) : []
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 24, fontWeight: 600 }}>系统设置</h2>
+    <div className="page-container">
+      <h2 className="page-title">系统设置</h2>
 
       <Card
         title="系统预检"
-        style={{ marginBottom: 24 }}
+        className="settings-card"
         extra={(
           <Button size="sm" loading={healthLoading} onClick={() => void loadHealth()}>
             刷新
@@ -117,7 +117,7 @@ export default function Settings() {
         {healthLoading && !health ? (
           <span className="spinner" />
         ) : healthError && !health ? (
-          <span style={{ color: 'var(--accent-red)' }}>{healthError}</span>
+          <span className="color-error">{healthError}</span>
         ) : (
           <div className="settings-health-list">
             <div className="settings-health-summary">
@@ -135,7 +135,7 @@ export default function Settings() {
         )}
       </Card>
 
-      <Card title="运行模式" style={{ marginBottom: 24 }}>
+      <Card title="运行模式" className="settings-card">
         {loading ? (
           <span className="spinner" />
         ) : context ? (
@@ -148,7 +148,7 @@ export default function Settings() {
             ))}
           </div>
         ) : (
-          <span style={{ color: 'var(--text-secondary)' }}>无法获取运行模式</span>
+          <span className="color-muted">无法获取运行模式</span>
         )}
       </Card>
 
@@ -174,7 +174,7 @@ export default function Settings() {
             <input type="checkbox" defaultChecked className="settings-toggle" />
           </label>
 
-          <Button variant="primary" type="submit" style={{ marginTop: 16 }}>保存设置</Button>
+          <Button variant="primary" type="submit" className="settings-submit-btn">保存设置</Button>
         </form>
       </Card>
 

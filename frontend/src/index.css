@@ -326,6 +326,10 @@ pre {
   color: var(--accent-red);
 }
 
+.color-muted {
+  color: var(--text-secondary);
+}
+
 .color-cyan {
   color: var(--accent-cyan);
 }
@@ -721,6 +725,22 @@ pre {
 .stage-complete-icon svg path {
   stroke-dasharray: 24;
   animation: checkmark-draw 0.4s ease-out 0.1s forwards;
+}
+
+/* ── Page Layout Utilities ── */
+.page-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.page-container-lg {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-title {
+  margin-bottom: 24px;
+  font-weight: 600;
 }
 
 /* ── Keyframe Animations ── */

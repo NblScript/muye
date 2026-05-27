@@ -17,7 +17,7 @@ export default function TaskList({ title = '当前任务 / 最近任务', tasks,
       ) : (
         tasks.map((item) => (
           <div key={item.id} className="task-item">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+            <div className="task-item-inner">
               <div className="task-topline">
                 <span className="task-id">{item.id}</span>
                 <div className="task-tag-group">
