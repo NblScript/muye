@@ -211,6 +211,7 @@ def check_runtime_config_health() -> dict[str, Any]:
         raw_config = {}
     execution = raw_config.get("execution") or {}
     px4 = raw_config.get("px4") or {}
+    yolo = check_yolo_model_health()
     return {
         "status": "ok",
         "takeoff_mode": os.getenv("MUYE_TAKEOFF_MODE") or os.getenv("DRONE_TAKEOFF_MODE") or execution.get("takeoff_mode", "auto"),
@@ -220,6 +221,13 @@ def check_runtime_config_health() -> dict[str, Any]:
             "PX4_AUTO_START_ON_SPRAY",
             bool(px4.get("auto_start_on_spray", True)),
         ),
+        "weather_mode": "mock" if _env_bool("QWEATHER_USE_MOCK", False) else "real",
+        "qwen_mode": "mock" if _env_bool("QWEN_USE_MOCK", False) else "real",
+        "rag_enabled": _env_bool("RAG_ENABLED", True),
+        "router_enabled": _env_bool("MUYE_ROUTER_ENABLED", False),
+        "multi_agent_enabled": _env_bool("MUYE_MULTI_AGENT_ENABLED", False),
+        "yolo_active_model": yolo.get("active_model"),
+        "yolo_device": yolo.get("device"),
     }
 
 

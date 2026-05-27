@@ -569,6 +569,31 @@ def test_health_status_collects_check_results(monkeypatch) -> None:
     assert payload["checks"]["embedded_yolo"]["status"] == "skipped"
 
 
+def test_runtime_config_health_exposes_effective_demo_switches(monkeypatch) -> None:
+    monkeypatch.setenv("MUYE_TAKEOFF_MODE", "manual")
+    monkeypatch.setenv("DRONE_BACKEND", "px4")
+    monkeypatch.setenv("PX4_EXECUTION_MODE", "animated_demo")
+    monkeypatch.setenv("PX4_AUTO_START_ON_SPRAY", "true")
+    monkeypatch.setenv("QWEATHER_USE_MOCK", "true")
+    monkeypatch.setenv("QWEN_USE_MOCK", "true")
+    monkeypatch.setenv("RAG_ENABLED", "false")
+    monkeypatch.setenv("MUYE_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("MUYE_MULTI_AGENT_ENABLED", "false")
+
+    payload = health_routes.check_runtime_config_health()
+
+    assert payload["status"] == "ok"
+    assert payload["takeoff_mode"] == "manual"
+    assert payload["drone_backend"] == "px4"
+    assert payload["px4_execution_mode"] == "animated_demo"
+    assert payload["weather_mode"] == "mock"
+    assert payload["qwen_mode"] == "mock"
+    assert payload["rag_enabled"] is False
+    assert payload["router_enabled"] is True
+    assert payload["multi_agent_enabled"] is False
+    assert "yolo_active_model" in payload
+
+
 def test_health_route_returns_503_when_dependency_fails(monkeypatch) -> None:
     monkeypatch.setattr(
         health_routes,

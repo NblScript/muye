@@ -111,7 +111,7 @@ curl http://localhost:18000/slo
 ### 健康检查
 
 ```bash
-# API 健康检查（含 7 项子检查）
+# API 健康检查（含依赖状态与当前生效配置）
 curl http://localhost:18000/health
 
 # YOLO 服务健康检查
@@ -119,6 +119,12 @@ curl http://localhost:8010/health
 
 # 烟雾测试（不依赖 PX4/Gazebo，验证 API + mock 链路）
 ./scripts/demo_smoke.sh
+
+# 现场诊断报告（聚合 health/SLO/workflow/事件流/错误日志）
+./scripts/demo_doctor.sh
+
+# 固定样例评测集清单与报告
+python scripts/eval_fixed_set.py --output data/eval/latest_report.md
 ```
 
 ### 日志监控

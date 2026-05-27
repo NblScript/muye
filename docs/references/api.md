@@ -6,7 +6,7 @@
 
 ### GET /health
 
-系统健康状态检查（含 7 项子检查）。任一子项 `error` 时整体返回 503。
+系统健康状态检查（含 SQLite、数据目录、YOLO、AI、天气、事件流、RAG、PX4、运行配置等子检查）。任一子项 `error` 时整体返回 503。
 
 **响应**：
 ```json
@@ -22,7 +22,19 @@
     "event_bus": {"status": "ok", "path": "data/logs/demo_events.jsonl"},
     "rag_config": {"status": "ok", "enabled": true},
     "px4_runtime": {"status": "skipped", "running": false, "ready": false},
-    "runtime_config": {"status": "ok", "takeoff_mode": "manual", "drone_backend": "px4"}
+    "runtime_config": {
+      "status": "ok",
+      "takeoff_mode": "manual",
+      "drone_backend": "px4",
+      "px4_execution_mode": "animated_demo",
+      "weather_mode": "mock",
+      "qwen_mode": "mock",
+      "rag_enabled": false,
+      "router_enabled": true,
+      "multi_agent_enabled": false,
+      "yolo_active_model": "yolov8n",
+      "yolo_device": "auto"
+    }
   },
   "failures": []
 }

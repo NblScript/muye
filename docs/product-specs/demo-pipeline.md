@@ -28,6 +28,12 @@
 
 **输出**：环境就绪，演示图片可用
 
+**固定样例评测集**：`python scripts/eval_fixed_set.py --output data/eval/latest_report.md`
+
+- 样例清单：`data/eval/manifest.json`
+- 覆盖：常规虫害、高湿、强风、合规 warning、合规 blocked
+- 输出：Markdown 表格，列出图片、预期害虫、作物、天气场景和合规结果
+
 ### 阶段 2：系统启动
 
 **脚本**：`./scripts/demo.sh`
@@ -54,6 +60,8 @@
 | `wind_high` | 风速过高，AI 建议暂缓 |
 | `rag_down` | RAG 不可用，降级处理 |
 | `px4_down` | PX4 不可用，动画演示 |
+
+**现场诊断**：`./scripts/demo_doctor.sh` 可在演示中随时运行，聚合 `/health`、`/slo`、`/workflow/state`、最近事件流和系统错误日志，输出 `PASS / WARN / FAIL`。
 
 ### 阶段 3：图片上传与检测
 
@@ -129,6 +137,7 @@
 - 无人机飞行轨迹（SVG 地图）
 - 任务状态面板（电池、进度、遥测数据）
 - 工作流管线步骤指示器
+- Settings 页系统预检与当前生效配置（起飞模式、无人机后端、PX4 模式、AI/RAG/Router/多智能体、YOLO 模型）
 
 ## 时间线（典型演示）
 

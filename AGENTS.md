@@ -17,7 +17,7 @@
 
 | 层 | 技术 |
 |---|------|
-| 前端 | React 19 + TypeScript 6 + Vite 8（暗色大屏） |
+| 前端 | React 19 + TypeScript 6 + Vite 8（暖色大屏，CSS 变量驱动，useDashboardState Hook 模式） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
 | AI | YOLOv8（检测，可切换模型）+ Qwen/DeepSeek/Xiaomi（多模型决策，provider 可配置）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
 | 无人机 | PX4 SITL + MAVSDK（仿真）/ DJI OSDK（行业级无人机） |
@@ -66,6 +66,8 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 ./scripts/demo.sh      # 一键演示主入口（通过 env var 注入配置，不修改 config 文件）
 ./scripts/demo_scenario.sh <场景名> # 预设演示场景（aphid_normal|planthopper_humid|wind_high|rag_down|px4_down）
 ./scripts/demo_smoke.sh # 烟雾测试（验证 API + mock 链路，不依赖 PX4）
+./scripts/demo_doctor.sh # 现场诊断报告（health/SLO/workflow/事件流/错误日志）
+python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样例评测集报告
 ./scripts/check.sh     # 竞赛总验证（关键路径测试 + 前端构建 + 文档校验；MUYE_FULL_CHECK=1 开启全量回归）
 ./scripts/precheck.sh  # 可 source 的环境检查工具库
 ```
