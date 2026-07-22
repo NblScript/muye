@@ -56,15 +56,15 @@ def fill_basic_info(table) -> None:
 
     intro = (
         "作品简介(100字以内)：\n"
-        "牧野智农面向大田植保场景，集成 YOLO 害虫识别、天气融合、Qwen+RAG 决策、PX4 仿真执行和 React 指挥大屏，形成从虫情感知到无人机作业展示的闭环系统。"
+        "牧野智农面向大田植保场景，集成 YOLO 害虫识别、天气融合、多模型AI会诊（Qwen/DeepSeek/Xiaomi）、合规推理链、药效评估闭环和 React 指挥大屏，形成从虫情感知到无人机执行再到药效验证的完整自动化闭环系统。"
     )
     innovation = (
         "创新描述（100字以内）：\n"
-        "把识别、天气、知识增强决策、航线规划和 PX4 本地航线执行贯通；AI 负责农事建议，规则规划器负责飞行参数，兼顾智能性、安全性和演示稳定性。"
+        "（1）多模型加权投票降低单一AI偏差；（2）五维合规推理链保障施药安全；（3）药效评估闭环实现自动补充喷洒；（4）变量喷洒按虫害密度精准施药；（5）仿真与真实无人机双模执行，灵活适配教学与生产场景。"
     )
     special = (
         "特别说明（100字以内）：\n"
-        "地图为前端 SVG 虚拟农田示意，不接入真实地图底图。使用 OpenAI ChatGPT/Codex 辅助代码分析、文档草稿和调试建议，内容经团队核验，核心设计与实现由团队完成。"
+        "地图为前端 SVG 虚拟农田示意，不接入真实地图底图。系统支持真实无人机与仿真双模执行，可一键启停。使用 AI 工具辅助代码分析、文档草稿和调试建议，内容经团队核验，核心设计与实现由团队完成。"
     )
     set_cell_text(table.cell(2, 0), intro, size=9)
     set_cell_text(table.cell(3, 0), innovation, size=9)
@@ -94,7 +94,8 @@ def fill_platforms(table) -> None:
     set_cell_text(table.cell(16, 4), "■Windows  ■Linux  □macOS  □iOS  □Android  ■其他：Chrome/Edge 浏览器、PX4 SITL/Gazebo", size=9)
     tools = (
         "Python 3.11、FastAPI、React/Vite/TypeScript、YOLO、SQLite、ChromaDB、MAVSDK、PX4 SITL、Gazebo；\n"
-        "后台大语言模型：通义千问（Qwen，DashScope）；文本向量模型：text-embedding-v3。"
+        "后台大语言模型：通义千问（Qwen，DashScope）、DeepSeek（DeepSeek Chat）、小米大模型（Xiaomi MiMo）；\n"
+        "文本向量模型：text-embedding-v3。"
     )
     set_cell_text(table.cell(17, 4), tools, size=8.8)
     refs = (
@@ -103,7 +104,7 @@ def fill_platforms(table) -> None:
         "3、Ultralytics YOLO、ChromaDB、DashScope、和风天气开发文档"
     )
     set_cell_text(table.cell(18, 4), refs, size=8.8)
-    submits = "■报告文档  ■演示视频  ■PPT  ■源代码  ■部署文件  ■数据集  ■模型\n■其他：readme.txt、运行说明、配置说明"
+    submits = "■报告文档  ■展示视频  ■PPT  ■源代码  ■部署文件  ■数据集  ■模型\n■其他：readme.txt、运行说明、配置说明"
     set_cell_text(table.cell(19, 4), submits, size=9)
 
 
@@ -115,17 +116,17 @@ def fill_related_files(table) -> None:
             "■自制  □未知版权\n□开源  □授权方：",
         ),
         (
-            "文件：2026002224-作品报告.docx\n描述：项目背景、需求分析、技术方案、系统实现、测试分析和作品总结。",
+            "文件：2026002224-作品报告.docx\n描述：项目背景、需求分析、技术方案（含多模型AI会诊、合规推理链、药效评估闭环）、系统实现、测试分析和作品总结。",
             "■已上传到网盘\n□未上传，下载地址：随参赛总文件夹提交",
             "■自制  □未知版权\n□开源  □授权方：",
         ),
         (
-            "文件：muye 项目源码\n描述：FastAPI 后端、YOLO 接口、RAG 决策、PX4 仿真、React 前端、测试与部署脚本。",
+            "文件：muye 项目源码\n描述：FastAPI 后端、YOLO 接口、多模型会诊决策（Qwen/DeepSeek/Xiaomi）、合规推理链、药效评估、PX4/真实无人机双模执行、React 前端、测试与部署脚本。",
             "■已上传到网盘\n□未上传，下载地址：随参赛总文件夹提交",
             "■自制  □未知版权\n■开源组件  授权方：见依赖许可证",
         ),
         (
-            "文件：data/samples 与 data/seeds\n描述：演示图片、农业种子数据、农药目录、地块和作物周期等测试数据。",
+            "文件：data/samples 与 data/seeds\n描述：展示图片、农业种子数据、农药目录、地块和作物周期等测试数据。",
             "■已上传到网盘\n□未上传，下载地址：随参赛总文件夹提交",
             "■自制整理  □未知版权\n□开源  □授权方：",
         ),
@@ -147,24 +148,25 @@ def fill_related_files(table) -> None:
 
 
 def write_readme() -> None:
-    content = """2026002224-03设计与开发文档
-
-本文件夹作用：
-用于存放“牧野智农——智能农业害虫防治系统”的设计、开发、说明类文档，供大赛评审了解作品的总体方案、技术路线、实现过程、测试情况和相关文件信息。
-
-文件说明：
-1. 2026002224-作品报告.docx
-   基于人工智能实践赛作品报告模板编写，内容包括作品概述、问题分析、解决思路、技术方案、系统实现、测试分析、作品总结、创新点、应用推广和参考资料。
-
-2. 2026002224-作品信息概要表.docx
-   基于人工智能实践赛/挑战赛作品信息概要表模板填写，内容包括作品编号、作品名称、作品简介、创新描述、开发制作平台、运行展示平台、开发工具、提交内容和相关文件说明。
-
-3. 中国大学生计算机设计大赛AI工具使用说明.pdf
-   大赛相关说明文档，用于核对人工智能工具使用、参赛材料填写和提交规范。
-
-4. readme.txt
-   本说明文件，简要说明当前文件夹作用，并对文件夹内各文件进行描述。
-"""
+    content = (
+        "2026002224-03\u8bbe\u8ba1\u4e0e\u5f00\u53d1\u6587\u6863\n"
+        "\n"
+        "\u672c\u6587\u4ef6\u5939\u4f5c\u7528\uff1a\n"
+        "\u7528\u4e8e\u5b58\u653e\u7267\u91ce\u667a\u519c\u2014\u2014\u667a\u80fd\u519c\u4e1a\u5bb3\u866b\u9632\u6cbb\u7cfb\u7edf\u7684\u8bbe\u8ba1\u3001\u5f00\u53d1\u3001\u8bf4\u660e\u7c7b\u6587\u6863\uff0c\u4f9b\u5927\u8d5b\u8bc4\u5ba1\u4e86\u89e3\u4f5c\u54c1\u7684\u603b\u4f53\u65b9\u6848\u3001\u6280\u672f\u8def\u7ebf\uff08\u542b\u591a\u6a21\u578bAI\u4f1a\u8bca\u3001\u5408\u89c4\u63a8\u7406\u94fe\u3001\u836f\u6548\u8bc4\u4f30\u95ed\u73af\uff09\u3001\u5b9e\u73b0\u8fc7\u7a0b\u3001\u6d4b\u8bd5\u60c5\u51b5\u548c\u76f8\u5173\u6587\u4ef6\u4fe1\u606f\u3002\n"
+        "\n"
+        "\u6587\u4ef6\u8bf4\u660e\uff1a\n"
+        "1. 2026002224-\u4f5c\u54c1\u62a5\u544a.docx\n"
+        "   \u57fa\u4e8e\u4eba\u5de5\u667a\u80fd\u5b9e\u8df5\u8d5b\u4f5c\u54c1\u62a5\u544a\u6a21\u677f\u7f16\u5199\uff0c\u5185\u5bb9\u5305\u62ec\u4f5c\u54c1\u6982\u8ff0\u3001\u95ee\u9898\u5206\u6790\u3001\u89e3\u51b3\u601d\u8def\u3001\u6280\u672f\u65b9\u6848\uff08\u591a\u667a\u80fd\u4f53\u4f1a\u8bca\u3001\u51b3\u7b56\u8def\u7531\u3001\u5408\u89c4\u63a8\u7406\u94fe\u3001\u53d8\u91cf\u55b7\u6d12\u3001\u836f\u6548\u8bc4\u4f30\u95ed\u73af\uff09\u3001\u7cfb\u7edf\u5b9e\u73b0\u3001\u6d4b\u8bd5\u5206\u6790\u3001\u4f5c\u54c1\u603b\u7ed3\u3001\u521b\u65b0\u70b9\u3001\u5e94\u7528\u63a8\u5e7f\u548c\u53c2\u8003\u8d44\u6599\u3002\n"
+        "\n"
+        "2. 2026002224-\u4f5c\u54c1\u4fe1\u606f\u6982\u8981\u8868.docx\n"
+        "   \u57fa\u4e8e\u4eba\u5de5\u667a\u80fd\u5b9e\u8df5\u8d5b/\u6311\u6218\u8d5b\u4f5c\u54c1\u4fe1\u606f\u6982\u8981\u8868\u6a21\u677f\u586b\u5199\uff0c\u5185\u5bb9\u5305\u62ec\u4f5c\u54c1\u7f16\u53f7\u3001\u4f5c\u54c1\u540d\u79f0\u3001\u4f5c\u54c1\u7b80\u4ecb\u3001\u521b\u65b0\u63cf\u8ff0\u3001\u5f00\u53d1\u5236\u4f5c\u5e73\u53f0\u3001\u8fd0\u884c\u5c55\u793a\u5e73\u53f0\u3001\u5f00\u53d1\u5de5\u5177\u3001\u63d0\u4ea4\u5185\u5bb9\u548c\u76f8\u5173\u6587\u4ef6\u8bf4\u660e\u3002\n"
+        "\n"
+        "3. \u4e2d\u56fd\u5927\u5b66\u751f\u8ba1\u7b97\u673a\u8bbe\u8ba1\u5927\u8d5bAI\u5de5\u5177\u4f7f\u7528\u8bf4\u660e.pdf\n"
+        "   \u5927\u8d5b\u76f8\u5173\u8bf4\u660e\u6587\u6863\uff0c\u7528\u4e8e\u6838\u5bf9\u4eba\u5de5\u667a\u80fd\u5de5\u5177\u4f7f\u7528\u3001\u53c2\u8d5b\u6750\u6599\u586b\u5199\u548c\u63d0\u4ea4\u89c4\u8303\u3002\n"
+        "\n"
+        "4. readme.txt\n"
+        "   \u672c\u8bf4\u660e\u6587\u4ef6\uff0c\u7b80\u8981\u8bf4\u660e\u5f53\u524d\u6587\u4ef6\u5939\u4f5c\u7528\uff0c\u5e76\u5bf9\u6587\u4ef6\u5939\u5185\u5404\u6587\u4ef6\u8fdb\u884c\u63cf\u8ff0\u3002\n"
+    )
     README_OUTPUT.write_text(content, encoding="utf-8")
 
 

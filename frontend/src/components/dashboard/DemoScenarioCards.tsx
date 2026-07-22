@@ -39,8 +39,8 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: 'px4_down',
-    name: 'PX4 离线',
-    desc: '无人机仿真不可用，动画演示模式',
+    name: '真实无人机',
+    desc: '手操真实无人机，配合前端动画展示',
     icon: '🚁',
     image: 'aphids_02.jpg',
   },
@@ -86,7 +86,7 @@ export default function DemoScenarioCards({ apiBase = '/api', onStarted }: Props
 
   return (
     <div className="scenario-cards">
-      <div className="scenario-cards-title">演示场景</div>
+      <div className="scenario-cards-title">展示场景</div>
       <div className="scenario-cards-row">
         {SCENARIOS.map((s) => {
           const isLoading = loading === s.id

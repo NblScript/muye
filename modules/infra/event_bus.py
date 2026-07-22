@@ -10,7 +10,7 @@ from modules.infra.common import LOGS_DIR, ensure_runtime_dirs
 from modules.infra.locks import flock_ex as _flock_ex, flock_sh as _flock_sh, flock_un as _flock_un
 
 
-EVENTS_FILE = LOGS_DIR / "demo_events.jsonl"
+EVENTS_FILE = LOGS_DIR / "events.jsonl"
 
 
 class FileEventBus:

@@ -127,7 +127,7 @@ export function useDashboardState() {
 
 ### 设计系统
 
-- **主题**：暖色奶油色调（CSS 变量驱动），专为竞赛演示优化
+- **主题**：暖色奶油色调（CSS 变量驱动），专为竞赛展示优化
 - **全局样式**：`index.css` 定义 CSS 变量（`--accent-amber`, `--accent-red`, `--bg-card` 等）、动画关键帧（`fadeSlideUp`, `shimmer`）和工具类（`.page-container`, `.page-title`, `.color-error`）
 - **组件样式**：`styles/dashboard.css` 包含所有组件 CSS 类
 - **响应式**：大屏展示为主（1920x1080），支持 720px+ 移动端适配

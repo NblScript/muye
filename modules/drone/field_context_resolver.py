@@ -113,11 +113,11 @@ class FieldContextResolver:
         location = demo_field.get("location", {})
         geofence = demo_field.get("geofence", [])
         if len(geofence) < 3:
-            raise RuntimeError("PX4 SITL 演示地块缺少有效 geofence 配置")
+            raise RuntimeError("PX4 SITL 展示地块缺少有效 geofence 配置")
 
         field_context = {
             "field_id": demo_field.get("field_id", "px4-sitl-demo"),
-            "name": demo_field.get("name", "PX4 SITL 演示地块"),
+            "name": demo_field.get("name", "PX4 SITL 展示地块"),
             "weather_location": demo_field.get("weather_location") or location.get("city") or "Zurich",
             "area_mu": demo_field.get("area_mu", 1.0),
             "soil_type": demo_field.get("soil_type", "demo"),

@@ -107,6 +107,7 @@ class DashboardContextResponse(BaseModel):
 
     modes: dict[str, str]
     upload_accept: list[str]
+    demo_mode: bool = False
 
 
 class HistoryTaskEntry(BaseModel):

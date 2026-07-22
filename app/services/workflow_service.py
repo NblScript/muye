@@ -235,91 +235,13 @@ def build_fallback_workflow_state() -> WorkflowStateResponse:
         "速度": 4.5,
         "喷洒速率": "1.8 L/min",
     }
-    timeline = [
-        WorkflowTimelineEntry(
-            timestamp=iso_utc_offset(42),
-            status="connecting",
-            message="PX4 链路已建立，等待飞控握手",
-            progress=12,
-            current_waypoint_index=0,
-            task_id="px4-demo-flow",
-        ),
-        WorkflowTimelineEntry(
-            timestamp=iso_utc_offset(34),
-            status="connected",
-            message="飞控连接完成，开始检查定位状态",
-            progress=24,
-            current_waypoint_index=0,
-            task_id="px4-demo-flow",
-        ),
-        WorkflowTimelineEntry(
-            timestamp=iso_utc_offset(28),
-            status="ready",
-            message="定位与 Home 点正常，允许上传任务",
-            progress=38,
-            current_waypoint_index=0,
-            task_id="px4-demo-flow",
-        ),
-        WorkflowTimelineEntry(
-            timestamp=iso_utc_offset(20),
-            status="uploaded",
-            message="作业航线已上传至 PX4",
-            progress=52,
-            current_waypoint_index=1,
-            task_id="px4-demo-flow",
-        ),
-        WorkflowTimelineEntry(
-            timestamp=iso_utc_offset(12),
-            status="armed",
-            message="飞控已解锁，等待执行起飞",
-            progress=66,
-            current_waypoint_index=1,
-            task_id="px4-demo-flow",
-        ),
-        WorkflowTimelineEntry(
-            timestamp=iso_utc_offset(4),
-            status="spraying",
-            message="虚拟农田喷洒执行中",
-            progress=78,
-            current_waypoint_index=3,
-            task_id="px4-demo-flow",
-        ),
-    ]
-    recent_events = [
-        WorkflowEventEntry(
-            timestamp=iso_utc_offset(44),
-            stage="drone",
-            status="connecting",
-            message="PX4 遥测链路接通",
-            payload={},
-        ),
-        WorkflowEventEntry(
-            timestamp=iso_utc_offset(32),
-            stage="drone",
-            status="connected",
-            message="飞控握手完成",
-            payload={},
-        ),
-        WorkflowEventEntry(
-            timestamp=iso_utc_offset(18),
-            stage="drone",
-            status="uploaded",
-            message="覆盖式喷洒航线上传成功",
-            payload={},
-        ),
-        WorkflowEventEntry(
-            timestamp=iso_utc_offset(5),
-            stage="drone",
-            status="spraying",
-            message="PX4 仿真任务正在执行喷洒路径",
-            payload={},
-        ),
-    ]
+    timeline = []
+    recent_events = []
     latest_task = WorkflowTaskState(
         request_id="px4-demo-fallback",
         current_stage="drone",
-        status="running",
-        message="当前暂无事件总线任务，展示 PX4 仿真流程示例",
+        status="idle",
+        message="系统就绪，等待演示任务启动",
         updated_at=iso_utc_offset(3),
         image_path=None,
         field={
@@ -335,11 +257,11 @@ def build_fallback_workflow_state() -> WorkflowStateResponse:
         decision={},
         compliance={},
         drone={
-            "task_id": "px4-demo-flow",
-            "status": "spraying",
-            "message": "虚拟农田喷洒执行中",
-            "progress": 78,
-            "current_waypoint_index": 3,
+            "task_id": None,
+            "status": "idle",
+            "message": "等待任务启动",
+            "progress": 0,
+            "current_waypoint_index": 0,
             "instruction": demo_instruction,
         },
         drone_timeline=timeline,

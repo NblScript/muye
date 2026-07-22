@@ -375,7 +375,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule, 
   const routeHoldPosition = resolveStaticRoutePosition(finalRoutePoints)
   const coveragePoints: LatLngTuple[] = []
 
-  const isSpraying = droneStatus === 'spraying' || droneStatus === '作业中'
+  const isSpraying = droneStatus === 'spraying' || droneStatus === '作业中' || droneStatus === 'patrolling'
   const droneStatusForStyle = isSpraying ? '作业中' : '待命'
 
   const baseDrones = [{
@@ -756,7 +756,7 @@ export default function FieldMap({ droneStatus, detections = [], spraySchedule, 
             borderColor: isSpraying ? C.sprayingBorder : C.waitingBorder,
           }}
         >
-          {isSpraying ? 'PX4 喷洒中' : '等待任务'}
+          {isSpraying ? '喷洒中' : '等待任务'}
         </div>
       )}
       </div>

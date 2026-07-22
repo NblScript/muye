@@ -52,7 +52,13 @@ function isWorkflowStateResponse(value: unknown): value is WorkflowStateResponse
 
 export function useDashboardState() {
   const toast = useToast()
-  const [demoMode, setDemoMode] = useState(false)
+  const [demoMode, setDemoMode] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('demo') === '1'
+    } catch {
+      return false
+    }
+  })
   const [workflowLoading, setWorkflowLoading] = useState(true)
   const [workflowError, setWorkflowError] = useState<string | null>(null)
   const [context, setContext] = useState<DashboardContextResponse | null>(null)
@@ -100,6 +106,13 @@ export function useDashboardState() {
     void loadContext()
     return () => { active = false }
   }, [])
+
+  // Auto-enable demo mode when backend signals animated_demo execution mode
+  useEffect(() => {
+    if (context?.demo_mode) {
+      setDemoMode(true)
+    }
+  }, [context?.demo_mode])
 
   useEffect(() => {
     let active = true
@@ -339,10 +352,10 @@ export function useDashboardState() {
     setPx4Starting(true)
     try {
       await startPx4Demo()
-      toast.success('PX4 SITL 启动中…')
+      toast.success('无人机启动中…')
       setPx4Running(true)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'PX4 启动失败')
+      toast.error(error instanceof Error ? error.message : '无人机启动失败')
     } finally {
       setPx4Starting(false)
     }
@@ -351,10 +364,10 @@ export function useDashboardState() {
   const handlePx4Stop = async () => {
     try {
       await stopPx4Demo()
-      toast.success('PX4 SITL 已停止')
+      toast.success('无人机已停止')
       setPx4Running(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'PX4 停止失败')
+      toast.error(error instanceof Error ? error.message : '无人机停止失败')
     }
   }
 

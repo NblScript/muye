@@ -106,8 +106,8 @@ export default function DemoReadinessBar({
     },
     {
       key: 'px4',
-      label: 'PX4',
-      value: px4Running ? '运行中' : '未启动',
+      label: '无人机',
+      value: px4Running ? '运行中' : '待命',
       color: px4Running ? 'green' : 'amber',
     },
     {

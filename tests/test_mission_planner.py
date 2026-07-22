@@ -55,7 +55,7 @@ def test_mission_planner_uses_presentation_profile_for_visible_demo_route() -> N
     default_plan = planner.plan_spray_mission(
         field_context={
             "field_id": "px4-sitl-demo",
-            "name": "PX4 SITL 演示地块",
+            "name": "PX4 SITL 展示地块",
             "area_mu": 2.0,
             "geofence": geofence,
             "crop_cycle": {"crop_name": "SITL 测试作物"},
@@ -65,7 +65,7 @@ def test_mission_planner_uses_presentation_profile_for_visible_demo_route() -> N
     presentation_plan = planner.plan_spray_mission(
         field_context={
             "field_id": "px4-sitl-demo",
-            "name": "PX4 SITL 演示地块",
+            "name": "PX4 SITL 展示地块",
             "area_mu": 2.0,
             "geofence": geofence,
             "presentation_profile": {
@@ -114,7 +114,7 @@ def test_mission_planner_prefers_explicit_demo_route_over_generated_sweep() -> N
     plan = planner.plan_spray_mission(
         field_context={
             "field_id": "px4-sitl-demo",
-            "name": "PX4 SITL 演示地块",
+            "name": "PX4 SITL 展示地块",
             "area_mu": 0.12,
             "geofence": geofence,
             "explicit_route": explicit_route,

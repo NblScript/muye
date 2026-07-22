@@ -450,13 +450,13 @@ set_slide_bg(slide, BG_CREAM)
 add_shape(slide, Inches(0), Inches(0), Inches(0.08), H, ACCENT_AMBER)
 
 add_text(slide, Inches(0.8), Inches(0.6), Inches(6), Inches(0.5),
-         '现场演示', font_size=14, color=ACCENT_AMBER, bold=True)
+         '现场展示', font_size=14, color=ACCENT_AMBER, bold=True)
 add_text(slide, Inches(0.8), Inches(1.1), Inches(11), Inches(0.8),
-         '实时演示 — 全自动闭环流程', font_size=36, color=TEXT_DARK, bold=True)
+         '实时展示 — 全自动闭环流程', font_size=36, color=TEXT_DARK, bold=True)
 
 add_shape(slide, Inches(1.5), Inches(2.5), Inches(10.3), Inches(3.5), BG_WHITE, ACCENT_AMBER, Pt(2))
 add_text(slide, Inches(2.0), Inches(3.0), Inches(9.3), Inches(0.6),
-         '演示步骤', font_size=22, color=ACCENT_AMBER, bold=True, alignment=PP_ALIGN.CENTER)
+         '展示步骤', font_size=22, color=ACCENT_AMBER, bold=True, alignment=PP_ALIGN.CENTER)
 
 demo_steps = [
     '① 展示空闲态 Dashboard — 系统监视中，等待图像输入',
@@ -511,7 +511,7 @@ add_shape(slide, Inches(0), Inches(0), Inches(0.08), H, ACCENT_AMBER)
 add_text(slide, Inches(0.8), Inches(0.6), Inches(6), Inches(0.5),
          '未来展望', font_size=14, color=ACCENT_AMBER, bold=True)
 add_text(slide, Inches(0.8), Inches(1.1), Inches(11), Inches(0.8),
-         '从演示到生产', font_size=36, color=TEXT_DARK, bold=True)
+         '从展示到生产', font_size=36, color=TEXT_DARK, bold=True)
 
 future_items = [
     ('接入真实无人机', '在 PX4 链路稳定后对接商用植保无人机 API'),

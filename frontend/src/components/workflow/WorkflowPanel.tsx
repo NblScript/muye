@@ -47,9 +47,9 @@ function inferDroneBackend(task: WorkflowTaskState) {
   const currentStatus = String(drone.status ?? '').toLowerCase()
   if (currentStatus) statuses.add(currentStatus)
   if (taskId.startsWith('px4-') || ['connecting', 'connected', 'ready', 'uploaded', 'armed'].some((s) => statuses.has(s))) {
-    return { key: 'px4', label: 'PX4 SITL' }
+    return { key: 'px4', label: '无人机' }
   }
-  return { key: 'px4', label: 'PX4 SITL' }
+  return { key: 'px4', label: '无人机' }
 }
 
 function buildStageSequence(task: WorkflowTaskState, backendKey: string) {
@@ -99,9 +99,10 @@ type WorkflowPanelProps = {
   data: WorkflowStateResponse | null
   loading?: boolean
   error?: string | null
+  onConfirmed?: () => void
 }
 
-export default function WorkflowPanel({ data, loading = false, error = null }: WorkflowPanelProps) {
+export default function WorkflowPanel({ data, loading = false, error = null, onConfirmed }: WorkflowPanelProps) {
   const [confirming, setConfirming] = useState(false)
   const toast = useToast()
 
@@ -110,6 +111,7 @@ export default function WorkflowPanel({ data, loading = false, error = null }: W
     try {
       await confirmDroneTakeoff()
       toast.success('起飞确认成功')
+      onConfirmed?.()
     } catch {
       toast.error('确认起飞失败，请检查后端服务')
     } finally {

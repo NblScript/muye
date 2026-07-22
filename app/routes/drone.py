@@ -80,13 +80,43 @@ async def ensure_px4_ready(request: Px4StartRequest | None = None) -> dict[str, 
     return start_result
 
 
+def _seed_demo_spray() -> None:
+    """Seed spray execution data for animated demo mode."""
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    seed_script = root / "scripts" / "seed_demo_stages.py"
+    venv_python = root / ".venv" / "bin" / "python"
+    try:
+        result = subprocess.run(
+            [str(venv_python), str(seed_script), "--stage", "spray"],
+            capture_output=True, text=True, timeout=15,
+            cwd=str(root),
+            env={**os.environ, "PYTHONPATH": str(root)},
+        )
+        if result.returncode != 0:
+            logger.error("Seed spray failed: %s", result.stderr)
+        else:
+            logger.info("Demo spray seeded: %s", result.stdout.strip())
+    except Exception:
+        logger.exception("Failed to seed demo spray data")
+
+
 async def confirm_drone_takeoff() -> dict[str, Any]:
     """Confirm drone takeoff and ensure PX4 is ready if needed."""
+    execution_mode = os.getenv("PX4_EXECUTION_MODE", "")
+    if execution_mode == "animated_demo":
+        deps.mark_takeoff_confirmed()
+        _seed_demo_spray()
+        return {"status": "confirmed", "mode": "animated_demo"}
+
     if deps.is_takeoff_confirmed():
         return {"status": "already_confirmed"}
 
     pending_request_id = deps.get_pending_takeoff_request_id()
     event = deps.takeoff_confirmation_event
+
     if event is None and pending_request_id is None:
         raise HTTPException(status_code=503, detail="takeoff_not_initialized")
 

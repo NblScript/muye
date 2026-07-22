@@ -114,7 +114,7 @@ describe('DemoReadinessBar', () => {
       />,
     )
 
-    expect(screen.getByText('演示链路状态')).toBeInTheDocument()
+    expect(screen.getByText('展示链路状态')).toBeInTheDocument()
     expect(screen.getByText('后端')).toBeInTheDocument()
     expect(screen.getByText('WebSocket')).toBeInTheDocument()
     expect(screen.getByText('最新任务')).toBeInTheDocument()
@@ -230,7 +230,7 @@ describe('Dashboard smoke', () => {
 
     render(<Dashboard />)
 
-    expect(screen.getByText('演示链路状态')).toBeInTheDocument()
+    expect(screen.getByText('展示链路状态')).toBeInTheDocument()
     expect(screen.getByText('本轮决策摘要')).toBeInTheDocument()
     expect(screen.getByTestId('field-map-smoke')).toBeInTheDocument()
     expect(screen.getByText('多智能体专家会诊')).toBeInTheDocument()

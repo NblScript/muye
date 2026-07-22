@@ -13,7 +13,7 @@ frontend/
 │   ├── components/            # 可复用组件
 │   │   ├── map/               # 地图相关组件与仿真数据
 │   │   │   ├── FieldMap.tsx   # PX4 虚拟农田态势图组件
-│   │   │   └── mapData.ts     # 虚拟农田边界与演示地图底稿
+│   │   │   └── mapData.ts     # 虚拟农田边界与展示地图底稿
 │   │   └── workflow/          # 任务流程与日志面板
 │   │       └── WorkflowPanel.tsx # 无人机阶段流、进度和事件日志面板
 │   ├── hooks/                 # 自定义 React Hooks

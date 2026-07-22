@@ -173,6 +173,7 @@ export function useWebSocket<T>(url: string, fallback: () => Promise<T>, interva
     disconnectedSinceLastOpenRef.current = false
     clearReconnectTimer()
     stopPolling()
+    void runFallback()
     connect()
 
     return () => {

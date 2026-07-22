@@ -1,8 +1,6 @@
 import { StatCard, WeatherCard, TaskList } from '../components/dashboard'
 import DecisionFlow from '../components/dashboard/DecisionFlow'
 import DecisionSummaryCard from '../components/dashboard/DecisionSummaryCard'
-import DemoScenarioCards from '../components/dashboard/DemoScenarioCards'
-import DemoReadinessBar from '../components/dashboard/DemoReadinessBar'
 import DecisionExplainPanel from '../components/dashboard/DecisionExplainPanel'
 import ExpertPanel from '../components/dashboard/ExpertPanel'
 import PipelineStepper from '../components/dashboard/PipelineStepper'
@@ -37,7 +35,7 @@ export default function Dashboard() {
           className={`demo-mode-toggle${s.demoMode ? ' is-active' : ''}`}
           onClick={() => { s.setDemoMode((v) => !v) }}
         >
-          {s.demoMode ? '✕ 退出演示模式' : '▶ 进入演示模式'}
+          {s.demoMode ? '✕ 退出展示模式' : '▶ 进入展示模式'}
         </button>
         {s.demoMode && <span className="demo-mode-hint">已隐藏技术细节，展示决策叙事</span>}
       </div>
@@ -88,7 +86,7 @@ export default function Dashboard() {
                     </div>
                     <div className="hero-bullet-item">
                       <strong>无人机自主执行</strong>
-                      <span>自动规划航线并联动 PX4 SITL 完成精准喷洒</span>
+                      <span>自动规划航线并联动无人机完成精准喷洒</span>
                     </div>
                   </div>
                 </>
@@ -157,11 +155,11 @@ export default function Dashboard() {
               </Button>
               {s.px4Running ? (
                 <Button variant="danger" onClick={() => void s.handlePx4Stop()}>
-                  停止 PX4
+                  停止无人机
                 </Button>
               ) : (
                 <Button variant="secondary" onClick={() => void s.handlePx4Start()} loading={s.px4Starting}>
-                  {s.px4Starting ? 'PX4 启动中…' : '启动 PX4 仿真'}
+                  {s.px4Starting ? '无人机启动中…' : '启动无人机'}
                 </Button>
               )}
             </div>
@@ -188,53 +186,6 @@ export default function Dashboard() {
         </Card>
       </section>
 
-      {s.demoMode && (
-        <DemoScenarioCards
-          onStarted={(id) => {
-            toast.success(`场景 ${id} 已启动`)
-          }}
-        />
-      )}
-
-      {s.demoMode && (
-        <section className="narrative-banner">
-          <div className="narrative-step">
-            <span className={`narrative-dot ${s.detections.length > 0 ? 'done' : ''}`} />
-            <span>{s.detections.length > 0 ? <>识别到 <strong>{s.primaryPest}</strong>，置信度 {((s.detections[0]?.confidence ?? 0) * 100).toFixed(0)}%</> : '等待虫情识别'}</span>
-          </div>
-          <span className="narrative-arrow">→</span>
-          <div className="narrative-step">
-            <span className={`narrative-dot ${Object.keys(s.weather).length > 0 ? 'done' : ''}`} />
-            <span>{Object.keys(s.weather).length > 0 ? (s.weatherOk ? '天气适宜施药' : '天气需注意风险') : '等待气象数据'}</span>
-          </div>
-          <span className="narrative-arrow">→</span>
-          <div className="narrative-step">
-            <span className={`narrative-dot ${s.medication['农药名称'] ? 'done' : ''}`} />
-            <span>{s.medication['农药名称'] ? <>推荐 <strong>{String(s.medication['农药名称'])}</strong></> : '等待 AI 决策'}</span>
-          </div>
-          <span className="narrative-arrow">→</span>
-          <div className="narrative-step">
-            <span className={`narrative-dot ${s.latestTask?.status === 'completed' ? 'done' : ''}`} />
-            <span>{s.latestTask?.status === 'completed' ? '喷洒完成' : s.hasCurrentTask ? '执行中' : '等待任务'}</span>
-          </div>
-        </section>
-      )}
-
-      {s.showTakeoffBanner ? (
-        <Alert
-          type="warning"
-          message="无人机等待人工确认起飞"
-          description={
-            <div className="alert-action-row">
-              <span>当前任务已完成 AI 决策，点击按钮后继续执行无人机作业。</span>
-              <Button variant="primary" size="lg" loading={s.confirmingTakeoff} onClick={s.handleConfirmTakeoff}>
-                确认起飞
-              </Button>
-            </div>
-          }
-          className="dashboard-alert"
-        />
-      ) : null}
 
       {s.combinedStatusError ? (
         <Alert
@@ -244,16 +195,6 @@ export default function Dashboard() {
           className="dashboard-alert"
         />
       ) : null}
-
-      <DemoReadinessBar
-        connected={s.connected}
-        workflowLoading={s.workflowLoading}
-        workflowError={s.workflowError}
-        latestTask={s.latestTask}
-        qwenMode={s.context?.modes.qwen}
-        px4Running={s.px4Running}
-        readiness={s.demoReadiness}
-      />
 
       <section className="mission-metric-ribbon" aria-label="作业关键指标">
         <StatCard
@@ -271,7 +212,7 @@ export default function Dashboard() {
           label="在线设备数"
           value={s.onlineDevices}
           unit="台"
-          footnote="数据来源：当前任务中的 PX4 / 作业无人机"
+          footnote="数据来源：当前作业无人机"
         />
 
         <StatCard
@@ -310,7 +251,7 @@ export default function Dashboard() {
             <div className="map-panel">
               <div className="map-header-strip">
                 <span className="panel-label">无人机作业态势主视图</span>
-                <span className="map-header-note">演示动画 / 地块边界 / 航线规划 / 检测点位</span>
+                <span className="map-header-note">展示动画 / 地块边界 / 航线规划 / 检测点位</span>
               </div>
               <FieldMap
                 droneStatus={s.latestTask?.drone?.status}
@@ -443,7 +384,7 @@ export default function Dashboard() {
 
       <section className="dashboard-workflow-row">
         <Card className="dashboard-card workflow-card">
-          <WorkflowPanel data={s.workflow} loading={s.workflowLoading} error={s.workflowError} />
+          <WorkflowPanel data={s.workflow} loading={s.workflowLoading} error={s.workflowError} onConfirmed={() => void s.refreshWorkflow()} />
         </Card>
       </section>
 

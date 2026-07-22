@@ -1,5 +1,7 @@
 """Dashboard context endpoint."""
 
+import os
+
 from fastapi import FastAPI
 
 from app.config import current_mode_labels
@@ -11,6 +13,7 @@ async def get_dashboard_context() -> DashboardContextResponse:
     return DashboardContextResponse(
         modes=current_mode_labels(),
         upload_accept=["jpg", "jpeg", "png"],
+        demo_mode=os.getenv("PX4_EXECUTION_MODE") == "animated_demo",
     )
 
 

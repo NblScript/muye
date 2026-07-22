@@ -16,8 +16,8 @@ const healthLabels: Record<string, string> = {
   weather_config: '天气服务配置',
   event_bus: '事件流日志',
   rag_config: 'RAG 配置',
-  px4_runtime: 'PX4 运行状态',
-  runtime_config: '演示运行配置',
+  px4_runtime: '无人机运行状态',
+  runtime_config: '展示运行配置',
 }
 
 function healthColor(status?: string): 'green' | 'red' | 'amber' | 'default' {
@@ -103,7 +103,7 @@ export default function Settings() {
     ? [
         ['起飞确认', runtimeConfig.takeoff_mode],
         ['无人机后端', runtimeConfig.drone_backend],
-        ['PX4 执行', runtimeConfig.px4_execution_mode],
+        ['无人机执行', runtimeConfig.px4_execution_mode],
         ['天气模式', runtimeConfig.weather_mode],
         ['AI 模式', runtimeConfig.qwen_mode],
         ['RAG', runtimeConfig.rag_enabled],

@@ -22,11 +22,11 @@ usage() {
     cat <<'EOF'
 Usage: ./scripts/prepare.sh [options]
 
-环境准备脚本：检查依赖、准备演示图片、构建 RAG 知识库。
+环境准备脚本：检查依赖、准备展示图片、构建 RAG 知识库。
 比赛前跑一次即可。
 
 Options:
-  --images-only    仅准备演示图片
+  --images-only    仅准备展示图片
   --check-only     仅检查环境
   --rag            构建 RAG 知识库
   --production     额外检查生产模式依赖
@@ -172,10 +172,10 @@ print(','.join(missing))
     fi
 fi
 
-# ── 6. 准备演示图片 ──
+# ── 6. 准备展示图片 ──
 if [[ "$CHECK_ONLY" != "true" ]]; then
     echo ""
-    print_info "准备演示图片..."
+    print_info "准备展示图片..."
 
     mkdir -p "${ROOT_DIR}/data/images" "$SAMPLES_DIR"
 
@@ -184,7 +184,7 @@ if [[ "$CHECK_ONLY" != "true" ]]; then
 
     if find "$SAMPLES_DIR" -maxdepth 1 \( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' \) -print -quit 2>/dev/null | grep -q .; then
         COUNT=$(find "$SAMPLES_DIR" -maxdepth 1 \( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' \) | wc -l)
-        print_success "已有 $COUNT 张演示图片"
+        print_success "已有 $COUNT 张展示图片"
     elif [[ -d "$IP102_VAL_DIR" ]]; then
         # 从 IP102 数据集复制
         DEMO_SELECTIONS=(
@@ -229,5 +229,5 @@ echo "=========================================="
 echo "  环境准备完成"
 echo "=========================================="
 echo ""
-echo "启动演示: ./scripts/demo.sh"
+echo "启动展示: ./scripts/demo.sh"
 echo ""

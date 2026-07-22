@@ -29,8 +29,8 @@ function buildFallbackState(
   return {
     timestamp: Date.now() / 1000,
     drone: {
-      id: 'px4-sitl',
-      name: 'PX4 SITL 飞行器',
+      id: 'demo-drone',
+      name: '作业无人机',
       status: 'connecting',
       message: '等待连接...',
       battery: { remaining: simMapState?.drones[0]?.battery ?? 0 },

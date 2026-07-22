@@ -78,6 +78,15 @@ export interface ExpertSummary {
   weight: number
   农药名称: string
   总量: string
+  llm_provider?: string
+  reasoning?: string
+}
+
+export interface FamiliarityBreakdown {
+  pesticide_match?: number
+  historical_cases?: number
+  crop_similarity?: number
+  catalog_coverage?: number
 }
 
 export interface ConsultationDetail {
@@ -98,6 +107,7 @@ export interface RagContext {
   agreement?: string
   decision_path?: 'expert' | 'multi_agent' | 'escalated'
   familiarity_score?: number
+  familiarity_breakdown?: FamiliarityBreakdown
 }
 
 export interface ComplianceEvidence {
@@ -251,6 +261,7 @@ export interface WorkflowHistoryResponse {
 export interface DashboardContextResponse {
   modes: Record<string, string>
   upload_accept: string[]
+  demo_mode?: boolean
 }
 
 export type DemoReadinessStatus = 'ready' | 'degraded' | 'blocked'

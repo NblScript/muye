@@ -45,7 +45,7 @@ def _make_weather():
 
 
 def _make_field_context():
-    return {"name": "演示农田", "area_mu": 10, "crop_name": "小麦", "location": {}}
+    return {"name": "展示农田", "area_mu": 10, "crop_name": "小麦", "location": {}}
 
 
 @pytest.fixture

@@ -220,4 +220,5 @@ def register_sim_routes(app: FastAPI, simulator: Px4MapStateSimulator) -> None:
     app.get("/api/sim/map-state", include_in_schema=False, response_model=SimMapStateResponse)(get_sim_map_state)
     app.websocket("/sim/ws/map-state")(sim_map_state_ws)
     app.websocket("/api/sim/ws/map-state")(sim_map_state_ws)
+    app.websocket("/ws/enhanced-state")(enhanced_state_ws)
     app.websocket("/api/ws/enhanced-state")(enhanced_state_ws)

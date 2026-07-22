@@ -30,7 +30,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
     "yolo_model": {"status": "ok", "active_model": "yolov8n", "model_exists": true, "device": "auto"},
     "ai_config": {"status": "ok", "qwen_mode": "real", "providers": {"qwen": true, "deepseek": true, "xiaomi": true}},
     "weather_config": {"status": "ok", "mode": "real"},
-    "event_bus": {"status": "ok", "path": "data/logs/demo_events.jsonl"},
+    "event_bus": {"status": "ok", "path": "data/logs/events.jsonl"},
     "rag_config": {"status": "ok", "enabled": true},
     "px4_runtime": {"status": "skipped", "running": false, "ready": false},
     "runtime_config": {
@@ -158,7 +158,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 }
 ```
 
-## 演示
+## 展示
 
 ### POST /demo/upload-image
 
@@ -177,7 +177,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### POST /demo/reset-events
 
-重置事件流（清空 `data/logs/demo_events.jsonl`）。需 `?confirm=true` 查询参数。
+重置事件流（清空 `data/logs/events.jsonl`）。需 `?confirm=true` 查询参数。
 
 **响应**：
 ```json
@@ -188,7 +188,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### GET /demo/readiness
 
-获取演示就绪状态（前端 DemoReadinessBar 使用）。
+获取展示就绪状态（前端 DemoReadinessBar 使用）。
 
 **响应**：
 ```json
@@ -300,7 +300,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### POST /drone/start-px4-demo
 
-启动 PX4 SITL 演示环境。
+启动 PX4 SITL 展示环境。
 
 **响应**：
 ```json
@@ -314,7 +314,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### POST /drone/stop-px4-demo
 
-停止 PX4 SITL 演示环境。
+停止 PX4 SITL 展示环境。
 
 **响应**：
 ```json

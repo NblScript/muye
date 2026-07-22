@@ -12,7 +12,7 @@
 
 ## 表分类
 
-### 1. 演示管线运行时表
+### 1. 展示管线运行时表
 
 #### tasks
 
@@ -351,7 +351,7 @@ UNIQUE(region_level, region_name, province, city, county, year, period, indicato
 
 ## 种子数据
 
-河南演示数据导入命令：
+河南展示数据导入命令：
 ```bash
 python scripts/import_henan_field_crop_seed_csv.py
 python scripts/import_henan_soil_records_csv.py

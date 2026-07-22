@@ -281,6 +281,59 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
           )}
         </section>
 
+        {/* 路由决策 */}
+        {rag && (rag.decision_path || rag.familiarity_score != null) && (
+          <section className="drawer-section">
+            <h4 className="drawer-section-title is-orange">🧭 决策路由</h4>
+            <div className="drawer-crop-context">
+              决策路径: <strong>{
+                rag.decision_path === 'expert' ? '专家模型（快速路径）'
+                  : rag.decision_path === 'escalated' ? '专家路径异常 → 多智能体升级'
+                  : '多智能体会诊'
+              }</strong>
+            </div>
+            {rag.familiarity_score != null && (
+              <>
+                <div className="drawer-metric-pair">
+                  <div className="drawer-metric-item">
+                    <div className="drawer-metric-value">{(rag.familiarity_score * 100).toFixed(0)}%</div>
+                    <div className="drawer-metric-label">综合熟悉度</div>
+                  </div>
+                  <div className="drawer-metric-item">
+                    <div className="drawer-metric-value small" style={{
+                      color: rag.decision_path === 'multi_agent' ? 'var(--accent-amber)' : 'var(--accent-green)',
+                    }}>
+                      {rag.decision_path === 'multi_agent' ? '多智能体' : rag.decision_path === 'expert' ? '快速路径' : '升级路径'}
+                    </div>
+                    <div className="drawer-metric-label">路由选择</div>
+                  </div>
+                </div>
+                {rag.familiarity_breakdown && (
+                  <div className="drawer-familiarity-list">
+                    {[
+                      { k: 'pesticide_match', label: '农药匹配', v: rag.familiarity_breakdown.pesticide_match },
+                      { k: 'historical_cases', label: '历史案例', v: rag.familiarity_breakdown.historical_cases },
+                      { k: 'crop_similarity', label: '作物相似度', v: rag.familiarity_breakdown.crop_similarity },
+                      { k: 'catalog_coverage', label: '目录覆盖', v: rag.familiarity_breakdown.catalog_coverage },
+                    ].map((item) => (
+                      <div key={item.k} className="drawer-familiarity-row">
+                        <span className="drawer-familiarity-label">{item.label}</span>
+                        <div className="drawer-vote-track" style={{ flex: 1, margin: '0 12px' }}>
+                          <div className="drawer-vote-fill" style={{ width: `${(item.v ?? 0) * 100}%`, background: (item.v ?? 0) >= 0.8 ? 'var(--accent-green)' : (item.v ?? 0) >= 0.6 ? 'var(--accent-amber)' : 'var(--accent-red)' }} />
+                        </div>
+                        <span className="drawer-familiarity-pct">{((item.v ?? 0) * 100).toFixed(0)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  熟悉度低于阈值（0.80），系统自动路由到多智能体会诊路径
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
         {/* RAG 知识检索 */}
         {rag && hasRagContext(rag) && (
           <section className="drawer-section">
@@ -338,11 +391,24 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
                 <div className="drawer-expert-list">
                   {Object.entries(experts).map(([role, info]) => (
                     <div key={role} className="drawer-expert-row">
-                      <div>
-                        <span className="drawer-expert-name">{info.name}</span>
-                        <span>{info['农药名称']}</span>
+                      <div className="drawer-expert-header">
+                        <div>
+                          <span className="drawer-expert-name">{info.name}</span>
+                          {info.llm_provider && (
+                            <span className="drawer-expert-model">{info.llm_provider}</span>
+                          )}
+                        </div>
+                        <div className="drawer-expert-meta">
+                          <span style={{ marginRight: '12px' }}>推荐: {info['农药名称']} {info['总量']}</span>
+                          <span>权重 {(info.weight * 100).toFixed(0)}%</span>
+                        </div>
                       </div>
-                      <div className="drawer-expert-weight">权重 {(info.weight * 100).toFixed(0)}%</div>
+                      {info.reasoning && (
+                        <div className="drawer-expert-reasoning">
+                          <span className="drawer-expert-reasoning-label">推理依据</span>
+                          <p>{info.reasoning}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -367,6 +433,39 @@ export default function DecisionFlow({ task }: DecisionFlowProps) {
             </section>
           )
         })()}
+
+        {/* 天气影响 */}
+        {task?.weather && Object.keys(task.weather).length > 0 && (
+          <section className="drawer-section">
+            <h4 className="drawer-section-title is-blue">🌤️ 天气影响分析</h4>
+            <div className="drawer-weather-grid">
+              {task.weather.temperature != null && (
+                <div className="drawer-weather-item">
+                  <span className="drawer-weather-value">{String(task.weather.temperature)}°C</span>
+                  <span className="drawer-weather-label">温度</span>
+                  <span className="drawer-weather-status" style={{color: 'var(--accent-green)'}}>适宜施药</span>
+                </div>
+              )}
+              {task.weather.humidity != null && (
+                <div className="drawer-weather-item">
+                  <span className="drawer-weather-value">{String(task.weather.humidity)}%</span>
+                  <span className="drawer-weather-label">湿度</span>
+                  <span className="drawer-weather-status" style={{color: 'var(--accent-green)'}}>在最佳范围</span>
+                </div>
+              )}
+              {(task.weather.wind_speed ?? task.weather.windSpeed) != null && (
+                <div className="drawer-weather-item">
+                  <span className="drawer-weather-value">{String(task.weather.wind_speed ?? task.weather.windSpeed)}m/s</span>
+                  <span className="drawer-weather-label">风速</span>
+                  <span className="drawer-weather-status" style={{color: Number(task.weather.wind_speed ?? task.weather.windSpeed) < 4 ? 'var(--accent-green)' : 'var(--accent-amber)'}}>无漂移风险</span>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+              温度18-30°C为最佳施药温度，湿度40-75%利于药液附着，风速低于4m/s避免药液漂移
+            </div>
+          </section>
+        )}
 
         {/* 决策结果 */}
         {Object.keys(decision).length > 0 && (
