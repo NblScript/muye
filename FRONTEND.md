@@ -1,232 +1,183 @@
 # FRONTEND.md — 牧野前端开发规范
 
+## 前端定位
+
+`frontend/` 是牧野唯一前端主线。首页是面向竞赛展示和真实作业监控的昆虫热力指挥大屏；历史与设置页用于任务追溯和运行诊断。
+
+首页只展示来自后端 `event_bus` 的真实工作流数据。田地几何可以使用项目内的虚拟地块，但不得接入省级行政地图，也不得在前端随机生成虫情、天气、决策或无人机状态。
+
 ## 技术栈
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| React | 19 | UI 框架 |
-| TypeScript | 6.x | 类型安全 |
-| Vite | 8.x | 构建工具 |
-| 自定义 UI | - | `components/ui/`（Card, Button, Tag, Toast, Drawer 等） |
+| 技术 | 用途 |
+|------|------|
+| React 19 + TypeScript 6 | UI 与类型边界 |
+| Vite 8 | 开发服务器、代理和生产构建 |
+| Three.js + React Three Fiber | 虚拟田地、航线、无人机和热力层 |
+| keli-heatmap.js | 生成热力纹理与高度灰度纹理 |
+| styled-components | 指挥大屏组件样式 |
+| Zustand | 大屏面板和图层开关状态 |
+| GSAP | 地图入场与面板过渡 |
+| Axios | HTTP API 客户端 |
+| Vitest + React Testing Library | 单元与渲染测试 |
 
-## 目录结构
+## 当前目录结构
 
-```
+```text
 frontend/src/
-├── api/               # API 调用层
-│   ├── client.ts      # HTTP 客户端（axios/fetch 封装）
-│   ├── health.ts      # 健康检查 API
-│   ├── models.ts      # 模型切换 API
-│   ├── simMap.ts      # 仿真地图 API
-│   └── workflow.ts    # 工作流 API
-├── components/        # UI 组件
-│   ├── dashboard/     # 仪表盘组件（DecisionFlow, DecisionExplainPanel, ExpertPanel, DJIStatusCard,
-│   │                  #   DemoScenarioCards, EvaluationCard, ModelSwitcher, PipelineStepper, StatCard,
-│   │                  #   TaskList, WeatherCard）
-│   ├── map/           # 地图组件（FieldMap, StatusPanel/）
-│   ├── ui/            # 通用 UI 组件（Alert, Button, Card, Drawer, Input, Progress, Select, Tag, Toast）
-│   ├── workflow/      # 工作流组件（WorkflowPanel）
+├── api/
+│   ├── client.ts              # /api 基础地址、超时和错误转换
+│   ├── health.ts              # readiness/health
+│   ├── realtime.ts            # WebSocket URL
+│   └── workflow.ts            # 状态、历史、上传、起飞确认
+├── assets/screen/
+│   ├── Screen.tsx             # 指挥大屏组合入口
+│   ├── model.ts               # WorkflowTaskState -> ScreenViewModel
+│   ├── store.ts               # 大屏共享展示状态
+│   ├── map/                   # Three.js 虚拟田地、热力层和航线几何
+│   ├── panel/                 # 顶栏、轻量统计面板和底部操作栏
+│   └── hooks/                 # 面板过渡工具
+├── components/
+│   ├── ui/                    # 历史/设置页共用基础组件
 │   └── ErrorBoundary.tsx
-├── hooks/             # 自定义 Hooks
-│   ├── useDashboardState.ts   # Dashboard 页面全部状态与逻辑
-│   ├── useEnhancedMapState.ts # 实时地图状态（WebSocket + HTTP 降级）
-│   ├── useSimMapState.ts
-│   └── useWebSocket.ts
-├── pages/             # 页面级组件
-│   ├── Dashboard.tsx  # 主仪表盘（纯渲染，逻辑在 useDashboardState）
-│   ├── History.tsx    # 任务历史报表
-│   ├── Px4Viewer.tsx  # PX4 可视化
-│   └── Settings.tsx   # 系统设置页
-├── layouts/           # 布局
-│   └── MainLayout.tsx
-├── types/             # TypeScript 类型
-│   ├── dashboard.types.ts
+├── hooks/
+│   ├── useDashboardState.ts   # 首页状态、上传与起飞操作
+│   ├── useWorkflowRealtimeState.ts
+│   └── useWebSocket.ts        # WS 重连 + HTTP 轮询降级
+├── layouts/MainLayout.tsx
+├── pages/
+│   ├── Dashboard.tsx          # 首页，懒加载 Screen
+│   ├── History.tsx
+│   └── Settings.tsx
+├── types/
 │   ├── health.ts
-│   ├── simMap.ts
-│   └── workflow.ts    # 含 DJITelemetry, DJIStatus, MissionIteration, MissionDetail, WorkflowTaskState 类型
-├── styles/            # 样式
-│   ├── dashboard.css  # 主样式表（组件类、动画、响应式）
-│   └── px4-viewer.css
-├── utils/             # 工具函数
-│   └── dashboardUtils.ts  # asRecord, modeColor, statusColor, summarizePests, formatPestLabel 等
-├── App.tsx            # 根组件
-├── main.tsx           # 入口
-└── index.css          # 全局样式（CSS 变量、动画、工具类）
+│   ├── workflow.ts
+│   └── keli-heatmap.d.ts
+├── utils/
+│   ├── dashboardUtils.ts
+│   ├── pipelineStages.ts
+│   └── workflowState.ts       # 实时工作流校验与最后有效帧保留
+├── App.tsx
+├── index.css                  # 全局/辅助页面样式
+└── main.tsx
 ```
 
-## 组件规范
+删除或移动上述关键入口时，必须同步更新本文件、相关测试和 `vite.config.ts` 的构建分包规则。
 
-### 组件组织
+## 首页数据流
 
-- **页面组件**（`pages/`）：路由级别的完整页面，组合多个功能组件
-  - Dashboard 页面遵循 **Hook + 纯渲染** 模式：`useDashboardState()` 管理全部状态和事件处理，页面组件只负责 JSX 渲染
-- **功能组件**（`components/dashboard/`, `components/map/`, `components/workflow/`）：特定功能区域
-- **通用组件**（`components/ui/`）：可复用的基础 UI 组件
-- **布局组件**（`layouts/`）：页面骨架和导航
-
-### 组件编写规则
-
-```typescript
-// 1. 使用函数组件 + Hooks
-// 2. Props 接口定义在组件上方
-interface FieldMapProps {
-  droneStatus?: string;
-  detections?: WorkflowDetectionEntry[];
-  spraySchedule?: number[] | null;
-  densityGrid?: DensityGridCell[] | null;
-  instructionRoute?: [number, number][] | null;
-  instructionCoverage?: [number, number][] | null;
-}
-
-export function FieldMap({ droneStatus, detections, spraySchedule, densityGrid, instructionRoute, instructionCoverage }: FieldMapProps) {
-  // 3. Hooks 在组件顶部
-  // 4. 颜色常量语义化命名
-  const C = { fieldActive: '#089cc5', fieldCompleted: '#16875a', ... };
-
-  // 5. 使用 CSS 类替代 inline style（仅动态值保留 inline）
-  return (
-    <div className="field-map">
-      <svg>...</svg>
-    </div>
-  );
-}
+```text
+GET /api/workflow/state ─┐
+                        ├─ useWebSocket / useWorkflowRealtimeState
+WS /api/ws/enhanced-state ┘
+            │
+            ▼
+retainLatestEventBusTask
+            │
+            ▼
+useDashboardState
+            │
+            ▼
+buildScreenViewModel
+            │
+       ┌────┴────┐
+       ▼         ▼
+  Three.js 地图   React/CSS 信息面板
 ```
 
-## 状态管理
+数据边界规则：
 
-### 分层策略
+1. 首页只接受 `source === "event_bus"` 且结构完整的 `latest_task`。
+2. `source === "fallback"` 是旧消费者兼容数据，不能进入首页真实指标。
+3. WebSocket 某一帧为 `workflow_state: null`、回退包或畸形包时，保留最后一帧有效任务，避免热力层闪烁。
+4. WebSocket 断开后由 `useWebSocket` 启动 HTTP 轮询，并按指数退避重连；恢复后只提示一次。
+5. 映射层必须容忍可选业务字段，但不能用硬编码演示值填充真实指标。
 
-| 层 | 用途 | 实现 |
-|----|------|------|
-| 页面状态 | Dashboard 全部状态 + 事件处理 | `useDashboardState()` Hook |
-| 组件状态 | 单组件内部状态 | `useState` |
-| 共享状态 | 跨组件状态 | React Context + Hooks |
-| 服务端状态 | API 数据缓存 | 自定义 Hooks（`useEnhancedMapState`） |
-| WebSocket 状态 | 实时数据 | `useWebSocket` Hook |
+## 昆虫热力图规则
 
-### useDashboardState 模式
+热力数据优先使用：
 
-Dashboard 页面使用 `useDashboardState()` 自定义 Hook 封装全部状态、派生数据、定时器和事件处理函数。页面组件仅负责渲染，不包含任何业务逻辑。
-
-```typescript
-// pages/Dashboard.tsx
-export default function Dashboard() {
-  const toast = useToast()
-  const s = useDashboardState()
-  return <div>...</div>  // 纯渲染
-}
-
-// hooks/useDashboardState.ts
-export function useDashboardState() {
-  // 全部 useState、useEffect、useMemo、事件处理函数
-  return { demoMode, latestTask, handleUploadClick, ... }
-}
+```text
+latest_task.drone.instruction.density_grid
 ```
 
-## 样式规范
+每个网格包含 `density`（0–1）和 GPS `bounds`。`density` 是检测置信度按网格累加、再除以当前任务最大网格权重得到的**相对热值**，不是每亩虫口数或农艺防治阈值。`buildScreenViewModel()` 将其归一化到虚拟田地坐标，`FieldHeatmap` 使用同一份数据生成彩色纹理和高度纹理。
 
-### 设计系统
+`latest_task.drone.instruction.density_metadata` 标注热力数据的来源、坐标空间、投影方式、有效/拒绝检测框数量和 `is_simulated`。大屏必须显示真实或模拟来源；不得把演示热力值标成 YOLO 实测数据。
 
-- **主题**：暖色奶油色调（CSS 变量驱动），专为竞赛展示优化
-- **全局样式**：`index.css` 定义 CSS 变量（`--accent-amber`, `--accent-red`, `--bg-card` 等）、动画关键帧（`fadeSlideUp`, `shimmer`）和工具类（`.page-container`, `.page-title`, `.color-error`）
-- **组件样式**：`styles/dashboard.css` 包含所有组件 CSS 类
-- **响应式**：大屏展示为主（1920x1080），支持 720px+ 移动端适配
+YOLO 像素检测框必须携带 `coordinate_space: "image_pixel"`、`image_width` 和 `image_height`；归一化框使用 `coordinate_space: "image_normalized"` 且坐标范围为 0–1。缺少图像尺寸的像素框不能参与真实密度网格。该约定与 Ultralytics 的 `xyxy`（像素）和 `xyxyn`（归一化）定义一致：<https://docs.ultralytics.com/modes/predict/>。
 
-### 样式编写规则
+当后端尚未生成密度网格但已有检测框时，可由检测位置生成确定性的虫点热区；没有真实检测时保持空热力状态。禁止使用 `Math.random()`、定时扰动或每帧重算随机热点。
 
-1. **禁止静态 inline style**：所有静态样式（颜色、布局、间距、字号）必须提取为 CSS 类
-2. **动态值允许 inline**：仅百分比宽度（`width: ${progress}%`）、动态颜色查找可使用 `style={{}}`
-3. **颜色常量**：SVG 组件中的硬编码颜色使用语义化常量对象（如 FieldMap 的 `const C = { fieldActive: '#089cc5', ... }`）
-4. **CSS 修饰类**：颜色变体使用 `.is-red`, `.is-active` 等修饰类，不使用 inline `color`
-5. **动画**：入场动画通过 `animation-delay` 配合 `:nth-child(n)` 实现交错效果
+稳定性约束：
 
-## API 调用
+- 同一份 `heatCells` 内容不重建纹理。
+- 纹理替换后必须释放旧的 `CanvasTexture`。
+- 热力图可显隐，但显隐不能改变数据。
+- 虚拟田地边界固定为项目内部坐标，真实 GPS 只用于地块内归一化。
+- 当前投影把整张巡检图像的上、下、左、右边缘映射到地块外接矩形，默认图像北向且覆盖整个田块；接入正射影像或相机位姿前，不宣称单个虫点具有测绘级 GPS 精度。
 
-```typescript
-// api/client.ts — 统一 HTTP 客户端
-const client = axios.create({
-  baseURL: '/api',
-  timeout: 10000,
-});
+## 组件和状态规范
 
-// 响应拦截器：统一错误处理
-client.interceptors.response.use(
-  (response) => response.data,
-  (error) => {
-    Toast.error(error.response?.data?.detail || '请求失败');
-    return Promise.reject(error);
-  }
-);
-```
+- 页面组件只组合功能；上传、刷新、连接和起飞确认放在 `useDashboardState()`。
+- 后端原始结构到展示结构的转换集中在 `assets/screen/model.ts`，面板组件不得重复解析业务 JSON。
+- 跨地图和面板的纯展示状态使用 `assets/screen/store.ts`；服务端状态不得复制进 Zustand。
+- 可复用的运行时校验放在 `utils/`，同时提供纯函数测试。
+- Three.js 创建的纹理、材质、几何体或计时器必须在 effect cleanup 中释放。
+- 不要在 render 阶段创建网络连接或 Three.js 资源。
+- 首页使用固定相机目标保持竞赛展示视角；不要重新引入轨道控制或允许误操作改变视角。
+- 地图标题、热力图例和等待提示使用 DOM 覆盖层，三维场景只渲染确实需要透视关系的对象。
 
-## 构建与开发
+## API 与代理
+
+浏览器统一请求 `/api`：
+
+- `GET /workflow/state`：最新工作流聚合状态
+- `GET /workflow/history`：任务历史
+- `POST /workflow/inspection-image`：上传巡检图像
+- `POST /drone/confirm-takeoff`：人工确认起飞
+- `GET /health`：设置页运行诊断
+- `WS /ws/enhanced-state`：实时工作流状态
+
+开发环境由 Vite 将 `/api` 代理到 `MUYE_API_TARGET`，默认 `http://127.0.0.1:18000`。WebSocket URL 必须通过 `api/realtime.ts` 生成，以自动适配 `ws/wss`。
+
+## 样式与适配
+
+- 首页大屏设计基准为 1920×1080，由 `panel/autoFit.tsx` 等比适配浏览器窗口。
+- 首页视觉由 `assets/screen/` 内的 styled-components 管理；历史和设置页沿用 `index.css` 的全局变量。
+- 信息必须在 16:9 屏幕完整可见；新增面板前先验证 1366×768、1920×1080 和浏览器缩放场景。
+- 静态色值尽量集中在组件主题或语义常量中，动态坐标和进度允许 inline style。
+- 动画只表达状态变化，不得让热力值、统计数字或连接状态持续闪烁。
+
+## 测试要求
+
+至少覆盖以下边界：
+
+- `DashboardOverview.test.tsx`：首页把实时状态和操作传给大屏。
+- `PestChart.test.tsx`：虫情统计数量、置信度、最多五类和空状态。
+- `RouteGeometry.test.ts`：连续航线、虚线分段和重复航点边界。
+- `ScreenModel.test.ts`：真实工作流到地块、虫情、决策、无人机、复检和热力模型的映射。
+- `workflowState.test.ts`：空包、回退包和畸形包不会覆盖最后有效任务。
+- `PipelineStepper.test.ts`：处理阶段和进度派生。
+- `MainLayoutNavigation.test.tsx`：辅助页面导航。
+- `dashboardUtils.test.ts`：公共展示工具。
+
+提交前运行：
 
 ```bash
-# 开发
-cd frontend && npm run dev      # 启动开发服务器（端口 5173）
-
-# 构建
-npm run build                   # 生产构建到 dist/
-
-# 测试
-npx vitest run                  # 运行前端测试（52 个用例）
+cd frontend
+npm run lint
+npm test -- --run
+npm run build
 ```
 
-## 关键依赖
+构建中的大型 Three.js vendor chunk 提示目前是已知提示；首页 `Screen` 已懒加载，历史和设置页也按路由加载，不应把这些依赖重新合并进首屏入口 chunk。
 
-| 包 | 用途 |
-|----|------|
-| `axios` | HTTP 客户端 |
-| `react-router-dom` | 路由 |
+## 常见错误
 
-## 闭环评估组件
-
-### 类型定义（`types/workflow.ts`）
-
-- **`MissionIteration`**：单次迭代记录。字段：`iteration_id`、`iteration_number`、`spray_request_id`、`status`、`pre_pest_count`、`post_pest_count`、`kill_rate` 等
-- **`MissionDetail`**：任务闭环详情。字段：`mission_row_id`、`mission_uuid`、`original_request_id`、`status`、`kill_rate_threshold`、`max_iterations`、`current_iteration`、`final_kill_rate`、`pest_types`、`iterations`（`MissionIteration[]`）
-- **`WorkflowTaskState`**：新增可选字段 `mission?: MissionDetail`，关联任务闭环数据
-
-### API 函数（`api/workflow.ts`）
-
-| 函数 | 签名 | 说明 |
-|------|------|------|
-| `fetchMission` | `(requestId: string) => MissionDetail` | 根据 requestId 获取任务闭环详情 |
-| `fetchMissions` | `({ status, limit, offset }) => MissionListResponse` | 分页查询任务列表，支持按状态过滤 |
-| `cancelMission` | `(missionUuid: string) => void` | 取消指定任务闭环 |
-
-### EvaluationCard
-
-位于 `components/dashboard/`，支持两种渲染模式：
-
-- **MissionTimeline**（`WorkflowTaskState.mission` 存在时）：展示任务闭环时间线
-  - 任务状态徽章（status badge）
-  - 阈值信息（kill_rate_threshold / max_iterations）
-  - 总体杀虫率进度条（kill rate bar）
-  - 垂直时间线（vertical timeline），每轮迭代显示：迭代编号、状态、喷洒前后害虫数量、该轮杀虫率
-- **SingleEvaluation**（fallback，兼容旧数据）：显示评估结论（effective/partial/ineffective）、效果评分、喷洒前后害虫数量对比
-
-新增 CSS 类：`.mission-timeline`、`.mission-iteration-row`、`.mission-iteration-header` 等（定义在 `styles/dashboard.css`）。
-
-### PipelineStepper
-
-已扩展新增「效果评估」阶段（`evaluation`）。管线步骤顺序为：upload → detection → weather → decision → drone → evaluation。评估阶段根据 `WorkflowTaskState.evaluation` 字段渲染状态（scheduled/evaluated/cancelled）。
-
-## 密度热力图与变量喷洒可视化
-
-### 数据流
-
-密度数据（`density_grid`）和喷洒速率表（`spray_schedule`）由后端 `MissionPlanner.plan_variable_rate_mission()` 产出，存储在 `drone_mission_updates.instruction` JSON 中。前端通过 workflow state 中的 `latest_task.drone.instruction` 提取，无需单独 API 调用。
-
-### 类型定义（`types/workflow.ts`）
-
-- **`DensityGridCell`**：密度网格单元。字段：`row`、`col`、`density`（0–1 归一化）、`bounds`（GPS 坐标对 `[lon, lat][]`）
-- **`WorkflowDroneInstruction`**：扩展了 `density_grid`、`spray_schedule`、`source` 字段
-
-### FieldMap 渲染逻辑
-
-1. **GPS→SVG 投影**：后端密度网格使用 GPS 坐标（`density_grid[].bounds`），通过 `projectGpsToSvg()` 投影到 SVG 抽象坐标空间。投影基准为 `instructionCoverage`（覆盖区域 GPS 坐标）→ `primaryFieldPlot.boundary`（SVG 坐标）
-2. **密度网格**：优先使用后端 `densityGrid` prop（真实 GPS 坐标投影），无后端数据时降级为本地 `localDensityGrid`（从检测点位置计算 6×8 网格）
-3. **变量喷洒航线**：当 `spraySchedule` 可用时，每条航线段按归一化速率着色（高密度红、中密度琥珀、低密度绿）和变粗细（1.4–3.0 SVG 单位）。无数据时使用标准虚线样式
-4. **图例**：增加三级密度喷洒量图例和密度热力图开关
-5. **密度统计卡片**：侧边栏显示网格数、最高密度、喷洒速率范围
+- 把后端 `fallback` 演示状态当成真实虫情。
+- WebSocket 空包到达时把 `latestTask` 清空，造成热力层闪烁。
+- 在前端用随机值补齐虫点、天气或无人机轨迹。
+- 同时维护多套地图或 Dashboard 实现。
+- 面板组件直接读取中文业务键并各自实现转换。
+- 忘记释放 Three.js/GSAP 资源。
+- 修改 API 字段后只改 TypeScript 类型，没有同步后端 schema 和契约测试。

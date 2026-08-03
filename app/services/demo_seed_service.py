@@ -212,6 +212,7 @@ def seed_demo_state(
     field = _demo_field()
     field_id = str(field["field_id"])
     decision = _decision()
+    detections = _detections()
     weather = {
         "summary": "晴，微风，适宜施药",
         "temperature": 24,
@@ -230,6 +231,19 @@ def seed_demo_state(
         "速度": 4.5,
         "喷洒速率": "1.8 L/min",
         "density_grid": _density_grid(),
+        "density_metadata": {
+            "source": "demo_seed",
+            "density_kind": "synthetic_relative_surface",
+            "coordinate_space": "virtual_field_normalized",
+            "projection": "synthetic_demo_surface",
+            "normalization": "max_cell_weight",
+            "grid_rows": 18,
+            "grid_cols": 28,
+            "detection_count": len(detections),
+            "accepted_detection_count": len(detections),
+            "rejected_detection_count": 0,
+            "is_simulated": True,
+        },
         "spray_schedule": _spray_schedule(),
     }
 
@@ -260,7 +274,7 @@ def seed_demo_state(
         }
     )
     store.mark_task_started(DEMO_REQUEST_ID, "data/samples/aphids_01.jpg", field_id)
-    store.replace_detections(DEMO_REQUEST_ID, _detections())
+    store.replace_detections(DEMO_REQUEST_ID, detections)
     store.add_weather_snapshot(DEMO_REQUEST_ID, weather)
     store.add_decision(DEMO_REQUEST_ID, decision)
     store.upsert_spray_record(
@@ -304,7 +318,7 @@ def seed_demo_state(
         stage="yolo",
         status="completed",
         message="YOLO 识别到小麦蚜虫",
-        payload={"detections": _detections()},
+        payload={"detections": detections},
     )
     event_bus.publish(
         request_id=DEMO_REQUEST_ID,

@@ -143,6 +143,23 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 }
 ```
 
+### POST /workflow/inspection-image
+
+上传一张巡检图片并写入工作流图片目录。前端通过 `/api/workflow/inspection-image` 访问同一端点。
+
+**请求**：`multipart/form-data`
+
+- `file`：扩展名为 `.jpg`、`.jpeg` 或 `.png` 的有效图片
+- 空文件、伪造图片内容、不支持的扩展名或超过服务端大小限制时返回 400
+
+**响应**：
+```json
+{
+  "filename": "20260803-201500-a1b2c3d4-field.jpg",
+  "path": "data/images/20260803-201500-a1b2c3d4-field.jpg"
+}
+```
+
 ## 仪表盘
 
 ### GET /dashboard/context
@@ -255,21 +272,43 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 实时仿真地图状态推送。
 
-### WebSocket /api/ws/enhanced-state
+### WebSocket /ws/enhanced-state
 
-增强状态推送（含 GPS 坐标、遥测数据、任务进度）。
+增强状态推送（含 GPS 坐标、遥测数据、任务进度和聚合工作流）。浏览器通过 Vite 代理使用 `/api/ws/enhanced-state` 别名。
 
 **消息格式**：
 ```json
 {
-  "type": "state_update",
-  "data": {
-    "drone": {...},
-    "mission": {...},
-    "timestamp": "2026-05-18T10:00:00Z"
+  "timestamp": 1785768900.25,
+  "drone": {
+    "id": "px4-sitl",
+    "name": "PX4 SITL 飞行器",
+    "status": "spraying",
+    "message": "变量喷洒中",
+    "position": null,
+    "battery": {"remaining": 0.82},
+    "telemetry": {"speed": 4.2}
+  },
+  "mission": {
+    "task_id": "req_abc123",
+    "status": "spraying",
+    "progress": 62,
+    "current_waypoint": 4,
+    "total_waypoints": 12,
+    "planned_route": []
+  },
+  "trajectory": {"recent_points": [], "total_distance": 0.0},
+  "field": {"id": "field-01", "name": "虚拟试验田", "boundary": []},
+  "workflow_state": {
+    "source": "event_bus",
+    "event_count": 18,
+    "latest_task": {},
+    "recent_tasks": []
   }
 }
 ```
+
+如果某一轮工作流状态构建失败，连接不会中断，该帧的 `workflow_state` 为 `null`；消费者应保留上一帧有效工作流，而不是清空当前展示。
 
 ## 无人机
 
@@ -397,9 +436,22 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
     {"row": 0, "col": 0, "density": 0.0, "bounds": [[lon1, lat1], [lon2, lat2]]},
     {"row": 0, "col": 1, "density": 0.35, "bounds": [[lon1, lat1], [lon2, lat2]]}
   ],
-  "spray_schedule": [0.5, 1.0, 1.5, 1.5, 1.0, 0.5, 0.5, 1.0]
+  "spray_schedule": [0.5, 1.0, 1.5, 1.5, 1.0, 0.5, 0.5, 1.0],
+  "metadata": {
+    "source": "yolo_bbox",
+    "density_kind": "relative_detection_weight",
+    "coordinate_space": "image_normalized",
+    "projection": "image_frame_to_geofence_bbox",
+    "normalization": "max_cell_weight",
+    "detection_count": 12,
+    "accepted_detection_count": 11,
+    "rejected_detection_count": 1,
+    "is_simulated": false
+  }
 }
 ```
+
+`density` 是单次任务内的相对检测热值，不是绝对虫口密度。`metadata.is_simulated` 用于区分演示种子和真实 YOLO 检测；像素框必须携带原图宽高才能参与密度计算。
 
 **密度等级与喷洒速率**：
 - `density >= 0.6` → `base_rate × 1.5`（高密度区加量喷洒）

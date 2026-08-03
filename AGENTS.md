@@ -17,7 +17,7 @@
 
 | 层 | 技术 |
 |---|------|
-| 前端 | React 19 + TypeScript 6 + Vite 8（暖色大屏，CSS 变量驱动，useDashboardState Hook 模式） |
+| 前端 | React 19 + TypeScript 6 + Vite 8 + Three.js（昆虫热力指挥大屏，useDashboardState Hook 模式） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
 | AI | YOLOv8（检测，可切换模型）+ Qwen/DeepSeek/Xiaomi（多模型决策，provider 可配置）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
 | 无人机 | PX4 SITL + MAVSDK（仿真）/ DJI OSDK（行业级无人机） |
@@ -207,7 +207,7 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 
 **决策扩展**：`DECISION_SCHEMA` 新增 `预计见效时间` 字段，评估配置定义在 `app/config_types.py`
 
-**前端展示**：`EvaluationCard` 组件 + `PipelineStepper` 新增评估阶段
+**前端展示**：`assets/screen/model.ts` 将评估状态映射到闭环面板和七阶段流程面板
 
 **`WorkflowTaskState` 扩展**：新增可选 `evaluation` 字段，携带评估状态和评分
 

@@ -112,6 +112,10 @@ class UltralyticsPredictor:
             return []
 
         names = getattr(result, "names", {}) or {}
+        orig_shape = getattr(result, "orig_shape", None)
+        has_orig_shape = isinstance(orig_shape, (list, tuple)) and len(orig_shape) >= 2
+        image_height = int(orig_shape[0]) if has_orig_shape else None
+        image_width = int(orig_shape[1]) if has_orig_shape else None
         detections: list[dict[str, Any]] = []
         for box in result.boxes:
             class_id = int(box.cls[0].item())
@@ -126,6 +130,9 @@ class UltralyticsPredictor:
                         "y1": y1,
                         "x2": x2,
                         "y2": y2,
+                        "coordinate_space": "image_pixel",
+                        **({"image_width": image_width} if image_width else {}),
+                        **({"image_height": image_height} if image_height else {}),
                     },
                 }
             )

@@ -18,7 +18,11 @@
 
 ## 已完成（近期）
 
-- [x] 前端测试覆盖率提升（60 个测试，Vitest + React Testing Library）
+- [x] 前端核心链路测试覆盖（Vitest + React Testing Library）
+- [x] 昆虫热力大屏实时状态抗闪烁（保留最后有效 event_bus 帧）
+- [x] 首页加载轻量化（移除 ECharts，辅助页面按路由加载）
+- [x] 三维场景依赖收敛（移除 Drei，固定视角与原生航线几何）
+- [x] YOLO 像素坐标到相对热力网格的数据契约（尺寸校验、来源标记、持久化）
 - [x] API 速率限制（滑动窗口 per-IP 限流，默认 120 次/分钟）
 - [x] SLO 监控（进程内指标采集，4 项 SLO 追踪）
 - [x] DJI OSDK 行业级无人机对接 Phase 1 + Phase 2（后端抽象层 + 仿真模式）

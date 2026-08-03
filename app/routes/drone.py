@@ -359,6 +359,7 @@ async def get_density_map(request_id: str) -> Any:
 
     density_grid = instruction.get("density_grid") or []
     spray_schedule = instruction.get("spray_schedule") or []
+    density_metadata = instruction.get("density_metadata") or {}
 
     if not density_grid:
         raise HTTPException(status_code=404, detail="该任务无密度图数据")
@@ -369,6 +370,7 @@ async def get_density_map(request_id: str) -> Any:
         "grid_cols": max(c["col"] for c in density_grid) + 1 if density_grid else 0,
         "cells": density_grid,
         "spray_schedule": spray_schedule,
+        "metadata": density_metadata,
     }
 
 

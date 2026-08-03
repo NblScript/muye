@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from app.slo import SLOMetrics
 
@@ -82,13 +82,15 @@ def test_websocket_stability():
     assert snap["websocket"]["ok"] is True
 
 
-def test_slo_endpoint_returns_snapshot():
+@pytest.mark.asyncio
+async def test_slo_endpoint_returns_snapshot():
     from app.routes.health import api_slo
 
     app = FastAPI()
     app.get("/slo")(api_slo)
-    client = TestClient(app)
-    resp = client.get("/slo")
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/slo")
     assert resp.status_code == 200
     data = resp.json()
     assert "api" in data

@@ -352,6 +352,19 @@ def _spray_instruction() -> dict:
         "速度": 4.5,
         "喷洒速率": "1.8 L/min",
         "density_grid": _density_grid(),
+        "density_metadata": {
+            "source": "demo_seed",
+            "density_kind": "synthetic_relative_surface",
+            "coordinate_space": "virtual_field_normalized",
+            "projection": "synthetic_demo_surface",
+            "normalization": "max_cell_weight",
+            "grid_rows": 18,
+            "grid_cols": 28,
+            "detection_count": 16,
+            "accepted_detection_count": 16,
+            "rejected_detection_count": 0,
+            "is_simulated": True,
+        },
         "spray_schedule": _spray_schedule(),
     }
 

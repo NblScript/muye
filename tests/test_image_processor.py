@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from PIL import Image
 
 from modules.detection.image_processor import ImageProcessingError, ImageProcessor
 
@@ -9,7 +10,7 @@ from modules.detection.image_processor import ImageProcessingError, ImageProcess
 @pytest.mark.asyncio
 async def test_image_processor_filters_low_confidence_results(tmp_path) -> None:
     image_file = tmp_path / "field.jpg"
-    image_file.write_bytes(b"fake-jpeg")
+    Image.new("RGB", (100, 80), color="green").save(image_file)
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -44,7 +45,15 @@ async def test_image_processor_filters_low_confidence_results(tmp_path) -> None:
         {
             "pest_type": "aphid",
             "confidence": 0.92,
-            "position": {"x1": 10.0, "y1": 20.0, "x2": 40.0, "y2": 60.0},
+            "position": {
+                "x1": 10.0,
+                "y1": 20.0,
+                "x2": 40.0,
+                "y2": 60.0,
+                "coordinate_space": "image_pixel",
+                "image_width": 100,
+                "image_height": 80,
+            },
         }
     ]
 

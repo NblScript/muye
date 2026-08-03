@@ -39,6 +39,9 @@ def test_density_map_add_detections_with_bbox() -> None:
 
     max_cell = max(max(row) for row in grid)
     assert max_cell == 1.0
+    assert dm.has_data is True
+    assert dm.accepted_detections == 2
+    assert dm.rejected_detections == 0
 
 
 def test_density_map_empty_detections() -> None:
@@ -63,6 +66,7 @@ def test_density_map_geo_grid() -> None:
     lon2, lat2 = cells[0]["bounds"][1]
     assert lon2 > lon1
     assert lat2 > lat1
+    assert cells[0]["bounds"][0][1] > cells[-1]["bounds"][0][1]
 
 
 def test_density_map_suggest_spray_rates() -> None:
@@ -111,3 +115,50 @@ def test_density_map_concentrated_detections_produce_hotspot() -> None:
     assert len(nonzero_cells) <= 2
     max_cell = max(max(row) for row in grid)
     assert max_cell == 1.0
+
+
+def test_density_map_reads_pixel_dimensions_from_detection_contract() -> None:
+    dm = DensityMap(GEOFENCE, grid_rows=4, grid_cols=4)
+    dm.add_detections([{
+        "pest_type": "aphid",
+        "confidence": 0.9,
+        "position": {
+            "x1": 480,
+            "y1": 120,
+            "x2": 560,
+            "y2": 200,
+            "coordinate_space": "image_pixel",
+            "image_width": 640,
+            "image_height": 480,
+        },
+    }])
+
+    grid = dm.to_grid()
+    assert grid[1][3] == 1.0
+    assert dm.metadata() == {
+        "source": "yolo_bbox",
+        "density_kind": "relative_detection_weight",
+        "coordinate_space": "image_normalized",
+        "projection": "image_frame_to_geofence_bbox",
+        "normalization": "max_cell_weight",
+        "grid_rows": 4,
+        "grid_cols": 4,
+        "detection_count": 1,
+        "accepted_detection_count": 1,
+        "rejected_detection_count": 0,
+        "is_simulated": False,
+    }
+
+
+def test_density_map_rejects_pixel_bbox_without_dimensions() -> None:
+    dm = DensityMap(GEOFENCE, grid_rows=4, grid_cols=4)
+    dm.add_detections([{
+        "pest_type": "aphid",
+        "confidence": 0.9,
+        "position": {"x1": 100, "y1": 100, "x2": 150, "y2": 150},
+    }])
+
+    assert dm.has_data is False
+    assert dm.accepted_detections == 0
+    assert dm.rejected_detections == 1
+    assert all(cell == 0 for row in dm.to_grid() for cell in row)

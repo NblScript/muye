@@ -17,8 +17,8 @@ function makeTask(overrides: Partial<WorkflowTaskState> = {}): WorkflowTaskState
       area_mu: 12.6,
     },
     detections: [
-      { pest_type: 'aphid', confidence: 0.92, position: { x1: 120, y1: 80, x2: 180, y2: 140 } },
-      { pest_type: 'aphid', confidence: 0.88, position: { x1: 420, y1: 260, x2: 490, y2: 330 } },
+      { pest_type: 'aphid', confidence: 0.92, position: { x1: 120, y1: 80, x2: 180, y2: 140, coordinate_space: 'image_pixel', image_width: 640, image_height: 480 } },
+      { pest_type: 'aphid', confidence: 0.88, position: { x1: 420, y1: 260, x2: 490, y2: 330, coordinate_space: 'image_pixel', image_width: 640, image_height: 480 } },
     ],
     weather: { summary: '晴', temperature: 27.4, humidity: 61, wind_speed: 3.2 },
     spray_summary: { spray_area_mu: 12.6 },
@@ -56,6 +56,12 @@ function makeTask(overrides: Partial<WorkflowTaskState> = {}): WorkflowTaskState
         density_grid: [
           { row: 0, col: 0, density: 0.82, bounds: [[113.59, 34.69], [113.64, 34.74]] },
         ],
+        density_metadata: {
+          source: 'yolo_bbox',
+          density_kind: 'relative_detection_weight',
+          accepted_detection_count: 2,
+          is_simulated: false,
+        },
       },
       position: { latitude_deg: 34.76, longitude_deg: 113.65 },
     },
@@ -121,7 +127,14 @@ describe('buildScreenViewModel', () => {
     expect(model.fieldTwin.route).toHaveLength(2)
     expect(model.fieldTwin.hasRoute).toBe(true)
     expect(model.fieldTwin.pestPoints).toHaveLength(2)
+    expect(model.fieldTwin.pestPoints[0]).toMatchObject({
+      x: 0.319375,
+      y: 0.31125,
+    })
     expect(model.fieldTwin.heatCells[0].density).toBe(0.82)
+    expect(model.fieldTwin.densitySourceLabel).toBe('YOLO 相对检测热值')
+    expect(model.fieldTwin.densitySimulated).toBe(false)
+    expect(model.fieldTwin.densityAcceptedCount).toBe(2)
     expect(model.fieldTwin.dronePosition).not.toBeNull()
   })
 
@@ -141,5 +154,6 @@ describe('buildScreenViewModel', () => {
     expect(model.fieldTwin.hasRoute).toBe(false)
     expect(model.fieldTwin.route).toEqual([])
     expect(model.fieldTwin.pestPoints).toEqual([])
+    expect(model.fieldTwin.densitySourceLabel).toBe('等待虫情数据')
   })
 })

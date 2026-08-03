@@ -29,24 +29,8 @@ export default defineConfig({
             return 'vendor-three-fiber'
           }
 
-          if (id.includes('/@react-three/drei/')) {
-            return 'vendor-three-drei'
-          }
-
-          if (id.includes('/three-stdlib/')) {
-            return 'vendor-three-extras'
-          }
-
           if (id.includes('/three/')) {
             return 'vendor-three'
-          }
-
-          if (id.includes('/zrender/')) {
-            return 'vendor-zrender'
-          }
-
-          if (id.includes('/echarts/')) {
-            return 'vendor-charts'
           }
 
           if (

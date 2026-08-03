@@ -20,6 +20,9 @@ export interface WorkflowDetectionPosition {
   y1?: number
   x2?: number
   y2?: number
+  coordinate_space?: 'image_pixel' | 'image_normalized' | string
+  image_width?: number
+  image_height?: number
 }
 
 export interface WorkflowDetectionEntry {
@@ -35,6 +38,20 @@ export interface DensityGridCell {
   bounds: [number, number][]
 }
 
+export interface DensityGridMetadata {
+  source?: string
+  density_kind?: string
+  coordinate_space?: string
+  projection?: string
+  normalization?: string
+  grid_rows?: number
+  grid_cols?: number
+  detection_count?: number
+  accepted_detection_count?: number
+  rejected_detection_count?: number
+  is_simulated?: boolean
+}
+
 export interface WorkflowDroneInstruction {
   飞行路径?: [number, number][]
   覆盖区域?: {
@@ -44,6 +61,7 @@ export interface WorkflowDroneInstruction {
   速度?: number | string
   喷洒速率?: number | string
   density_grid?: DensityGridCell[]
+  density_metadata?: DensityGridMetadata
   spray_schedule?: number[]
   source?: string
 }

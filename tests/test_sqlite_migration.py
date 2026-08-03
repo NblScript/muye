@@ -234,6 +234,62 @@ def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_p
     assert [task["request_id"] for task in image_search_tasks] == ["req-b"]
 
 
+def test_density_contract_survives_sqlite_task_view_round_trip(tmp_path) -> None:
+    store = SqliteStore(tmp_path / "density-contract.db")
+    detection_position = {
+        "x1": 120.0,
+        "y1": 80.0,
+        "x2": 180.0,
+        "y2": 140.0,
+        "coordinate_space": "image_pixel",
+        "image_width": 640,
+        "image_height": 480,
+    }
+    density_metadata = {
+        "source": "yolo_bbox",
+        "density_kind": "relative_detection_weight",
+        "coordinate_space": "image_normalized",
+        "projection": "image_frame_to_geofence_bbox",
+        "normalization": "max_cell_weight",
+        "grid_rows": 8,
+        "grid_cols": 10,
+        "detection_count": 1,
+        "accepted_detection_count": 1,
+        "rejected_detection_count": 0,
+        "is_simulated": False,
+    }
+
+    try:
+        store.mark_task_started("req-density", "/tmp/field.jpg")
+        store.replace_detections(
+            "req-density",
+            [
+                {
+                    "pest_type": "aphid",
+                    "confidence": 0.93,
+                    "position": detection_position,
+                }
+            ],
+        )
+        store.add_drone_mission_update(
+            "req-density",
+            task_id="px4-density",
+            status="submitted",
+            message="变率喷洒任务已提交",
+            instruction={
+                "density_grid": [[0.0, 1.0], [0.5, 0.0]],
+                "density_metadata": density_metadata,
+            },
+        )
+        task_views = store.fetch_task_views(limit=1)
+    finally:
+        store.close()
+
+    assert len(task_views) == 1
+    assert task_views[0]["detections"][0]["position"] == detection_position
+    assert task_views[0]["drone"]["instruction"]["density_metadata"] == density_metadata
+
+
 def test_sqlite_store_creates_agriculture_data_schema_scaffold(tmp_path) -> None:
     db_path = tmp_path / "muye.db"
     store = SqliteStore(db_path)

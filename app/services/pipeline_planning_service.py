@@ -11,7 +11,9 @@ def detection_has_bbox(detections: list[dict[str, Any]]) -> bool:
         pos = item.get("position")
         if pos is None:
             pos = item.get("bbox")
-        if isinstance(pos, dict) and pos:
+        if not isinstance(pos, dict):
+            continue
+        if {"x1", "y1", "x2", "y2"}.issubset(pos) or {"x", "y", "w", "h"}.issubset(pos):
             return True
     return False
 
@@ -31,11 +33,12 @@ def plan_spray_mission(
         if geofence and len(geofence) >= 3:
             density_map = DensityMap(geofence)
             density_map.add_detections(detections)
-            return drone_controller.planner.plan_variable_rate_mission(
-                field_context=field_context,
-                current_weather=current_weather,
-                density_map=density_map,
-            )
+            if density_map.has_data:
+                return drone_controller.planner.plan_variable_rate_mission(
+                    field_context=field_context,
+                    current_weather=current_weather,
+                    density_map=density_map,
+                )
 
     return drone_controller.plan_spray_mission(
         field_context=field_context,

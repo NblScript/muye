@@ -104,6 +104,9 @@ export interface FieldTwinMetric {
   dronePosition: TwinPoint | null
   boundarySource: 'virtual'
   hasRoute: boolean
+  densitySourceLabel: string
+  densitySimulated: boolean
+  densityAcceptedCount: number | null
 }
 
 export interface ScreenViewModel {
@@ -494,34 +497,51 @@ function normalizeGeoPoint(point: [number, number], bounds: GeoBounds): TwinPoin
   }
 }
 
+function normalizedDetectionCenter(
+  position: WorkflowTaskState['detections'][number]['position'],
+): TwinPoint | null {
+  const x1 = firstNumber(position?.x1)
+  const x2 = firstNumber(position?.x2)
+  const y1 = firstNumber(position?.y1)
+  const y2 = firstNumber(position?.y2)
+  if (x1 === null || x2 === null || y1 === null || y2 === null) return null
+
+  const values = [x1, y1, x2, y2]
+  const centerX = (x1 + x2) / 2
+  const centerY = (y1 + y2) / 2
+  const coordinateSpace = position?.coordinate_space?.trim().toLowerCase() ?? ''
+  const normalizedSpaces = new Set(['normalized', 'image_normalized', 'xyxyn', 'xywhn'])
+  const valuesAreNormalized = values.every((value) => value >= 0 && value <= 1)
+
+  if (normalizedSpaces.has(coordinateSpace) || (!coordinateSpace && valuesAreNormalized)) {
+    return centerX >= 0 && centerX <= 1 && centerY >= 0 && centerY <= 1
+      ? { x: centerX, y: centerY }
+      : null
+  }
+
+  const imageWidth = firstNumber(position?.image_width)
+  const imageHeight = firstNumber(position?.image_height)
+  if (imageWidth === null || imageWidth <= 0 || imageHeight === null || imageHeight <= 0) {
+    return null
+  }
+  const x = centerX / imageWidth
+  const y = centerY / imageHeight
+  return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null
+}
+
 function buildTwinPestPoints(task: WorkflowTaskState | null): TwinPestPoint[] {
   const detections = (task?.detections ?? []).slice(0, 24)
-  const positioned = detections.map((detection) => {
-    const position = detection.position
-    const x1 = firstNumber(position?.x1)
-    const x2 = firstNumber(position?.x2)
-    const y1 = firstNumber(position?.y1)
-    const y2 = firstNumber(position?.y2)
-    return x1 !== null && x2 !== null && y1 !== null && y2 !== null
-      ? { x: (x1 + x2) / 2, y: (y1 + y2) / 2 }
-      : null
-  })
-  const xs = positioned.flatMap((point) => point ? [point.x] : [])
-  const ys = positioned.flatMap((point) => point ? [point.y] : [])
-  const minX = xs.length > 1 ? Math.min(...xs) : 0
-  const maxX = xs.length > 1 ? Math.max(...xs) : 1
-  const minY = ys.length > 1 ? Math.min(...ys) : 0
-  const maxY = ys.length > 1 ? Math.max(...ys) : 1
+  const positioned = detections.map((detection) => normalizedDetectionCenter(detection.position))
   const goldenAngle = Math.PI * (3 - Math.sqrt(5))
 
   return detections.map((detection, index) => {
     const point = positioned[index]
     const fallbackRadius = 0.26 * Math.sqrt((index + 0.5) / Math.max(1, detections.length))
     const virtualX = point
-      ? 0.2 + ((point.x - minX) / Math.max(1, maxX - minX)) * 0.6
+      ? 0.16 + point.x * 0.68
       : 0.5 + Math.cos(index * goldenAngle) * fallbackRadius
     const virtualY = point
-      ? 0.2 + ((point.y - minY) / Math.max(1, maxY - minY)) * 0.58
+      ? 0.16 + point.y * 0.66
       : 0.49 + Math.sin(index * goldenAngle) * fallbackRadius
     return {
       x: Math.max(0.16, Math.min(0.84, virtualX)),
@@ -547,6 +567,7 @@ function interpolateRoute(route: TwinPoint[], progress: number): TwinPoint | nul
 
 function buildFieldTwin(task: WorkflowTaskState | null): FieldTwinMetric {
   const instruction = task?.drone?.instruction
+  const densityMetadata = instruction?.density_metadata
   const coverage = (instruction?.覆盖区域?.coordinates ?? []).filter(validGeoPoint)
   const rawRoute = (instruction?.飞行路径 ?? []).filter(validGeoPoint)
   const densityCells = instruction?.density_grid ?? []
@@ -596,6 +617,15 @@ function buildFieldTwin(task: WorkflowTaskState | null): FieldTwinMetric {
     dronePosition: actualPosition ?? routePosition,
     boundarySource: 'virtual',
     hasRoute: route.length >= 2,
+    densitySourceLabel: densityMetadata?.is_simulated
+      ? '模拟虫情数据'
+      : densityCells.length > 0
+        ? 'YOLO 相对检测热值'
+        : pestPoints.length > 0
+          ? 'YOLO 检测点热值'
+          : '等待虫情数据',
+    densitySimulated: Boolean(densityMetadata?.is_simulated),
+    densityAcceptedCount: firstNumber(densityMetadata?.accepted_detection_count),
   }
 }
 

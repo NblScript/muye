@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from PIL import Image, UnidentifiedImageError
 
 from modules.infra.common import chunked, log_event
 
@@ -148,8 +150,28 @@ class ImageProcessor:
         for index, item in enumerate(raw_results):
             image_path = self._resolve_image_key(item, batch, index)
             detections = item.get("detections", [])
-            normalized[str(image_path)] = self._validate_detections(detections)
+            image_size = self._resolve_image_size(item, image_path)
+            normalized[str(image_path)] = self._validate_detections(
+                detections,
+                image_size=image_size,
+            )
         return normalized
+
+    def _resolve_image_size(
+        self,
+        item: dict[str, Any],
+        image_path: Path,
+    ) -> tuple[int, int] | None:
+        width = self._positive_int(item.get("image_width", item.get("width")))
+        height = self._positive_int(item.get("image_height", item.get("height")))
+        if width is not None and height is not None:
+            return width, height
+
+        try:
+            with Image.open(image_path) as image:
+                return int(image.width), int(image.height)
+        except (FileNotFoundError, UnidentifiedImageError, OSError):
+            return None
 
     def _resolve_image_key(self, item: dict[str, Any], batch: list[Path], index: int) -> Path:
         image_name = item.get("image") or item.get("filename") or item.get("image_path")
@@ -161,7 +183,12 @@ class ImageProcessor:
             raise ImageProcessingError("YOLO 批处理结果数量超过输入图片数量")
         return batch[index]
 
-    def _validate_detections(self, detections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _validate_detections(
+        self,
+        detections: list[dict[str, Any]],
+        *,
+        image_size: tuple[int, int] | None = None,
+    ) -> list[dict[str, Any]]:
         normalized: list[dict[str, Any]] = []
         for detection in detections:
             pest_type = (
@@ -184,33 +211,70 @@ class ImageProcessor:
                 {
                     "pest_type": str(pest_type),
                     "confidence": round(confidence, 4),
-                    "position": self._normalize_position(position_raw),
+                    "position": self._normalize_position(position_raw, image_size=image_size),
                 }
             )
         return normalized
 
-    def _normalize_position(self, position: dict[str, Any]) -> dict[str, float]:
+    def _normalize_position(
+        self,
+        position: dict[str, Any],
+        *,
+        image_size: tuple[int, int] | None = None,
+    ) -> dict[str, Any]:
         if {"x1", "y1", "x2", "y2"}.issubset(position):
-            return {
+            box = {
                 "x1": float(position["x1"]),
                 "y1": float(position["y1"]),
                 "x2": float(position["x2"]),
                 "y2": float(position["y2"]),
             }
-
-        if {"x", "y", "w", "h"}.issubset(position):
+        elif {"x", "y", "w", "h"}.issubset(position):
             x = float(position["x"])
             y = float(position["y"])
             width = float(position["w"])
             height = float(position["h"])
-            return {
+            box = {
                 "x1": x,
                 "y1": y,
                 "x2": x + width,
                 "y2": y + height,
             }
+        else:
+            raise ImageProcessingError("YOLO 检测框格式不合法")
 
-        raise ImageProcessingError("YOLO 检测框格式不合法")
+        values = tuple(box.values())
+        if not all(math.isfinite(value) for value in values):
+            raise ImageProcessingError("YOLO 检测框包含非有限数值")
+        if box["x2"] <= box["x1"] or box["y2"] <= box["y1"]:
+            raise ImageProcessingError("YOLO 检测框宽高必须为正数")
+
+        coordinate_space = str(position.get("coordinate_space") or "").strip().lower()
+        normalized_spaces = {"normalized", "image_normalized", "xyxyn", "xywhn"}
+        if coordinate_space in normalized_spaces or (
+            not coordinate_space and all(0 <= value <= 1 for value in values)
+        ):
+            box["coordinate_space"] = "image_normalized"
+            return box
+
+        box["coordinate_space"] = "image_pixel"
+        width = self._positive_int(position.get("image_width"))
+        height = self._positive_int(position.get("image_height"))
+        if image_size is not None:
+            width = width or image_size[0]
+            height = height or image_size[1]
+        if width is not None and height is not None:
+            box["image_width"] = width
+            box["image_height"] = height
+        return box
+
+    @staticmethod
+    def _positive_int(value: Any) -> int | None:
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number > 0 else None
 
 
 def _is_loopback_url(url: str) -> bool:

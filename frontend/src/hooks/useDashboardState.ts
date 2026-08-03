@@ -6,18 +6,16 @@ import {
 } from '../api/workflow'
 import { useWorkflowRealtimeState } from './useWorkflowRealtimeState'
 import { useToast } from '../components/ui'
-import type { WorkflowStateResponse } from '../types/workflow'
+import type { WorkflowTaskState } from '../types/workflow'
 import { derivePipelineProgress } from '../utils/pipelineStages'
-
-function isWorkflowStateResponse(value: unknown): value is WorkflowStateResponse {
-  return Boolean(value && typeof value === 'object' && 'latest_task' in value && 'recent_tasks' in value)
-}
+import { retainLatestEventBusTask } from '../utils/workflowState'
 
 export function useDashboardState() {
   const toast = useToast()
   const [refreshing, setRefreshing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [confirmingTakeoff, setConfirmingTakeoff] = useState(false)
+  const [latestTask, setLatestTask] = useState<WorkflowTaskState | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const notifiedReconnectCountRef = useRef(0)
 
@@ -29,8 +27,11 @@ export function useDashboardState() {
     refresh: refreshCombinedState,
   } = useWorkflowRealtimeState()
 
-  const workflow = isWorkflowStateResponse(wsData?.workflow_state) ? wsData.workflow_state : null
   const workflowLoading = refreshing || (!wsData && !wsError)
+
+  useEffect(() => {
+    setLatestTask((current) => retainLatestEventBusTask(current, wsData?.workflow_state))
+  }, [wsData?.workflow_state])
 
   useEffect(() => {
     if (reconnectCount <= notifiedReconnectCountRef.current) return
@@ -38,9 +39,9 @@ export function useDashboardState() {
     toast.success('实时连接已恢复')
   }, [reconnectCount, toast])
 
-  // The API keeps a legacy PX4 demo fallback for older dashboard consumers.
-  // This screen must only render measurements produced by the real workflow.
-  const latestTask = workflow?.source === 'event_bus' ? workflow.latest_task : null
+  // The API keeps a legacy PX4 demo fallback for older consumers. This screen
+  // renders only real event-bus tasks and retains the last valid snapshot when
+  // a transient WebSocket message contains no workflow state.
   const weather = latestTask?.weather ?? {}
   const pipelineProgress = derivePipelineProgress(latestTask)
   const showTakeoffBanner = String(latestTask?.drone?.status ?? '').toLowerCase() === 'pending_confirmation'

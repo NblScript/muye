@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from modules.drone.mission_planner import MissionPlanner
+from modules.drone.density_map import DensityMap
 
 
 def build_planner() -> MissionPlanner:
@@ -128,3 +129,43 @@ def test_mission_planner_prefers_explicit_demo_route_over_generated_sweep() -> N
     )
 
     assert plan["飞行路径"] == explicit_route
+
+
+def test_variable_rate_plan_carries_density_provenance() -> None:
+    planner = build_planner()
+    geofence = [
+        [113.6241, 34.7467],
+        [113.6257, 34.7467],
+        [113.6257, 34.7479],
+        [113.6241, 34.7479],
+    ]
+    density_map = DensityMap(geofence, grid_rows=4, grid_cols=4)
+    density_map.add_detections([{
+        "confidence": 0.91,
+        "position": {
+            "x1": 64,
+            "y1": 48,
+            "x2": 128,
+            "y2": 96,
+            "coordinate_space": "image_pixel",
+            "image_width": 640,
+            "image_height": 480,
+        },
+    }])
+
+    plan = planner.plan_variable_rate_mission(
+        field_context={
+            "field_id": "field-real-density",
+            "name": "真实虫情测试田",
+            "area_mu": 12,
+            "geofence": geofence,
+            "crop_cycle": {"crop_name": "冬小麦"},
+        },
+        current_weather={"wind_speed": 2.5},
+        density_map=density_map,
+    )
+
+    assert plan["source"] == "system_planner_variable_rate"
+    assert plan["density_metadata"]["source"] == "yolo_bbox"
+    assert plan["density_metadata"]["accepted_detection_count"] == 1
+    assert plan["density_metadata"]["is_simulated"] is False

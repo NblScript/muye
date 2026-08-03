@@ -57,6 +57,7 @@ class MissionPlanner:
 
         result["spray_schedule"] = spray_schedule
         result["density_grid"] = density_map.to_geo_grid()
+        result["density_metadata"] = density_map.metadata()
         result["source"] = "system_planner_variable_rate"
         return result
 

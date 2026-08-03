@@ -992,23 +992,21 @@ PYTHONPATH=. .venv/bin/pytest -q
 - `vendor-three*`
   - `three`
   - `@react-three/fiber`
-  - `@react-three/drei`
-- `vendor-charts`
-  - `echarts`
-  - `zrender`
 - `vendor-screen` / `vendor-app`
   - 大屏辅助库与通用应用依赖
 
 这样做的效果是：
 
 - 业务主包只保留当前页面和业务逻辑，首屏主业务 chunk 显著变小。
-- 三维渲染、图表和应用依赖分别缓存，避免所有第三方库进入同一个大包。
+- 三维渲染和应用依赖分别缓存，避免所有第三方库进入同一个大包。
+- 虫情数量面板使用原生 React/CSS，不再为简单柱状统计加载大型图表运行时。
+- 航线、阴影和地图覆盖信息由项目内轻量实现负责，不依赖 Drei 组件集合。
+- 历史与设置页面按路由懒加载，不进入首页业务入口。
 - 当只修改业务代码时，只要相关 vendor 依赖内容没有变化，浏览器通常不需要重新下载第三方包。
 
 当前仓库构建结果中，文件名已经带内容哈希，例如：
 
 - `vendor-three-*.js`
-- `vendor-charts-*.js`
 - `vendor-react-*.js`
 - `index-*.js`
 
