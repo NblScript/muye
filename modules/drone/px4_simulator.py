@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import math
 import subprocess
@@ -359,25 +358,6 @@ class PX4Simulator:
         except TypeError:
             on_status(status, message, progress, current_waypoint_index)
 
-    async def _wait_for_mission_completion(
-        self,
-        *,
-        drone: Any,
-        total_waypoints: int,
-        on_status: Callable[[str, str, int, int], None] | None,
-        route: list[list[float]] | None = None,
-    ) -> None:
-        del route
-        async for progress in drone.mission.mission_progress():
-            current = int(getattr(progress, "current", 0))
-            total = int(getattr(progress, "total", total_waypoints))
-            progress_value = min(99, max(55, int(round(55 + (current / max(total, 1)) * 40))))
-            self._emit_status(on_status, "spraying", f"PX4 正在沿预设航线飞行", progress_value, current, None)
-            if current >= total:
-                break
-
-        self._emit_status(on_status, "completed", "PX4 喷洒任务完成", 100, total_waypoints, None)
-
     def _normalize_route(self, route: Any) -> list[list[float]]:
         if not isinstance(route, list):
             return []
@@ -389,14 +369,6 @@ class PX4Simulator:
                 normalized.append([float(point[0]), float(point[1])])
             except (TypeError, ValueError):
                 continue
-        return normalized
-
-    def _resolve_px4_route(self, execution_plan: dict[str, Any]) -> list[list[float]]:
-        raw = execution_plan.get("飞行路径") if isinstance(execution_plan, dict) else None
-        normalized = self._normalize_route(raw)
-        if normalized and abs(normalized[0][0]) > 20:
-            demo = self.drone_config.get("px4", {}).get("demo_field", {})
-            return self._normalize_route(demo.get("explicit_route"))
         return normalized
 
     def _compute_route_cumulative_distances(self, route: list[list[float]]) -> list[float]:
@@ -491,133 +463,6 @@ class PX4Simulator:
             )
         except Exception as exc:
             self.logger.warning("切换 Gazebo world 暂停状态失败: %s", exc)
-
-    def _normalize_system_address(self, system_address: str) -> str:
-        if system_address.startswith("udp://:"):
-            return "udpin://0.0.0.0:" + system_address.removeprefix("udp://:")
-        if system_address.startswith("udp://0.0.0.0:"):
-            return "udpin://0.0.0.0:" + system_address.removeprefix("udp://0.0.0.0:")
-        return system_address
-
-    def _compute_heading_deg(
-        self,
-        current: tuple[float, float],
-        nxt: tuple[float, float],
-    ) -> float:
-        current_lon, current_lat = current
-        next_lon, next_lat = nxt
-        delta_lon = (next_lon - current_lon) * METERS_PER_DEGREE_LAT * math.cos(math.radians((current_lat + next_lat) / 2))
-        delta_lat = (next_lat - current_lat) * METERS_PER_DEGREE_LAT
-        if abs(delta_lon) < 1e-9 and abs(delta_lat) < 1e-9:
-            return 0.0
-        return math.degrees(math.atan2(delta_lon, delta_lat))
-
-    def _heading_delta_deg(self, current: float, nxt: float) -> float:
-        delta = (nxt - current + 180.0) % 360.0 - 180.0
-        return abs(delta)
-
-    def _build_mission_items(
-        self,
-        *,
-        MissionItem: Any,
-        route: list[list[float]],
-        altitude_m: float,
-        speed_m_s: float,
-        acceptance_radius_m: float,
-        loiter_time_s: float,
-        is_fly_through: bool,
-        turn_mode: str,
-        turn_loiter_time_s: float,
-    ) -> list[Any]:
-        normalized_route = [(float(point[0]), float(point[1])) for point in route]
-        if not normalized_route:
-            return []
-
-        headings: list[float] = []
-        for current, nxt in zip(normalized_route, normalized_route[1:]):
-            headings.append(self._compute_heading_deg(current, nxt))
-
-        mission_items: list[Any] = []
-        for index, (longitude, latitude) in enumerate(normalized_route):
-            arrival_heading = headings[index - 1] if index > 0 and headings else (
-                headings[0] if headings else float("nan")
-            )
-            next_heading = headings[index] if index < len(headings) else arrival_heading
-            should_pivot = (
-                turn_mode == "in_place"
-                and 0 < index < len(normalized_route) - 1
-                and self._heading_delta_deg(arrival_heading, next_heading) >= 10.0
-            )
-
-            mission_items.append(
-                self._build_mission_item(
-                    MissionItem=MissionItem,
-                    longitude=longitude,
-                    latitude=latitude,
-                    altitude_m=altitude_m,
-                    speed_m_s=speed_m_s,
-                    acceptance_radius_m=acceptance_radius_m,
-                    loiter_time_s=0.0 if should_pivot else loiter_time_s,
-                    is_fly_through=False if should_pivot else is_fly_through,
-                    yaw_deg=arrival_heading,
-                )
-            )
-
-            if should_pivot:
-                mission_items.append(
-                    self._build_mission_item(
-                        MissionItem=MissionItem,
-                        longitude=longitude,
-                        latitude=latitude,
-                        altitude_m=altitude_m,
-                        speed_m_s=speed_m_s,
-                        acceptance_radius_m=acceptance_radius_m,
-                        loiter_time_s=turn_loiter_time_s,
-                        is_fly_through=False,
-                        yaw_deg=next_heading,
-                    )
-                )
-
-        return mission_items
-
-    def _build_mission_item(
-        self,
-        *,
-        MissionItem: Any,
-        longitude: float,
-        latitude: float,
-        altitude_m: float,
-        speed_m_s: float,
-        acceptance_radius_m: float,
-        loiter_time_s: float,
-        is_fly_through: bool,
-        yaw_deg: float,
-    ) -> Any:
-        signature = inspect.signature(MissionItem)
-        camera_action = getattr(getattr(MissionItem, "CameraAction", None), "NONE", None)
-        vehicle_action = getattr(getattr(MissionItem, "VehicleAction", None), "NONE", None)
-        kwargs = {
-            "latitude_deg": latitude,
-            "longitude_deg": longitude,
-            "relative_altitude_m": altitude_m,
-            "speed_m_s": speed_m_s,
-            "is_fly_through": is_fly_through,
-            "gimbal_pitch_deg": 0.0,
-            "gimbal_yaw_deg": 0.0,
-            "camera_action": camera_action,
-            "loiter_time_s": loiter_time_s,
-            "camera_photo_interval_s": 0.0,
-            "acceptance_radius_m": acceptance_radius_m,
-            "yaw_deg": yaw_deg,
-            "camera_photo_distance_m": 0.0,
-            "vehicle_action": vehicle_action,
-        }
-        filtered_kwargs = {
-            key: value
-            for key, value in kwargs.items()
-            if key in signature.parameters and value is not None
-        }
-        return MissionItem(**filtered_kwargs)
 
     def _heading_between(
         self,

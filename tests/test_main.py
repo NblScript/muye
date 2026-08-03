@@ -1648,6 +1648,7 @@ from app.routes.drone import (
     Px4StatusResponse,
 )
 import app.routes.drone as drone_mod
+from app.services import px4_process_service as px4_process_mod
 
 
 def _setup_px4_paths(monkeypatch, tmp_path):
@@ -1655,6 +1656,10 @@ def _setup_px4_paths(monkeypatch, tmp_path):
     pid_file = tmp_path / "px4.pid"
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
+    # The service functions reference px4_process_service module-level constants,
+    # so the patch must target that module (drone_mod aliases are stale copies).
+    monkeypatch.setattr(px4_process_mod, "PX4_PID_FILE", pid_file)
+    monkeypatch.setattr(px4_process_mod, "PX4_LOG_DIR", log_dir)
     monkeypatch.setattr(drone_mod, "PX4_PID_FILE", pid_file)
     monkeypatch.setattr(drone_mod, "PX4_LOG_DIR", log_dir)
     return pid_file

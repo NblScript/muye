@@ -245,7 +245,7 @@ class DroneController:
         current_waypoint_index: int,
         position: dict[str, float] | None,
     ) -> None:
-        from app.services.telemetry_service import get_telemetry_service
+        from modules.infra.telemetry import get_telemetry_service
 
         telemetry_service = get_telemetry_service()
         if int(progress) <= 0 or str(status).strip().lower() in {"queued", "submitted", "ready"}:

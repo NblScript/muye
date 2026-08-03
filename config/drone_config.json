@@ -327,6 +327,8 @@
       "crop_cycle": {
         "crop_name": "小麦"
       }
-    }
+    },
+    "real_system_address": "udpin://0.0.0.0:14540",
+    "real_baud_rate": 57600
   }
 }

@@ -5,8 +5,8 @@ import asyncio
 from fastapi import WebSocketDisconnect
 
 import app.routes.sim as sim_routes
-import app.services.telemetry_service as telemetry_module
-from app.services.telemetry_service import TelemetryService
+import modules.infra.telemetry as telemetry_module
+from modules.infra.telemetry import TelemetryService
 from models.schemas import DroneStatusEnum, SimMapStateResponse
 from modules.drone.controller import DroneController
 
