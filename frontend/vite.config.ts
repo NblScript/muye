@@ -15,18 +15,51 @@ export default defineConfig({
             return undefined
           }
 
-          if (id.includes('/react/') || id.includes('/react-dom/')) {
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/scheduler/')
+          ) {
             return 'vendor-react'
           }
 
           if (
-            id.includes('/leaflet/') ||
-            id.includes('/react-leaflet/')
+            id.includes('/@react-three/fiber/')
           ) {
-            return 'vendor-map'
+            return 'vendor-three-fiber'
           }
 
-          return 'vendor-misc'
+          if (id.includes('/@react-three/drei/')) {
+            return 'vendor-three-drei'
+          }
+
+          if (id.includes('/three-stdlib/')) {
+            return 'vendor-three-extras'
+          }
+
+          if (id.includes('/three/')) {
+            return 'vendor-three'
+          }
+
+          if (id.includes('/zrender/')) {
+            return 'vendor-zrender'
+          }
+
+          if (id.includes('/echarts/')) {
+            return 'vendor-charts'
+          }
+
+          if (
+            id.includes('/styled-components/') ||
+            id.includes('/gsap/') ||
+            id.includes('/zustand/') ||
+            id.includes('/autofit.js/') ||
+            id.includes('/keli-heatmap.js/')
+          ) {
+            return 'vendor-screen'
+          }
+
+          return 'vendor-app'
         },
       },
     },

@@ -4,6 +4,7 @@ from fastapi import FastAPI, Query
 
 from models.schemas import WorkflowHistoryResponse, WorkflowStateResponse
 import app.services.workflow_service as workflow_service
+from app.routes.demo import upload_demo_image
 
 
 async def get_workflow_state() -> WorkflowStateResponse:
@@ -26,3 +27,5 @@ def register_workflow_routes(app: FastAPI) -> None:
     app.get("/api/workflow/state", include_in_schema=False, response_model=WorkflowStateResponse)(get_workflow_state)
     app.get("/workflow/history", response_model=WorkflowHistoryResponse)(get_workflow_history)
     app.get("/api/workflow/history", include_in_schema=False, response_model=WorkflowHistoryResponse)(get_workflow_history)
+    app.post("/workflow/inspection-image")(upload_demo_image)
+    app.post("/api/workflow/inspection-image", include_in_schema=False)(upload_demo_image)

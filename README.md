@@ -200,26 +200,21 @@ PX4 工作流程包含连接、定位等待、原生 Mission 准备、解锁、�
 前端的主要职责是把复杂的处理链路转化为“评委和用户能看懂的系统行为”。当前承载能力包括：
 
 - 首页指挥大屏
-- 地图态势展示
+- Three.js 虚拟田地与昆虫热力值展示
 - 图片上传
-- 原图 / 标注图对照
-- 天气卡片
-- AI 决策卡片
-- 工作流步骤条
-- 无人机执行面板
+- 虫情、天气、AI 决策、无人机和复检面板
 - 任务历史检索
 - WebSocket 实时状态接收与断线降级轮询
 
-地图组件 `FieldMap.tsx` 当前已经不依赖 Leaflet 运行时地图容器，而是改为纯 SVG 虚拟农田渲染，直接绘制：
+首页地图位于 `frontend/src/assets/screen/map/`，使用 Three.js 渲染一块项目内的虚拟田地，直接表现：
 
 - 地块边界
-- 覆盖区域
-- 飞行路径
+- 昆虫密度热力值
+- 虫点与作业航线
 - 无人机位置
-- 检测点位
-- 指挥点
+- 喷洒与复检状态
 
-这种实现方式更适合比赛演示，因为它对外部地图底图无依赖，也减少了底图加载、容器初始化和缩放适配带来的不稳定因素。
+该实现不加载省级行政区或外部地图底图，工作流没有热力数据时保持空状态，不在前端生成随机虫情。
 
 ### 6. 系统运行方式
 
@@ -316,7 +311,7 @@ PX4 工作流程包含连接、定位等待、原生 Mission 准备、解锁、�
    使用 `JSONL + SQLite + ChromaDB` 分别处理实时事件、结构化历史和向量知识，结构简单但功能完整。
 
 8. 前端虚拟农田态势图
-   通过纯 SVG 实现作业地图，更适合答辩和比赛场景下的稳定展示。
+   通过 Three.js 展示虚拟田地、昆虫热力值、航线和无人机作业状态。
 
 ### 9. 当前局限与后续扩展方向
 
@@ -401,7 +396,8 @@ muye/
 │   ├── drone/                       # 无人机域
 │   │   ├── controller.py            # 无人机任务执行与状态回写
 │   │   ├── mission_planner.py       # 飞行/喷洒规划
-│   │   ├── px4_simulator.py         # PX4 SITL / MAVSDK 执行链路
+│   │   ├── px4_simulator.py         # 前端演示状态模拟
+│   │   ├── px4_real.py              # MAVSDK PX4 执行器
 │   │   └── __init__.py
 │   ├── detection/                   # 检测域
 │   │   ├── image_processor.py       # YOLO 识别调用与校验
@@ -554,7 +550,7 @@ muye/
 
 8. `frontend/`
    - 基于 Vite + React + TypeScript 的唯一前端。
-   - 统一承接图片上传、原图/识别图对比、天气/决策卡片、无人机工作流、态势图、任务历史和实时日志。
+   - 首页承接图片上传、昆虫热力值、天气/决策、无人机工作流和复检状态；历史与设置保留独立页面。
 
 ## 安装依赖
 
@@ -693,7 +689,42 @@ cd /home/qingking/muye
 
 ### 接入真实无人机
 
-系统支持通过 DJI OSDK 后端对接 Matrice 系列行业级无人机（M300 / M350 / 30T）。接入步骤：
+系统支持两种真实无人机对接方式：
+
+#### 方式一：PX4 自组机（推荐，低成本）
+
+自组四旋翼（Pixhawk/Cube 飞控 + PX4 固件）通过数传模块连接电脑，使用 MAVSDK 驱动执行任务：
+
+1. 安装 MAVSDK：
+
+   ```bash
+   pip install mavsdk
+   ```
+
+2. 配置环境变量（`.env.production`）：
+
+   ```bash
+   DRONE_BACKEND=px4
+   PX4_EXECUTION_MODE=real
+   PX4_SYSTEM_ADDRESS=udpin://0.0.0.0:14540
+   PX4_ALLOW_FORCE_ARM=true
+   ```
+
+   `PX4_EXECUTION_MODE=real` 时系统使用 `PX4RealExecutor`（`modules/drone/px4_real.py`）通过 MAVSDK 连接真实飞机；
+   保持默认 `animated_demo` 时仍为竞赛演示动画，互不影响。
+
+3. 确认数传模块已连接（`/dev/ttyUSB*`，波特率通常 57600），PX4 已通过 QGroundControl 校准并能在遥控器上解锁
+
+4. 启动系统：`./scripts/run.sh`
+
+安全建议：
+- 真机模式务必保留遥控器作为安全兜底
+- 首次飞行建议在开阔场地、低高度小航线验证
+- `PX4_ALLOW_FORCE_ARM=false` 可禁止强制解锁（更安全）
+
+#### 方式二：DJI 行业机
+
+通过 DJI OSDK 后端对接 Matrice 系列行业级无人机（M300 / M350 / 30T）。接入步骤：
 
 1. 配置环境变量（`.env.production`）：
 
@@ -913,7 +944,7 @@ MUYE_API_TARGET=http://127.0.0.1:18100 npm run dev -- --host 127.0.0.1 --port 51
 启动后：
 
 1. 在 React 大屏顶部操作条上传图片
-2. 前端会通过 `/api/demo/upload-image` 将图片写入 `data/images/`
+2. 前端会通过 `/api/workflow/inspection-image` 将图片写入 `data/images/`
 3. 后端监听到新图片后，依次执行 YOLO、天气、千问和无人机流程
 4. 事件总线持续写入 `data/logs/demo_events.jsonl`
 5. React 前端会刷新原图、识别框、天气卡片、AI 建议、态势图和无人机状态
@@ -958,21 +989,26 @@ PYTHONPATH=. .venv/bin/pytest -q
 - `vendor-react`
   - `react`
   - `react-dom`
-- `vendor-map`
-  - `leaflet`
-  - `react-leaflet`
-- `vendor-misc`
-  - 其余第三方依赖
+- `vendor-three*`
+  - `three`
+  - `@react-three/fiber`
+  - `@react-three/drei`
+- `vendor-charts`
+  - `echarts`
+  - `zrender`
+- `vendor-screen` / `vendor-app`
+  - 大屏辅助库与通用应用依赖
 
 这样做的效果是：
 
 - 业务主包只保留当前页面和业务逻辑，首屏主业务 chunk 显著变小。
-- 地图库被拆成独立 vendor chunk，更适合浏览器缓存复用。
-- 当只修改业务代码时，只要相关 vendor 依赖内容没有变化，浏览器通常不需要重新下载 `vendor-map` 等大包。
+- 三维渲染、图表和应用依赖分别缓存，避免所有第三方库进入同一个大包。
+- 当只修改业务代码时，只要相关 vendor 依赖内容没有变化，浏览器通常不需要重新下载第三方包。
 
 当前仓库构建结果中，文件名已经带内容哈希，例如：
 
-- `vendor-map-*.js`
+- `vendor-three-*.js`
+- `vendor-charts-*.js`
 - `vendor-react-*.js`
 - `index-*.js`
 
@@ -1025,7 +1061,7 @@ PYTHONPATH=. .venv/bin/pytest -q
 补充说明：
 
 - 当前后端没有额外挂载独立静态资源目录，任务原图和识别图仍通过后端 API 动态返回，因此 Nginx 不需要再单独 `alias` 一套后端静态目录。
-- 当前前端地图实时态势使用 `/api/sim/ws/map-state`，`deploy/nginx.conf` 中 `/api/` 已包含 `Upgrade/Connection` 头透传，可支持 WebSocket。
+- 当前前端实时状态使用 `/api/ws/enhanced-state`，断线时只轮询 `/api/workflow/state`；`deploy/nginx.conf` 中 `/api/` 已包含 WebSocket 透传配置。
 - `deploy/muye_backend.service` 已加入 `EnvironmentFile=/var/www/muye/backend/.env`，并显式使用 `.venv/bin/uvicorn`。
 - 服务文件内已补部署备注：上线后应先对 `/var/www/muye/backend/data` 执行 `chown -R www-data:www-data`。
 - 当前 `deploy/nginx.conf` 以“比赛现场优先”为默认口径：`HTTP + 本地局域网访问 + WebSocket + 大文件上传`；如果后续要上公网，再单独补 HTTPS 站点配置。

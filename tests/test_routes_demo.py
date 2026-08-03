@@ -12,6 +12,12 @@ async def test_upload_image_rejects_empty(client):
 
 
 @pytest.mark.asyncio
+async def test_real_workflow_upload_route_rejects_empty(client):
+    resp = await client.post("/workflow/inspection-image")
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 @pytest.mark.skip(reason="Pre-existing SQLite foreign key bug in clear_runtime_task_data")
 async def test_reset_events(client):
     resp = await client.post("/demo/reset-events?confirm=true")

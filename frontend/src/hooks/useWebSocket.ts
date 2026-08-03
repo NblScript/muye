@@ -36,6 +36,12 @@ export function useWebSocket<T>(url: string, fallback: () => Promise<T>, interva
 
   useEffect(() => {
     let cancelled = false
+    const resetStateTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setConnected(false)
+        setError(null)
+      }
+    }, 0)
 
     const clearReconnectTimer = () => {
       if (reconnectTimerRef.current !== null) {
@@ -166,8 +172,6 @@ export function useWebSocket<T>(url: string, fallback: () => Promise<T>, interva
       }
     }
 
-    setConnected(false)
-    setError(null)
     reconnectDelayRef.current = INITIAL_RECONNECT_DELAY_MS
     seenSuccessfulConnectionRef.current = false
     disconnectedSinceLastOpenRef.current = false
@@ -178,6 +182,7 @@ export function useWebSocket<T>(url: string, fallback: () => Promise<T>, interva
 
     return () => {
       cancelled = true
+      window.clearTimeout(resetStateTimer)
       clearReconnectTimer()
       stopPolling()
 

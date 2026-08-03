@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from app.deps import iso_utc_offset
@@ -111,38 +112,70 @@ def _compliance() -> dict[str, Any]:
 
 def _detections() -> list[dict[str, Any]]:
     return [
+        {"pest_type": "麦长管蛜", "confidence": 0.94, "position": {"x1": 810, "y1": 130, "x2": 862, "y2": 184}},
+        {"pest_type": "麦长管蛜", "confidence": 0.91, "position": {"x1": 744, "y1": 166, "x2": 796, "y2": 220}},
+        {"pest_type": "麦长管蛜", "confidence": 0.87, "position": {"x1": 900, "y1": 194, "x2": 946, "y2": 246}},
+        {"pest_type": "麦长管蛜", "confidence": 0.79, "position": {"x1": 838, "y1": 248, "x2": 884, "y2": 296}},
+        {"pest_type": "麦二叉蛜", "confidence": 0.86, "position": {"x1": 356, "y1": 468, "x2": 410, "y2": 524}},
+        {"pest_type": "麦二叉蛜", "confidence": 0.82, "position": {"x1": 432, "y1": 510, "x2": 480, "y2": 560}},
+        {"pest_type": "麦二叉蛜", "confidence": 0.72, "position": {"x1": 500, "y1": 440, "x2": 544, "y2": 486}},
+        {"pest_type": "蓟马", "confidence": 0.74, "position": {"x1": 82, "y1": 286, "x2": 126, "y2": 332}},
+        {"pest_type": "蓟马", "confidence": 0.64, "position": {"x1": 70, "y1": 214, "x2": 108, "y2": 254}},
+        {"pest_type": "麦长管蛜", "confidence": 0.77, "position": {"x1": 1038, "y1": 526, "x2": 1084, "y2": 574}},
         {"pest_type": "aphid", "confidence": 0.92, "position": {"x1": 112, "y1": 96, "x2": 184, "y2": 172}},
         {"pest_type": "aphid", "confidence": 0.88, "position": {"x1": 264, "y1": 132, "x2": 338, "y2": 210}},
     ]
 
 
 def _density_grid() -> list[dict[str, Any]]:
-    """Simulated variable-rate density grid with realistic gradient distribution."""
-    geofence = [
+    """Build a deterministic, irregular insect-density survey surface."""
+    geofence = _demo_field().get("geofence") or [
         [8.545275, 47.397586],
         [8.545913, 47.397586],
         [8.545913, 47.397898],
         [8.545275, 47.397898],
     ]
-    min_lon, max_lon = geofence[0][0], geofence[1][0]
-    min_lat, max_lat = geofence[0][1], geofence[2][1]
+    min_lon = min(float(point[0]) for point in geofence)
+    max_lon = max(float(point[0]) for point in geofence)
+    min_lat = min(float(point[1]) for point in geofence)
+    max_lat = max(float(point[1]) for point in geofence)
     lon_span = max_lon - min_lon
     lat_span = max_lat - min_lat
-    rows, cols = 8, 10
+    rows, cols = 18, 28
     cell_lon = lon_span / cols
     cell_lat = lat_span / rows
 
-    # Density pattern: hot spot in center-right, medium ring, low edges
-    pattern = [
-        [0.0,  0.0,  0.0,  0.05, 0.1,  0.05, 0.0,  0.0,  0.0,  0.0 ],
-        [0.0,  0.05, 0.15, 0.3,  0.4,  0.35, 0.2,  0.1,  0.05, 0.0 ],
-        [0.05, 0.2,  0.4,  0.65, 0.85, 0.7,  0.45, 0.25, 0.1,  0.0 ],
-        [0.1,  0.3,  0.6,  0.9,  1.0,  0.92, 0.55, 0.3,  0.15, 0.05],
-        [0.05, 0.25, 0.5,  0.75, 0.88, 0.8,  0.5,  0.2,  0.1,  0.0 ],
-        [0.0,  0.15, 0.35, 0.5,  0.6,  0.55, 0.35, 0.15, 0.05, 0.0 ],
-        [0.0,  0.05, 0.15, 0.25, 0.3,  0.28, 0.18, 0.1,  0.0,  0.0 ],
-        [0.0,  0.0,  0.05, 0.1,  0.15, 0.12, 0.08, 0.05, 0.0,  0.0 ],
-    ]
+    def patch(x: float, y: float, cx: float, cy: float, sx: float, sy: float, weight: float, angle: float) -> float:
+        dx, dy = x - cx, y - cy
+        cos_a, sin_a = math.cos(angle), math.sin(angle)
+        rx = cos_a * dx + sin_a * dy
+        ry = -sin_a * dx + cos_a * dy
+        return weight * math.exp(-0.5 * ((rx / sx) ** 2 + (ry / sy) ** 2))
+
+    raw_grid: list[list[float]] = []
+    for row in range(rows):
+        values: list[float] = []
+        for col in range(cols):
+            x = (col + 0.5) / cols
+            y = (row + 0.5) / rows
+            density = (
+                patch(x, y, 0.68, 0.28, 0.155, 0.070, 0.96, -0.22)
+                + patch(x, y, 0.35, 0.69, 0.125, 0.105, 0.70, 0.38)
+                + patch(x, y, 0.055, 0.43, 0.045, 0.190, 0.48, -0.05)
+                + patch(x, y, 0.84, 0.76, 0.055, 0.045, 0.38, 0.18)
+                + patch(x, y, 0.53, 0.49, 0.24, 0.055, 0.20, 0.08)
+            )
+            density -= patch(x, y, 0.61, 0.29, 0.048, 0.033, 0.27, 0.0)
+            density -= patch(x, y, 0.31, 0.66, 0.040, 0.052, 0.18, 0.0)
+            lane_factor = (1.03, 0.91, 0.97, 1.00)[row % 4]
+            pseudo = math.sin((row + 1) * 12.9898 + (col + 1) * 78.233) * 43758.5453
+            noise = (pseudo - math.floor(pseudo) - 0.5) * 0.10 * min(1.0, density * 3.2 + 0.12)
+            density = max(0.0, density * lane_factor + noise)
+            values.append(0.0 if density < 0.042 else density)
+        raw_grid.append(values)
+
+    peak = max(max(row) for row in raw_grid) or 1.0
+    pattern = [[round(value / peak, 4) for value in row] for row in raw_grid]
 
     cells = []
     for r in range(rows):
@@ -163,8 +196,8 @@ def _density_grid() -> list[dict[str, Any]]:
 
 
 def _spray_schedule() -> list[float]:
-    """Spray rates per lane matching the density pattern — higher density = higher rate."""
-    return [0.9, 1.2, 1.8, 2.7, 2.4, 1.8, 1.2, 0.9, 0.9, 0.9, 0.9]
+    """Spray rates per lane matching the irregular density survey."""
+    return [1.2, 1.5, 2.1, 2.5, 2.2, 1.4, 1.1, 1.7, 2.3, 1.8, 1.0]
 
 
 def seed_demo_state(

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveStages } from '../src/components/dashboard/PipelineStepper'
+import { derivePipelineProgress, deriveStages } from '../src/utils/pipelineStages'
 import type { WorkflowTaskState } from '../src/types/workflow'
 
 function makeTask(overrides: Partial<WorkflowTaskState> = {}): WorkflowTaskState {
@@ -23,8 +23,9 @@ function makeTask(overrides: Partial<WorkflowTaskState> = {}): WorkflowTaskState
 describe('deriveStages', () => {
   it('returns all pending when task is null', () => {
     const stages = deriveStages(null)
-    expect(stages).toHaveLength(5)
+    expect(stages).toHaveLength(6)
     expect(stages.every((s) => s.status === 'pending')).toBe(true)
+    expect(stages.at(-1)?.label).toBe('效果评估')
   })
 
   it('marks upload as done when queue completed', () => {
@@ -136,5 +137,24 @@ describe('deriveStages', () => {
     expect(stages[2].status).toBe('done')
     expect(stages[3].status).toBe('done')
     expect(stages[4].status).toBe('active')
+  })
+
+  it('marks evaluation as done when the closed-loop target is reached', () => {
+    const task = makeTask({
+      status: 'completed',
+      evaluation: {
+        status: 'passed',
+        kill_rate: 0.94,
+      },
+    })
+    const stages = deriveStages(task)
+    expect(stages[5].status).toBe('done')
+    expect(stages[5].message).toBe('杀灭率 94%')
+  })
+
+  it('combines stage and drone progress without exceeding bounds', () => {
+    expect(derivePipelineProgress(null)).toBe(0)
+    expect(derivePipelineProgress(makeTask({ status: 'completed' }))).toBe(100)
+    expect(derivePipelineProgress(makeTask({ drone: { progress: 62 } }))).toBe(62)
   })
 })
