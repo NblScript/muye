@@ -46,7 +46,7 @@ export default function Bottom() {
       value: 20.0,
     },
     uColor: {
-      value: new Color(0xea580c),
+      value: new Color(0x7fe5a8),
     },
     uDir: {
       value: 2.0, // 1.0-xy,2.0-xz
@@ -81,7 +81,7 @@ export default function Bottom() {
           transparent
           blending={NormalBlending}
           map={gaoGuang1Tex}
-          color="#fbdf88"
+          color="#7fe5a8"
         />
       </mesh>
       <mesh ref={meshRef1} position-z={0.1}>
@@ -89,7 +89,7 @@ export default function Bottom() {
         <meshBasicMaterial
           transparent
           map={rotationBorder1Tex}
-          color="#fbdf88"
+          color="#7fe5a8"
           opacity={0.2}
           depthWrite={false}
           blending={NormalBlending}
@@ -100,7 +100,7 @@ export default function Bottom() {
         <meshBasicMaterial
           transparent
           map={rotationBorder2Tex}
-          color="#fbdf88"
+          color="#a7a7a7"
           opacity={0.4}
           depthWrite={false}
           blending={NormalBlending}
@@ -112,7 +112,7 @@ export default function Bottom() {
           transparent
           map={gridTex}
           alphaMap={gridBlackTex}
-          color="#fbdf88"
+          color="#6f6f6f"
           opacity={0.1}
           depthWrite={false}
           blending={NormalBlending}
@@ -124,7 +124,7 @@ export default function Bottom() {
           transparent
           map={gridTex}
           alphaMap={gridBlackTex}
-          color="#ea580c"
+          color="#7fe5a8"
           opacity={0.5}
           depthWrite={false}
           blending={NormalBlending}

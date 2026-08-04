@@ -94,18 +94,18 @@ function Drone({ model }: { model: ScreenViewModel }) {
 
   return (
     <group ref={groupRef} position={[x, 15, z]} scale={0.72}>
-      <mesh castShadow><boxGeometry args={[7, 1.6, 4.5]} /><meshStandardMaterial color="#fff5e8" metalness={0.35} roughness={0.36} /></mesh>
-      <mesh position={[0, -1.25, 0]} castShadow><boxGeometry args={[2.6, 1.6, 2.6]} /><meshStandardMaterial color="#ea580c" /></mesh>
+      <mesh castShadow><boxGeometry args={[7, 1.6, 4.5]} /><meshStandardMaterial color="#dfffee" metalness={0.35} roughness={0.36} /></mesh>
+      <mesh position={[0, -1.25, 0]} castShadow><boxGeometry args={[2.6, 1.6, 2.6]} /><meshStandardMaterial color="#4f8a72" /></mesh>
       {([[-5, 0, -4], [5, 0, -4], [-5, 0, 4], [5, 0, 4]] as [number, number, number][]).map((offset, index) => (
         <group key={index} position={offset}>
-          <mesh rotation-y={index % 2 ? Math.PI / 4 : -Math.PI / 4}><boxGeometry args={[8, .35, .45]} /><meshStandardMaterial color="#6b5144" /></mesh>
+          <mesh rotation-y={index % 2 ? Math.PI / 4 : -Math.PI / 4}><boxGeometry args={[8, .35, .45]} /><meshStandardMaterial color="#273433" /></mesh>
           <mesh ref={(mesh) => { if (mesh) rotorRefs.current[index] = mesh }} position-y={0.5}>
             <cylinderGeometry args={[3.2, 3.2, .16, 24]} />
-            <meshBasicMaterial color="#ea580c" transparent opacity={0.46} />
+            <meshBasicMaterial color="#7fe5a8" transparent opacity={0.46} />
           </mesh>
         </group>
       ))}
-      <pointLight color="#ff7a2e" intensity={2.5} distance={20} position={[0, -2, 0]} />
+      <pointLight color="#7fe5a8" intensity={2.5} distance={20} position={[0, -2, 0]} />
     </group>
   )
 }
@@ -138,11 +138,11 @@ export default function Field({ model }: { model: ScreenViewModel }) {
     <group ref={groupRef} position={[18, 2, -2]}>
       <mesh position={[0, 1, 0]} castShadow receiveShadow>
         <boxGeometry args={[FIELD_WIDTH + 8, 3, FIELD_DEPTH + 8]} />
-        <meshStandardMaterial color="#c98d52" metalness={0.08} roughness={0.88} />
+        <meshStandardMaterial color="#0e171a" metalness={0.08} roughness={0.88} />
       </mesh>
       <mesh position={[0, 3, 0]} receiveShadow>
         <boxGeometry args={[FIELD_WIDTH, 2, FIELD_DEPTH]} />
-        <meshStandardMaterial color="#6f8f57" roughness={0.94} />
+        <meshStandardMaterial color="#294a3a" roughness={0.94} />
       </mesh>
 
       {Array.from({ length: 16 }, (_, index) => {
@@ -151,12 +151,12 @@ export default function Field({ model }: { model: ScreenViewModel }) {
           <group key={index} position={[0, 4.3, z]}>
             <mesh castShadow receiveShadow>
               <boxGeometry args={[FIELD_WIDTH - 7, 1.2, 1.45]} />
-              <meshStandardMaterial color={index % 2 ? '#8aae68' : '#769b59'} roughness={0.9} />
+              <meshStandardMaterial color={index % 2 ? '#46765d' : '#3a674f'} roughness={0.9} />
             </mesh>
             {Array.from({ length: 18 }, (_, cropIndex) => (
               <mesh key={cropIndex} position={[-FIELD_WIDTH / 2 + 7 + cropIndex * 6.15, 1.25, 0]} castShadow>
                 <coneGeometry args={[0.7, 2.5, 5]} />
-                <meshStandardMaterial color={cropIndex % 3 ? '#5f8d4d' : '#739f55'} />
+                <meshStandardMaterial color={cropIndex % 3 ? '#315c46' : '#4f8063'} />
               </mesh>
             ))}
           </group>
@@ -172,18 +172,18 @@ export default function Field({ model }: { model: ScreenViewModel }) {
           <group key={`${point.name}-${index}`} position={[x, 5.2, z]}>
             <mesh position-y={height / 2} castShadow>
               <cylinderGeometry args={[0.42, 1.15, height, 10]} />
-              <meshStandardMaterial color={new Color(densityColor(point.confidence))} emissive="#8b2c08" emissiveIntensity={0.24} />
+              <meshStandardMaterial color={new Color(densityColor(point.confidence))} emissive="#4b2720" emissiveIntensity={0.24} />
             </mesh>
             <mesh rotation-x={-Math.PI / 2} position-y={0.2}>
               <ringGeometry args={[1.2, 2.3, 28]} />
-              <meshBasicMaterial color="#ea580c" transparent opacity={0.62} />
+              <meshBasicMaterial color="#7fe5a8" transparent opacity={0.62} />
             </mesh>
           </group>
         )
       })}
 
-      {route.length >= 2 && <RoutePath points={route} color="#e9a23b" radius={0.22} dashed />}
-      {completedRoute.length >= 2 && <RoutePath points={completedRoute} color="#ea580c" radius={0.4} />}
+      {route.length >= 2 && <RoutePath points={route} color="#a7a7a7" radius={0.22} dashed />}
+      {completedRoute.length >= 2 && <RoutePath points={completedRoute} color="#7fe5a8" radius={0.4} />}
       <Drone model={model} />
     </group>
   )

@@ -82,6 +82,18 @@ def _has_configured_secret(name: str) -> bool:
 
 def check_yolo_model_health() -> dict[str, Any]:
     """Check configured local YOLO model availability without loading it."""
+    if _env_bool("MUYE_CONTAINER_SMOKE", False):
+        return {
+            "status": "ok",
+            "active_model": "container-smoke-fake",
+            "model_path": None,
+            "model_exists": False,
+            "device": "fake",
+            "available_models": [],
+            "mode": "smoke_fake",
+            "is_simulated": True,
+        }
+
     config = load_yaml(CONFIG_DIR / "yolo_config.yaml")
     models = config.get("models") or {}
     active_model = str(config.get("active_model") or "")
@@ -162,6 +174,20 @@ def check_event_bus_health() -> dict[str, Any]:
         raise
 
 
+def check_pipeline_runtime_health() -> dict[str, Any]:
+    """Check the optional cross-process pipeline readiness marker."""
+    raw_path = os.getenv("MUYE_PIPELINE_READY_FILE", "").strip()
+    if not raw_path:
+        return {"status": "skipped", "detail": "pipeline_ready_file_not_configured"}
+    ready_path = Path(raw_path)
+    ready = ready_path.is_file()
+    return {
+        "status": "ok" if ready else "error",
+        "ready": ready,
+        "path": str(ready_path),
+    }
+
+
 def check_rag_config_health() -> dict[str, Any]:
     """Report RAG mode and local vector-store path state."""
     enabled = _env_bool("RAG_ENABLED", True)
@@ -224,6 +250,8 @@ def check_runtime_config_health() -> dict[str, Any]:
         "multi_agent_enabled": _env_bool("MUYE_MULTI_AGENT_ENABLED", False),
         "yolo_active_model": yolo.get("active_model"),
         "yolo_device": yolo.get("device"),
+        "yolo_mode": yolo.get("mode", "real"),
+        "yolo_is_simulated": bool(yolo.get("is_simulated", False)),
     }
 
 
@@ -268,6 +296,7 @@ def collect_health_status(embedded_yolo_runner: Any = None) -> tuple[dict[str, A
         ("ai_config", health_module.check_ai_config_health),
         ("weather_config", health_module.check_weather_config_health),
         ("event_bus", health_module.check_event_bus_health),
+        ("pipeline_runtime", health_module.check_pipeline_runtime_health),
         ("rag_config", health_module.check_rag_config_health),
         ("px4_runtime", health_module.check_px4_runtime_health),
         ("runtime_config", health_module.check_runtime_config_health),

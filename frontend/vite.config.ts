@@ -53,7 +53,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './tests/setup.ts',
     css: true,
-    exclude: ['tests/commandPoint.test.mjs', 'node_modules/**'],
+    exclude: ['e2e/**', 'tests/commandPoint.test.mjs', 'node_modules/**'],
   },
   server: {
     host: '0.0.0.0',

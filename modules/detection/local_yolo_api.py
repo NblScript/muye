@@ -342,6 +342,7 @@ def create_app(
     settings: LocalYoloSettings | None = None,
     predictor: PredictorProtocol | None = None,
     logger: logging.Logger | None = None,
+    health_metadata: dict[str, Any] | None = None,
 ) -> FastAPI:
     active_settings = settings or load_local_yolo_settings()
     active_predictor = predictor or UltralyticsPredictor(
@@ -361,6 +362,7 @@ def create_app(
             "status": "ok",
             "model_path": str(active_predictor.model_path),
             "max_batch_size": active_settings.max_batch_size,
+            **(health_metadata or {}),
         }
 
     @app.post("/detect")

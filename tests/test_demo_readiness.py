@@ -54,6 +54,11 @@ def test_seed_demo_state_generates_full_demo_task(tmp_path) -> None:
     task_views = store.fetch_task_views(limit=1)
     assert task_views[0]["request_id"] == DEMO_REQUEST_ID
     assert task_views[0]["decision"]["用药"]["农药名称"] == "吡虫啉"
+    snapshot = store.fetch_heatmap_snapshot_by_request(DEMO_REQUEST_ID)
+    assert snapshot is not None
+    assert snapshot["source"] == "demo_seed"
+    assert snapshot["is_simulated"] is True
+    assert snapshot["algorithm_version"] == "demo-synthetic-surface-v1"
 
     event_tasks = build_task_views(load_events(event_bus.path))
     seeded = event_tasks[0]

@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine
 
 from app.config_types import MuyeConfig
+from app.services.pipeline_planning_service import (
+    attach_heatmap_trace,
+    build_density_payload,
+    plan_spray_mission,
+)
 from app.utils import evaluate_effectiveness, parse_action_time
 from modules.detection.image_processor import ImageProcessor
 from modules.drone.controller import DroneController
@@ -53,6 +58,7 @@ class MissionManager:
         field_context: dict[str, Any],
         image_path: Path,
         weather: dict[str, Any] | None = None,
+        execution_plan: dict[str, Any] | None = None,
     ) -> None:
         """Schedule a re-inspection mission after pesticide action time elapses."""
         import uuid
@@ -81,6 +87,27 @@ class MissionManager:
             pesticide_name=medication.get("农药名称"),
             crop_name=crop_cycle.get("crop_name"),
         )
+        self.sqlite_store.attach_heatmap_snapshot_to_mission(
+            request_id=request_id,
+            mission_id=mission_uuid,
+            inspection_kind="pre_spray",
+            iteration_number=1,
+        )
+        initial_snapshot = self.sqlite_store.fetch_heatmap_snapshot_by_request(
+            request_id,
+            inspection_kind="pre_spray",
+            iteration_number=1,
+            include_legacy=False,
+        )
+        initial_plan = dict(execution_plan or {})
+        initial_snapshot_id = (
+            initial_plan.get("heatmap_snapshot_id")
+            or (initial_snapshot or {}).get("snapshot_id")
+        )
+        initial_algorithm_version = (
+            initial_plan.get("heatmap_algorithm_version")
+            or (initial_snapshot or {}).get("algorithm_version")
+        )
 
         evaluation_id = self.sqlite_store.create_evaluation(
             original_request_id=request_id,
@@ -94,6 +121,9 @@ class MissionManager:
             mission_id=mission_uuid,
             iteration_number=1,
             spray_request_id=request_id,
+            heatmap_snapshot_id=initial_snapshot_id,
+            heatmap_algorithm_version=initial_algorithm_version,
+            spray_plan=initial_plan,
         )
         self.sqlite_store.update_iteration(
             iteration_id, evaluation_id=evaluation_id, status="spraying",
@@ -113,6 +143,8 @@ class MissionManager:
                 "action_time_hours": action_hours,
                 "pre_pest_count": pre_pest_count,
                 "max_iterations": self.config.evaluation_max_retries,
+                "heatmap_snapshot_id": initial_snapshot_id,
+                "heatmap_algorithm_version": initial_algorithm_version,
             },
         )
         log_event(
@@ -133,6 +165,8 @@ class MissionManager:
             "mission_uuid": mission_uuid,
             "iteration_id": iteration_id,
             "action_hours": action_hours,
+            "latest_heatmap_snapshot_id": initial_snapshot_id,
+            "latest_heatmap_metadata": (initial_snapshot or {}).get("density_metadata") or {},
         }
 
         task = asyncio.create_task(self._run_mission_loop(mission_uuid, request_id, delay_seconds))
@@ -269,15 +303,43 @@ class MissionManager:
                     original_pest_types.add(pt)
 
             all_post_detections: list[dict[str, Any]] = []
+            snapshot_image_paths = [str(path) for path in captured_images]
             if captured_images:
                 for img_path_str in captured_images:
                     img_path = Path(img_path_str)
                     if not img_path.exists():
                         continue
                     dets = await self._detect_pests_fn(request_id, img_path, publish_events=False)
-                    all_post_detections.extend(dets)
+                    all_post_detections.extend(
+                        {**item, "image_path": str(img_path)} for item in dets
+                    )
             else:
-                all_post_detections = await self._detect_pests_fn(request_id, ctx["image_path"], publish_events=False)
+                fallback_image = Path(ctx["image_path"])
+                snapshot_image_paths = [str(fallback_image)]
+                dets = await self._detect_pests_fn(
+                    request_id,
+                    fallback_image,
+                    publish_events=False,
+                )
+                all_post_detections = [
+                    {**item, "image_path": str(fallback_image)} for item in dets
+                ]
+
+            density_grid, density_metadata = build_density_payload(
+                field_context=field_context,
+                detections=all_post_detections,
+            )
+            snapshot_id = self.sqlite_store.save_heatmap_snapshot(
+                request_id=request_id,
+                field_id=field_context.get("field_id"),
+                mission_id=mission_uuid,
+                inspection_kind="reinspection",
+                iteration_number=iteration_number,
+                image_paths=snapshot_image_paths,
+                detections=all_post_detections,
+                density_grid=density_grid,
+                density_metadata=density_metadata,
+            )
 
             if original_pest_types:
                 post_count = sum(
@@ -322,8 +384,13 @@ class MissionManager:
                     "pre_pest_count": pre_count,
                     "post_pest_count": post_count,
                     "captured_images": captured_images,
+                    "heatmap_snapshot_id": snapshot_id,
+                    "heatmap_algorithm_version": density_metadata.get("algorithm_version"),
                 },
             )
+            ctx["detections"] = all_post_detections
+            ctx["latest_heatmap_snapshot_id"] = snapshot_id
+            ctx["latest_heatmap_metadata"] = density_metadata
             return kill_rate
 
         except Exception as exc:
@@ -340,6 +407,7 @@ class MissionManager:
         """Execute one complete spray+inspect+evaluate cycle. Returns kill_rate or None."""
         from modules.infra.sqlite_store._private import utc_now_iso
 
+        iteration_id: int | None = None
         try:
             delay_seconds = self.config.evaluation_demo_delay_seconds
 
@@ -353,10 +421,44 @@ class MissionManager:
 
             field_context = ctx["field_context"]
             decision = ctx["decision"]
-            spray_plan = self.drone_controller.plan_spray_mission(
+            source_detections = list(ctx.get("detections") or [])
+            spray_plan = plan_spray_mission(
+                drone_controller=self.drone_controller,
                 field_context=field_context,
                 current_weather=ctx.get("weather", {}),
+                detections=source_detections,
             )
+            spray_plan = attach_heatmap_trace(
+                spray_plan,
+                snapshot_id=ctx.get("latest_heatmap_snapshot_id"),
+                density_metadata=ctx.get("latest_heatmap_metadata") or {},
+            )
+
+            evaluation_id = self.sqlite_store.create_evaluation(
+                original_request_id=original_request_id,
+                scheduled_at=utc_now_iso(),
+                action_time_hours=ctx.get("action_hours", 24),
+                pre_pest_count=len(source_detections),
+                kill_rate_threshold=self.config.evaluation_kill_rate_threshold,
+            )
+            iteration_id = self.sqlite_store.create_iteration(
+                mission_id=mission_uuid,
+                iteration_number=iteration_number,
+                spray_request_id=original_request_id,
+                heatmap_snapshot_id=spray_plan.get("heatmap_snapshot_id"),
+                heatmap_algorithm_version=spray_plan.get("heatmap_algorithm_version"),
+                spray_plan=spray_plan,
+            )
+            self.sqlite_store.update_iteration(
+                iteration_id,
+                evaluation_id=evaluation_id,
+                status="spraying",
+            )
+
+            mission = self.sqlite_store.fetch_mission_by_mission_id(mission_uuid)
+            if mission:
+                self.sqlite_store.update_mission(mission["id"], current_iteration=iteration_number)
+
             await self.drone_controller.execute_spray_mission(
                 decision=decision,
                 current_weather=ctx.get("weather", {}),
@@ -364,29 +466,10 @@ class MissionManager:
                 execution_plan=spray_plan,
                 field_context=field_context,
             )
-
-            evaluation_id = self.sqlite_store.create_evaluation(
-                original_request_id=original_request_id,
-                scheduled_at=utc_now_iso(),
-                action_time_hours=ctx.get("action_hours", 24),
-                pre_pest_count=len(ctx["detections"]),
-                kill_rate_threshold=self.config.evaluation_kill_rate_threshold,
-            )
-            iteration_id = self.sqlite_store.create_iteration(
-                mission_id=mission_uuid,
-                iteration_number=iteration_number,
-                spray_request_id=original_request_id,
-            )
             self.sqlite_store.update_iteration(
                 iteration_id,
-                evaluation_id=evaluation_id,
-                status="spraying",
                 spray_completed_at=utc_now_iso(),
             )
-
-            mission = self.sqlite_store.fetch_mission_by_mission_id(mission_uuid)
-            if mission:
-                self.sqlite_store.update_mission(mission["id"], current_iteration=iteration_number)
 
             await asyncio.sleep(delay_seconds)
 
@@ -396,6 +479,12 @@ class MissionManager:
 
         except Exception as exc:
             self.logger.exception("Mission iteration %d failed: %s", iteration_number, exc)
+            if iteration_id is not None:
+                self.sqlite_store.update_iteration(
+                    iteration_id,
+                    status="failed",
+                    notes=f"喷洒迭代失败: {exc}",
+                )
             return None
 
     async def _complete_mission(

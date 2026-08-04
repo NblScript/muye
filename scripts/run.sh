@@ -36,7 +36,7 @@ Usage: ./scripts/run.sh [options]
 与 demo.sh 的区别：
   - 自动起飞（无需前端确认）
   - 启动即采集（不等待手动注入）
-  - PX4 SITL 真实仿真模式
+  - PX4 MAVSDK 真实执行模式（可连接 SITL 或真机）
   - 支持无前端无头运行
   - 使用真实 API（需配置 .env.production）
 
@@ -58,6 +58,7 @@ FRONTEND_PORT=5173
 NO_FRONTEND="false"
 SKIP_PRECHECK="false"
 ALLOW_DEFAULT_ENV="false"
+USING_DEFAULT_ENV="false"
 
 load_env_file() {
     local file="$1"
@@ -111,6 +112,7 @@ if [[ -f "$PRODUCTION_ENV_FILE" ]]; then
     print_info "已加载生产环境: .env.production"
 else
     if [[ "$ALLOW_DEFAULT_ENV" == "true" ]]; then
+        USING_DEFAULT_ENV="true"
         print_warn "缺少 .env.production，已按 --allow-default-env 使用默认配置"
     else
         print_error "缺少 .env.production"
@@ -120,10 +122,20 @@ else
     fi
 fi
 
+# 显式允许无生产配置时，固定使用安全的本地联调行为。
+if [[ "$USING_DEFAULT_ENV" == "true" ]]; then
+    export QWEN_USE_MOCK="${QWEN_USE_MOCK:-true}"
+    export QWEATHER_USE_MOCK="${QWEATHER_USE_MOCK:-true}"
+    export RAG_ENABLED="${RAG_ENABLED:-false}"
+    export MUYE_TAKEOFF_MODE="${MUYE_TAKEOFF_MODE:-manual}"
+    export PX4_EXECUTION_MODE="${PX4_EXECUTION_MODE:-animated_demo}"
+    export PX4_AUTO_START_ON_SPRAY="${PX4_AUTO_START_ON_SPRAY:-false}"
+fi
+
 # 配置生产模式覆盖
 export DRONE_BACKEND="${DRONE_BACKEND:-px4}"
 export MUYE_TAKEOFF_MODE="${MUYE_TAKEOFF_MODE:-auto}"
-export PX4_EXECUTION_MODE="${PX4_EXECUTION_MODE:-sitl}"
+export PX4_EXECUTION_MODE="${PX4_EXECUTION_MODE:-real}"
 export PX4_AUTO_START_ON_SPRAY="${PX4_AUTO_START_ON_SPRAY:-true}"
 export PX4_RETURN_TO_LAUNCH_AFTER_MISSION="${PX4_RETURN_TO_LAUNCH_AFTER_MISSION:-true}"
 export PX4_REQUIRE_GLOBAL_POSITION="${PX4_REQUIRE_GLOBAL_POSITION:-true}"
@@ -192,8 +204,9 @@ echo "  牧野智慧农业作业系统（生产模式）"
 echo "=========================================="
 echo ""
 echo "  工作模式:   24h 自动巡检循环"
-echo "  起飞模式:   自动起飞"
+echo "  起飞模式:   $MUYE_TAKEOFF_MODE"
 echo "  无人机后端: $DRONE_BACKEND"
+echo "  PX4 模式:   $PX4_EXECUTION_MODE"
 echo "  任务闭环:   自动重试至杀灭率 ≥ 90%"
 echo "  API 地址:   ${API_HOST}:${API_PORT}"
 if [[ "$NO_FRONTEND" != "true" ]]; then
@@ -219,11 +232,19 @@ if [[ "$SKIP_PRECHECK" != "true" ]]; then
     fi
     print_success "配置文件: $CONFIG_FILE"
 
-    # 检查 YOLO 模型
-    if [[ -f "${ROOT_DIR}/models/best.pt" ]]; then
-        print_success "YOLO 模型: models/best.pt"
+    # --with-yolo-api 会加载本地模型，因此模型缺失必须立即失败。
+    YOLO_MODEL_PATH="${YOLO_LOCAL_MODEL_PATH:-models/best.pt}"
+    if [[ "$YOLO_MODEL_PATH" = /* ]]; then
+        RESOLVED_YOLO_MODEL_PATH="$YOLO_MODEL_PATH"
     else
-        print_warn "YOLO 模型不存在，将使用 --with-yolo-api 内嵌模式"
+        RESOLVED_YOLO_MODEL_PATH="${ROOT_DIR}/${YOLO_MODEL_PATH}"
+    fi
+    if [[ -f "$RESOLVED_YOLO_MODEL_PATH" ]]; then
+        print_success "YOLO 模型: $YOLO_MODEL_PATH"
+    else
+        print_error "YOLO 模型不存在: $YOLO_MODEL_PATH"
+        echo "  --with-yolo-api 需要可用的本地模型，请设置 YOLO_LOCAL_MODEL_PATH"
+        exit 1
     fi
 
     # 检查 DJI OSDK 配置（当后端为 dji_osdk 时）
@@ -314,7 +335,7 @@ echo "=========================================="
 echo ""
 echo "  API 服务:    http://${API_HOST}:${API_PORT}/health"
 echo "  巡检间隔:    每 24 小时自动采集"
-echo "  起飞模式:    自动（无需人工确认）"
+echo "  起飞模式:    $MUYE_TAKEOFF_MODE"
 echo "  任务闭环:    自动重试至杀灭率 ≥ 90%"
 echo "  RAG 索引:    完成任务自动索引"
 if [[ "$NO_FRONTEND" != "true" ]]; then

@@ -14,6 +14,8 @@ import Footer, { type FooterActions } from './footer'
 import Header from './header'
 
 const GridWrapper = styled.div`
+  position: relative;
+  isolation: isolate;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -21,6 +23,15 @@ const GridWrapper = styled.div`
   grid-template-rows: repeat(6, minmax(0, 1fr));
   gap: 20px;
   padding: 20px 20px 100px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 50% 48%, transparent 35%, rgba(0, 0, 0, 0.72) 100%);
+  }
 `
 
 const Card = styled.div`
@@ -29,10 +40,14 @@ const Card = styled.div`
   min-height: 0;
   overflow: hidden;
   padding: 15px;
-  border: 1px solid rgba(255, 145, 0, 0.3);
+  color: #fff;
+  border: 1px solid rgba(141, 141, 141, 0.24);
   border-radius: 4px;
-  background: rgba(255, 245, 232, 0.65);
-  backdrop-filter: blur(4px);
+  background:
+    linear-gradient(135deg, rgba(127, 229, 168, 0.035), transparent 42%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 6px),
+    rgba(12, 18, 19, 0.58);
+  backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
   pointer-events: auto;
@@ -46,8 +61,8 @@ const Card = styled.div`
     pointer-events: none;
     transition: all .3s ease;
   }
-  &::before { top: -1px; left: -1px; border-top: 2px solid #ea580c; border-left: 2px solid #ea580c; }
-  &::after { right: -1px; bottom: -1px; border-right: 2px solid #ea580c; border-bottom: 2px solid #ea580c; }
+  &::before { top: -1px; left: -1px; border-top: 2px solid #7fe5a8; border-left: 2px solid #7fe5a8; }
+  &::after { right: -1px; bottom: -1px; border-right: 2px solid #7fe5a8; border-bottom: 2px solid #7fe5a8; }
   &:hover::before, &:hover::after { width: 100%; height: 100%; opacity: .5; }
 `
 
@@ -55,14 +70,14 @@ const CardTitle = styled.div`
   flex: 0 0 auto;
   margin-bottom: 10px;
   padding-left: 10px;
-  border-left: 4px solid #fdb961;
+  border-left: 3px solid #7fe5a8;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #5a4a42;
+  color: #fff;
   font-size: 18px;
 
-  span { color: rgba(0,0,0,.4); font-size: 10px; font-weight: normal; }
+  span { color: rgba(255,255,255,.36); font-size: 10px; font-weight: normal; }
 `
 
 const CardBody = styled.div`
@@ -110,28 +125,28 @@ export default function Panel({ model, actions }: PanelProps) {
   return (
     <AutoFit>
       <Header ref={topRef} model={model} />
-      <GridWrapper>
-        <Card ref={leftRef} style={{ gridArea: '1 / 1 / 3 / 2' }}>
+      <GridWrapper data-testid="command-panel-grid">
+        <Card ref={leftRef} data-testid="panel-pests" style={{ gridArea: '1 / 1 / 3 / 2' }}>
           <CardTitle>昆虫识别与数量<span>PEST DETECTION</span></CardTitle>
           <CardBody><Chart1 pests={model.pests} /></CardBody>
         </Card>
-        <Card ref={leftRef1} style={{ gridArea: '3 / 1 / 5 / 2' }}>
+        <Card ref={leftRef1} data-testid="panel-weather" style={{ gridArea: '3 / 1 / 5 / 2' }}>
           <CardTitle>气象与施药窗口<span>WEATHER WINDOW</span></CardTitle>
           <CardBody><Chart2 metrics={model.weather} ready={model.weatherReady} suitable={model.weatherSuitable} /></CardBody>
         </Card>
-        <Card ref={leftRef2} style={{ gridArea: '5 / 1 / 7 / 2' }}>
+        <Card ref={leftRef2} data-testid="panel-pipeline" style={{ gridArea: '5 / 1 / 7 / 2' }}>
           <CardTitle>真实任务处理链<span>PIPELINE EVENTS</span></CardTitle>
           <CardBody><Chart3 stages={model.pipeline} /></CardBody>
         </Card>
-        <Card ref={rightRef} style={{ gridArea: '1 / 4 / 3 / 5' }}>
+        <Card ref={rightRef} data-testid="panel-decision" style={{ gridArea: '1 / 4 / 3 / 5' }}>
           <CardTitle>AI 会诊与防治方案<span>AI DECISION</span></CardTitle>
           <CardBody><Chart4 decision={model.decision} /></CardBody>
         </Card>
-        <Card ref={rightRef1} style={{ gridArea: '3 / 4 / 5 / 5' }}>
+        <Card ref={rightRef1} data-testid="panel-drone" style={{ gridArea: '3 / 4 / 5 / 5' }}>
           <CardTitle>无人机执行状态<span>UAV MISSION</span></CardTitle>
           <CardBody><Chart5 drone={model.drone} /></CardBody>
         </Card>
-        <Card ref={rightRef2} style={{ gridArea: '5 / 4 / 7 / 5' }}>
+        <Card ref={rightRef2} data-testid="panel-evaluation" style={{ gridArea: '5 / 4 / 7 / 5' }}>
           <CardTitle>虫情热力与防治闭环<span>HEAT & EVALUATION</span></CardTitle>
           <CardBody><Chart6 evaluation={model.evaluation} /></CardBody>
         </Card>

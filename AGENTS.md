@@ -20,7 +20,7 @@
 | 前端 | React 19 + TypeScript 6 + Vite 8 + Three.js（昆虫热力指挥大屏，useDashboardState Hook 模式） |
 | 后端 | Python 3.x + FastAPI + SQLAlchemy |
 | AI | YOLOv8（检测，可切换模型）+ Qwen/DeepSeek/Xiaomi（多模型决策，provider 可配置）+ LangChain RAG + ChromaDB + DecisionRouter（路由） |
-| 无人机 | PX4 SITL + MAVSDK（仿真）/ DJI OSDK（行业级无人机） |
+| 无人机 | PX4 animated demo + MAVSDK real（SITL/真机）/ DJI OSDK 后端接口（当前仿真） |
 | 存储 | SQLite（结构化）+ JSONL（事件流）+ ChromaDB（向量） |
 
 ## 服务端口
@@ -77,6 +77,7 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 | `app/services/pipeline_planning_service.py` | 主处理链喷洒规划选择：变量喷洒优先，失败回退均匀路径 |
 | `app/services/map_simulator.py` | 模拟 PX4 地图状态用于演示大屏 |
 | `app/services/telemetry_service.py` | PX4 遥测状态管理、轨迹缓冲 |
+| `app/routes/heatmaps.py` | 热力快照 API：最新、组合筛选、详情与喷洒前后配对 |
 | `app/main.py`（评估编排） | `_schedule_reinspection`、`_run_reinspection`、`_evaluate_effectiveness` 闭环评估管线阶段 |
 | `app/routes/mission.py` | 任务 API 端点：按请求查询任务、任务列表、取消任务 |
 
@@ -98,19 +99,20 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 ### 生产入口（24h 自动巡检）
 
 ```bash
+cp .env.production.example .env.production
 ./scripts/prepare.sh --production  # 环境准备 + 生产模式检查
 ./scripts/run.sh                   # 生产主入口：24h 自动巡检循环
 ```
 
-**run.sh 参数**：`--api-port` · `--frontend-port` · `--no-frontend` · `--skip-precheck`
+**run.sh 参数**：`--api-port` · `--frontend-port` · `--no-frontend` · `--skip-precheck` · `--allow-default-env`
 
-生产模式特点：启动即采集、自动起飞、PX4 SITL 真实仿真、任务闭环自动重试至杀灭率 ≥ 90%、可选无头运行。
+生产模式特点：启动即采集、自动起飞、PX4 MAVSDK 真实执行（可连接 SITL 或真机）、任务闭环自动重试至杀灭率 ≥ 90%、可选无头运行。
 
 | 配置项 | demo.sh（演示） | run.sh（生产） |
 |--------|----------------|---------------|
 | `MUYE_TAKEOFF_MODE` | `manual` | `auto` |
 | 启动采集 | `--no-capture-on-startup` | 启动即采集 |
-| `PX4_EXECUTION_MODE` | `animated_demo` | `sitl` |
+| `PX4_EXECUTION_MODE` | `animated_demo` | `real` |
 | 图片注入 | 单张手动注入 | 依赖定时采集（24h） |
 | 前端 | 必须启动 | 可选（`--no-frontend`） |
 | 环境配置 | mock | `.env.production`（真实 API Key） |
@@ -120,9 +122,12 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 ```bash
 ./scripts/demo_scenario.sh <场景名> # 预设演示场景（aphid_normal|planthopper_humid|wind_high|rag_down|px4_down）
 ./scripts/demo_smoke.sh # 烟雾测试（验证 API + mock 链路，不依赖 PX4）
+./scripts/docker_smoke.sh # 隔离容器端到端冒烟（显式 fake YOLO，不需模型权重）
+./scripts/docker_real_smoke.sh # 真实 best.pt 容器验收（独立数据卷，需 Docker 与模型）
 ./scripts/demo_doctor.sh # 现场诊断报告（health/SLO/workflow/事件流/错误日志）
 python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样例评测集报告
 ./scripts/check.sh     # 竞赛总验证（关键路径测试 + 前端构建 + 文档校验；MUYE_FULL_CHECK=1 开启全量回归）
+cd frontend && npm run test:e2e # Playwright 大屏/历史页 3 视口验收（需先 build）
 ./scripts/precheck.sh  # 可 source 的环境检查工具库
 ```
 
@@ -139,7 +144,7 @@ python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样
 | [RELIABILITY.md](RELIABILITY.md) | 可靠性要求、SLO |
 | [SECURITY.md](SECURITY.md) | 安全规范 |
 | [docs/design-docs/](docs/design-docs/index.md) | 设计文档索引 |
-| [docs/exec-plans/](docs/exec-plans/tech-debt-tracker.md) | 执行计划与技术债务 |
+| [docs/exec-plans/](docs/exec-plans/index.md) | 执行计划与技术债务索引 |
 | [docs/generated/](docs/generated/db-schema.md) | 自动生成文档（DB Schema） |
 | [docs/product-specs/](docs/product-specs/index.md) | 产品规格说明 |
 | [docs/references/api.md](docs/references/api.md) | API 端点参考 |
@@ -150,7 +155,8 @@ python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样
 
 ## 当前活跃计划
 
-- 无活跃执行计划。查看 [技术债务追踪器](docs/exec-plans/tech-debt-tracker.md) 了解待处理项。
+- [昆虫热力图产品化执行计划](docs/exec-plans/2026-08-04-insect-heatmap-productization.md)：阶段 4、阶段 5 和多分辨率验收已完成；真实模型 Docker 验收链已就绪，待具备 Docker 与权重的环境实跑。
+- [技术债务追踪器](docs/exec-plans/tech-debt-tracker.md)：持续记录工程质量项。
 
 ## 外部依赖
 
@@ -162,7 +168,7 @@ python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样
 | 小米 MiMo | AI 决策（植保专家） | `XIAOMI_API_KEY` / `XIAOMI_API_URL` / `XIAOMI_MODEL` |
 | DashScope | RAG 文本向量化 | `DASHSCOPE_API_KEY` |
 | PX4 SITL | 无人机仿真 | 自动启动 |
-| DJI OSDK | 行业级无人机对接（Matrice/M300/M350） | `DRONE_BACKEND` 环境变量 | `config/drone_config.json` → `execution.backend` |
+| DJI OSDK | Matrice 系列后端接口与 `osdk_sim`；`osdk_real` 硬件通信尚未实现 | `DRONE_BACKEND` 环境变量 | `config/drone_config.json` → `execution.backend` |
 | YOLO 模型 | 害虫图像识别 | 本地 ONNX 权重 |
 | DecisionRouter | 路由决策路径（专家/多智能体） | `MUYE_ROUTER_ENABLED`（bool，默认 false）· `MUYE_ROUTER_FAMILIARITY_THRESHOLD`（float，默认 0.6） |
 | 模型切换 | 检测模型热切换 + 决策 provider 映射 | `config/yolo_config.yaml` → `models` + `active_model`；`config/model_config.yaml` → `expert_providers` |
@@ -185,7 +191,7 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 
 每项检查携带 `evidence`（来源 + 匹配字段），顶层返回 `summary`（规则拼接）、`execution_policy`、`alternatives`（blocked/warning 时从 RAG 候选中推荐替代农药，最多 3 条，排除高毒/剧毒品种）。
 
-**知识库规模**：80 条农药（5 级毒性）· 7 种作物 · 238 个 RAG 知识文档块
+**知识数据基线**：80 条农药演示种子，覆盖 7 类目标作物、59 类防治对象；种子中实际出现 4 种毒性标签，合规规则按 5 级标准处理。Markdown 知识块在构建时从当前 `docs/` 动态切分，数量随文档版本变化，不作为固定架构常量。
 
 **代码**：`modules/decision/compliance.py`
 **设计文档**：`docs/superpowers/specs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`

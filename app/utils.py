@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
 from modules.infra.common import log_event
+
+
+T = TypeVar("T")
 
 
 def evaluate_effectiveness(
@@ -42,10 +45,10 @@ def safe_sqlite_write(
     client_ip: str,
     sqlite_path: str,
     operation: str,
-    callback: Callable[[], None],
-) -> None:
+    callback: Callable[[], T],
+) -> T | None:
     try:
-        callback()
+        return callback()
     except Exception as exc:
         log_event(
             logger,
@@ -57,3 +60,4 @@ def safe_sqlite_write(
             sqlite_path=sqlite_path,
             error=str(exc),
         )
+        return None

@@ -1,6 +1,6 @@
 # ===========================================
 # Muye Backend Service
-# 运行主处理流程 + YOLO API + Virtual Drone API + Frontend API
+# 运行主处理流程、内嵌 YOLO API 和 Frontend API
 # ===========================================
 FROM python:3.11-slim
 
@@ -38,10 +38,7 @@ ENV PYTHONPATH=/app
 ENV MUYE_SQLITE_PATH=/app/data/muye.db
 ENV MUYE_API_PORT=8000
 
-# 暴露端口
-# 8000: Frontend API
-# 8010: YOLO API (调试用)
-# 9010: Virtual Drone API (调试用)
-EXPOSE 8000 8010 9010
+# 内嵌 YOLO 只监听容器回环地址，不对宿主机暴露。
+EXPOSE 8000
 
 ENTRYPOINT ["/entrypoint.sh"]

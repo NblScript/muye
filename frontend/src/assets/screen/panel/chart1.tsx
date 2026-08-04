@@ -5,7 +5,7 @@ const Empty = styled.div`
   height: 100%;
   display: grid;
   place-items: center;
-  color: rgba(90, 74, 66, 0.55);
+  color: rgba(255, 255, 255, 0.48);
   font-size: 14px;
   letter-spacing: 0.08em;
 `
@@ -28,7 +28,7 @@ const Row = styled.div`
 
 const PestName = styled.span`
   overflow: hidden;
-  color: #5a4a42;
+  color: rgba(255, 255, 255, 0.86);
   font-size: 14px;
   font-weight: 650;
   text-align: right;
@@ -40,7 +40,7 @@ const Track = styled.div`
   position: relative;
   height: 9px;
   border-radius: 999px;
-  background: rgba(234, 88, 12, 0.08);
+  background: rgba(127, 229, 168, 0.1);
 `
 
 const Fill = styled.div<{ $percent: number }>`
@@ -49,8 +49,8 @@ const Fill = styled.div<{ $percent: number }>`
   width: ${({ $percent }) => `${$percent}%`};
   min-width: 15px;
   border-radius: inherit;
-  background: linear-gradient(90deg, #f6c56d 0%, #ea580c 100%);
-  box-shadow: 0 0 9px rgba(234, 88, 12, 0.24);
+  background: linear-gradient(90deg, #4f8a72 0%, #7fe5a8 100%);
+  box-shadow: 0 0 9px rgba(127, 229, 168, 0.24);
 
   &::after {
     content: '';
@@ -59,16 +59,16 @@ const Fill = styled.div<{ $percent: number }>`
     right: -6px;
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(255, 248, 238, 0.92);
+    border: 2px solid rgba(223, 255, 238, 0.92);
     border-radius: 50%;
-    background: #ffb34d;
-    box-shadow: 0 0 10px rgba(234, 88, 12, 0.55);
+    background: #7fe5a8;
+    box-shadow: 0 0 10px rgba(127, 229, 168, 0.5);
     transform: translateY(-50%);
   }
 `
 
 const Count = styled.span`
-  color: #b84f10;
+  color: #7fe5a8;
   font-size: 13px;
   font-weight: 750;
   white-space: nowrap;
@@ -77,7 +77,7 @@ const Count = styled.span`
 const Confidence = styled.span`
   grid-column: 2 / 4;
   margin-top: -10px;
-  color: rgba(90, 74, 66, 0.48);
+  color: rgba(255, 255, 255, 0.42);
   font-size: 10px;
   letter-spacing: 0.02em;
 `

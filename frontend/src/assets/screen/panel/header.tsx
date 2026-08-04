@@ -12,6 +12,10 @@ const TitleWrapper = styled.div`
   align-items: center;
   z-index: 5;
   pointer-events: none;
+  color: #fff;
+  border: 1px solid rgba(141, 141, 141, 0.22);
+  background: rgba(12, 18, 19, 0.58);
+  backdrop-filter: blur(10px);
 `
 
 const Title = styled.div`
@@ -20,17 +24,13 @@ const Title = styled.div`
   font-weight: 700;
   letter-spacing: 8px;
   text-align: center;
-  text-shadow: 0 8px 10px rgba(255,145,0,.8);
-  background: linear-gradient(to bottom, #ea580c, #ff9100);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 18px rgba(127, 229, 168, 0.16);
 
   &::after {
     content: 'MUYE PEST HEATMAP COMMAND CENTER';
     display: block;
     margin-top: -5px;
-    color: rgba(255,145,0,.6);
-    -webkit-text-fill-color: rgba(255,145,0,.6);
+    color: rgba(127, 229, 168, 0.62);
     font-size: 10px;
     letter-spacing: 9px;
   }
@@ -41,10 +41,10 @@ const SideInfo = styled.div<{ $side: 'left' | 'right' }>`
   top: 14px;
   ${({ $side }) => $side}: 30px;
   width: 300px;
-  color: #6d584c;
+  color: rgba(255,255,255,.82);
   text-align: ${({ $side }) => $side};
   .primary { font-size: 13px; font-weight: 650; }
-  .secondary { margin-top: 4px; color: rgba(88,68,58,.45); font-size: 10px; }
+  .secondary { margin-top: 4px; color: rgba(255,255,255,.42); font-size: 10px; }
 `
 
 const LiveDot = styled.span<{ $online: boolean }>`
@@ -53,7 +53,7 @@ const LiveDot = styled.span<{ $online: boolean }>`
   height: 7px;
   margin-right: 6px;
   border-radius: 50%;
-  background: ${({ $online }) => $online ? '#52a168' : '#d18a31'};
+  background: ${({ $online }) => $online ? '#7fe5a8' : '#d6b56f'};
   box-shadow: 0 0 9px currentColor;
 `
 
@@ -88,10 +88,10 @@ export default function Header({ model, ...props }: HeaderProps) {
           <mask id="header-line-left"><circle r="100" fill="url(#header-glow)"><animateMotion dur="3s" path="M0,60 L620,60 L670,80 L960,80" repeatCount="indefinite" /></circle></mask>
           <mask id="header-line-right"><circle r="100" fill="url(#header-glow)"><animateMotion dur="3s" path="M1920,60 L1300,60 L1250,80 L960,80" repeatCount="indefinite" /></circle></mask>
         </defs>
-        <path d="M0,0 L1920,0 L1920,60 L1300,60 L1250,80 L670,80 L620,60 L0,60 Z" fill="rgb(255,245,232)" />
-        <path d="M0,60 L620,60 L670,80 L1250,80 L1300,60 L1920,60" fill="none" stroke="rgb(234,88,12)" strokeWidth="1" />
-        <path d="M0,60 L620,60 L670,80 L960,80" fill="none" stroke="#ff6715" strokeWidth="4" mask="url(#header-line-left)" />
-        <path d="M1920,60 L1300,60 L1250,80 L960,80" fill="none" stroke="#ff6715" strokeWidth="4" mask="url(#header-line-right)" />
+        <path d="M0,0 L1920,0 L1920,60 L1300,60 L1250,80 L670,80 L620,60 L0,60 Z" fill="rgba(16,22,23,.62)" />
+        <path d="M0,60 L620,60 L670,80 L1250,80 L1300,60 L1920,60" fill="none" stroke="rgba(127,229,168,.52)" strokeWidth="1" />
+        <path d="M0,60 L620,60 L670,80 L960,80" fill="none" stroke="#7fe5a8" strokeWidth="3" mask="url(#header-line-left)" />
+        <path d="M1920,60 L1300,60 L1250,80 L960,80" fill="none" stroke="#7fe5a8" strokeWidth="3" mask="url(#header-line-right)" />
       </Bg>
       <SideInfo $side="left"><div className="primary"><LiveDot $online={model.connected} />{model.connected ? '实时数据链路' : '轮询数据链路'}</div><div className="secondary">任务 {model.requestId}</div></SideInfo>
       <Title>牧野昆虫热力监测大屏</Title>

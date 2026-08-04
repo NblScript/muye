@@ -9,24 +9,25 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "smoke:frontend": "vitest run tests/DashboardOverview.test.tsx tests/ScreenModel.test.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@react-three/fiber": "^9.7.0",
     "autofit.js": "^3.2.8",
-    "axios": "^1.15.0",
+    "axios": "1.19.0",
     "gsap": "^3.15.0",
     "keli-heatmap.js": "^2.0.18",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router-dom": "^7.14.1",
     "styled-components": "^6.4.4",
     "three": "^0.185.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

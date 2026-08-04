@@ -69,7 +69,7 @@ case "$SCENARIO" in
     echo -e "${RED}场景: 风速过高(7.8m/s)，AI 应建议暂缓施药${NC}"
     ;;
   rag_down)
-    IMAGE="${ROOT_DIR}/data/samples/corn_borer_01.jpg"
+    IMAGE="${ROOT_DIR}/data/samples/rice_leaf_roller_01.jpg"
     export QWEN_USE_MOCK="true"
     export QWEATHER_USE_MOCK="true"
     export RAG_ENABLED="false"

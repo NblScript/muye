@@ -95,6 +95,20 @@ def test_sqlite_store_migrates_legacy_database_to_v1_1(tmp_path) -> None:
             item["name"]
             for item in store.fetch_all("PRAGMA index_list('decisions')")
         }
+        heatmap_tables = {
+            item["name"]
+            for item in store.fetch_all(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table'
+                  AND name IN ('inspection_batches', 'inspection_detections', 'heatmap_snapshots')
+                """
+            )
+        }
+        mission_iteration_columns = {
+            item["name"]
+            for item in store.fetch_all("PRAGMA table_info('mission_iterations')")
+        }
     finally:
         store.close()
 
@@ -114,6 +128,16 @@ def test_sqlite_store_migrates_legacy_database_to_v1_1(tmp_path) -> None:
     assert "idx_detections_request_id" in detection_indexes
     assert "idx_weather_snapshots_request_id" in weather_indexes
     assert "idx_decisions_request_id" in decision_indexes
+    assert heatmap_tables == {
+        "inspection_batches",
+        "inspection_detections",
+        "heatmap_snapshots",
+    }
+    assert {
+        "heatmap_snapshot_id",
+        "heatmap_algorithm_version",
+        "spray_plan",
+    }.issubset(mission_iteration_columns)
 
 
 def test_sqlite_store_fetch_task_views_supports_structured_history_queries(tmp_path) -> None:

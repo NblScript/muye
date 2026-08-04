@@ -53,7 +53,7 @@
 **信念**：所有系统行为必须可通过事件流重放。
 
 **推论**：
-- `data/logs/demo_events.jsonl` 是系统的"黑匣子"
+- `data/logs/events.jsonl` 是系统的本地事件“黑匣子”，并按大小轮转
 - 每个关键操作必须发出事件
 - 事件格式：`{timestamp, event_type, source, payload}`
 

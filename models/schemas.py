@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -133,6 +133,66 @@ class WorkflowHistoryResponse(BaseModel):
 
     total: int
     items: list[HistoryTaskEntry]
+
+
+class HeatmapSnapshotSummary(BaseModel):
+    """Compact heatmap snapshot metadata returned by list endpoints."""
+
+    snapshot_id: str
+    batch_id: str
+    request_id: str
+    field_id: str | None = None
+    mission_id: str | None = None
+    iteration_number: int
+    inspection_kind: Literal["pre_spray", "reinspection"]
+    captured_at: str
+    algorithm_version: str
+    pest_counts: dict[str, int] = Field(default_factory=dict)
+    total_detection_count: int
+    hotspot_cell_count: int
+    peak_relative_heat: float
+    source: str
+    is_simulated: bool
+    legacy: bool = False
+    created_at: str | None = None
+
+
+class HeatmapSnapshotDetail(HeatmapSnapshotSummary):
+    """Full heatmap snapshot including grid, provenance, and detections."""
+
+    density_grid: list[dict[str, Any]] = Field(default_factory=list)
+    density_metadata: dict[str, Any] = Field(default_factory=dict)
+    image_paths: list[str] = Field(default_factory=list)
+    detections: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class HeatmapSnapshotListResponse(BaseModel):
+    """Paginated durable heatmap snapshot list."""
+
+    total: int
+    limit: int
+    offset: int
+    items: list[HeatmapSnapshotSummary]
+
+
+class HeatmapComparisonMetrics(BaseModel):
+    """Relative changes between one pre-spray and reinspection snapshot."""
+
+    detection_count_change: int
+    hotspot_cell_count_change: int
+    peak_relative_heat_change: float
+
+
+class HeatmapComparisonResponse(BaseModel):
+    """Traceable pre-spray/reinspection pair for one workflow request."""
+
+    request_id: str
+    mission_id: str | None = None
+    iteration_number: int
+    status: Literal["paired", "pending_pre_spray", "pending_reinspection"]
+    pre_spray: HeatmapSnapshotDetail | None = None
+    reinspection: HeatmapSnapshotDetail | None = None
+    metrics: HeatmapComparisonMetrics | None = None
 
 
 class DroneStatusEnum(str, Enum):
@@ -269,6 +329,9 @@ class MissionIterationResult(BaseModel):
     pre_pest_count: int | None = None
     post_pest_count: int | None = None
     kill_rate: float | None = None
+    heatmap_snapshot_id: str | None = None
+    heatmap_algorithm_version: str | None = None
+    spray_plan: dict[str, Any] = Field(default_factory=dict)
     spray_completed_at: str | None = None
     inspected_at: str | None = None
     evaluated_at: str | None = None

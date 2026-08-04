@@ -137,6 +137,7 @@ def test_density_map_reads_pixel_dimensions_from_detection_contract() -> None:
     assert grid[1][3] == 1.0
     assert dm.metadata() == {
         "source": "yolo_bbox",
+        "algorithm_version": "relative-bbox-grid-v1",
         "density_kind": "relative_detection_weight",
         "coordinate_space": "image_normalized",
         "projection": "image_frame_to_geofence_bbox",

@@ -1,0 +1,51 @@
+# Isolated CI/local smoke stack. It never mounts or loads a real YOLO model.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "127.0.0.1:${MUYE_SMOKE_API_PORT:-18080}:8000"
+      - "127.0.0.1:${MUYE_SMOKE_YOLO_PORT:-18010}:8010"
+    volumes:
+      - smoke-data:/app/data
+      - ./config:/app/config:ro
+    environment:
+      MUYE_CONTAINER_SMOKE: "true"
+      MUYE_API_PORT: "8000"
+      MUYE_SQLITE_PATH: /app/data/muye.db
+      MUYE_PIPELINE_READY_FILE: /app/data/runtime/pipeline.ready
+      MUYE_ENABLE_SQLITE_DECISION_CONTEXT: "false"
+      YOLO_API_URL: http://127.0.0.1:8010/detect
+      QWEN_USE_MOCK: "true"
+      QWEATHER_USE_MOCK: "true"
+      RAG_ENABLED: "false"
+      MUYE_MULTI_AGENT_ENABLED: "false"
+      MUYE_ROUTER_ENABLED: "false"
+      DRONE_BACKEND: px4
+      PX4_EXECUTION_MODE: animated_demo
+      PX4_AUTO_START_ON_SPRAY: "false"
+      PX4_ALLOW_FORCE_ARM: "false"
+      PX4_REQUIRE_GLOBAL_POSITION: "false"
+      MUYE_TAKEOFF_MODE: auto
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    restart: "no"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "127.0.0.1:${MUYE_SMOKE_FRONTEND_PORT:-5174}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  smoke-data:

@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { NavLink, useLocation } from '../router'
 
 const navItems = [
   { path: '/', label: '指挥台', icon: '⊞' },
@@ -6,7 +7,7 @@ const navItems = [
   { path: '/settings', label: '设置', icon: '⚙' },
 ]
 
-export default function MainLayout() {
+export default function MainLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const isCommandScreen = location.pathname === '/'
 
@@ -40,7 +41,7 @@ export default function MainLayout() {
       )}
       <div className="main-content">
         <div className="main-content-body">
-          <Outlet />
+          {children}
         </div>
       </div>
     </div>

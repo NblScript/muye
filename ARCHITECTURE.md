@@ -2,8 +2,10 @@
 
 ## 系统定位
 
-牧野（muye）是一个端到端的智慧农业害虫防治展示与原型系统：
+牧野（muye）是一个以单块田地昆虫热力监测为入口的端到端智慧植保原型：
 害虫检测 → 气象采集 → AI 决策 → 无人机执行 → 效果评估 → 任务闭环（自动复喷至达标） → 大屏展示
+
+当前首页不接省级行政地图。虚拟田地只负责承载业务数据，虫情必须来自后端检测或明确标记的演示种子。
 
 ## 架构分层
 
@@ -44,7 +46,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 
 **跨域通信**：
 - 唯一通道：`modules/infra/event_bus.py` 中的 `EventBus`
-- 事件格式：JSON，写入 `data/logs/demo_events.jsonl`
+- 事件格式：JSONL，写入 `data/logs/events.jsonl`，默认按 10 MB、最多 5 个备份轮转
 - 禁止业务域之间直接函数调用；应用层可编排多个业务域，基础设施工具可被业务域直接使用
 
 **横切关注点**（日志、配置、存储）：
@@ -53,12 +55,14 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 - 配置：`app/config.py` 统一加载，`config/` 目录存放配置文件
 - 人工确认起飞：`app/services/takeoff_confirmation_service.py` 负责 SQLite `pending_actions` 状态与旧文件标记兼容，路由层不直接操作确认状态细节
 - 主处理链辅助服务：`app/services/pipeline_policy_service.py` 解析合规执行策略，`app/services/pipeline_planning_service.py` 选择变量喷洒或均匀喷洒规划，`app/main.py` 保留流程编排职责
+- 热力查询边界：`app/routes/heatmaps.py` 通过共享 `SqliteStore` 提供最新快照、组合筛选、完整详情和喷洒前后配对，路由层只计算展示摘要，不改写业务数据
 
 ## 领域模型
 
 ### 1. detection（检测域）
 
 - **入口**：`app/yolo_api.py` — 独立 FastAPI 服务（端口 8010）
+- **容器冒烟边界**：`app/services/smoke_yolo_service.py` 只在 `MUYE_CONTAINER_SMOKE=true` 的独立 Compose 栈中返回确定性检测，健康响应显式标记为模拟，不参与生产启动
 - **核心**：`modules/detection/`
   - `image_processor.py` — YOLO 推理 + 结果校验
   - `data_collector.py` — 目录监听 + 图像队列
@@ -82,7 +86,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
     - `voting.py` — 加权投票 + 置信度计算 + 分歧检测
     - `knowledge_loader.py` — 知识加载器 + `build_mission_summary_document`（将已完成/失败任务索引为 `mission_summary` 文档写入 ChromaDB `decisions` 集合）
 - **数据流**：害虫列表 + 天气 → RAG 检索 → [路由评估] → 专家路径（单 Qwen）或多智能体会诊（3 模型） → 用药/农事建议 JSON
-- **知识库规模**：农药目录 30 条、作物目录 5 种、害虫同义词 27 组、历史决策 200+ 条
+- **知识数据基线**：农药演示种子 80 条，覆盖 7 类目标作物、59 类防治对象；害虫/病害同义词 27 组。Markdown 知识块和历史决策均在构建或运行时动态增长，不记录为固定架构常量
 
 ### 3. drone（无人机域）
 
@@ -92,17 +96,18 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
 - **核心**：`modules/drone/`
   - `controller.py` — DroneController，编排任务执行（通过后端抽象层）
   - `mission_planner.py` — 航线生成 + 喷洒参数
-  - `px4_simulator.py` — PX4 SITL 集成（MAVSDK）
+  - `px4_simulator.py` — `animated_demo` 的确定性动画执行器
+  - `px4_real.py` — `real` 模式的 MAVSDK 执行器，可连接 PX4 SITL 或真机
   - `field_context_resolver.py` — 农田上下文解析
   - `backends/` — 后端抽象层
     - `base.py` — DroneBackend ABC（connect/disconnect/execute_spray_mission/get_telemetry/get_status）
-    - `px4_backend.py` — PX4Backend，包装 PX4Simulator
-    - `dji_osdk.py` — DJIOSDKBackend，DJI OSDK 对接（osdk_sim 仿真 + osdk_real 真机）
+    - `px4_backend.py` — PX4Backend，根据 `animated_demo` / `real` 选择执行器；未知模式直接失败
+    - `dji_osdk.py` — DJIOSDKBackend，提供 `osdk_sim` 仿真；`osdk_real` 当前仍回退到仿真实现，串口/OSDK 硬件通信待开发
     - `__init__.py` — 后端注册表（BACKEND_REGISTRY + resolve_backend）
 - **后端切换**：`DRONE_BACKEND` 环境变量 → `config/drone_config.json` `execution.backend` 字段（`px4` / `dji_osdk`）
 - **数据流**：决策结果 → 任务规划 → 航线生成 → [手动确认] → 后端执行（PX4 或 DJI OSDK）
 - **起飞模式**：`manual`（等待确认）/ `auto`（自主），由 `config/drone_config.json` 配置
-- **密度热力图与变量喷洒**：`density_map.py` 将检测结果映射到地理网格，`mission_planner.py` 生成差异化喷洒速率表（`spray_schedule`）。前端 `FieldMap` 通过 GPS→SVG 投影渲染密度热力图，按速率对航线着色（高密度红/中密度琥珀/低密度绿），侧边栏显示密度统计
+- **昆虫相对热力图与变量喷洒**：`density_map.py` 将检测框中心映射到默认 8×10 网格，累计置信度后按本任务最大网格归一化；`mission_planner.py` 生成差异化喷洒速率表（`spray_schedule`）。前端 `FieldHeatmap` 将网格边界归一化到 Three.js 虚拟田地。当前投影是假定图像北向并覆盖田地外接矩形的工程近似，不代表测绘级 GPS 定位
 
 ### 4. infra（基础设施域）
 
@@ -117,6 +122,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
     - `catalog.py` — 目录操作
     - `agri_data.py` — 农业数据操作
     - `evaluation.py` — EvaluationMixin，效果评估 CRUD（`task_evaluations` 表）
+    - `heatmap.py` — HeatmapMixin，巡检批次、检测项和热力快照原子写入、组合筛选、分页、重启恢复与旧任务只读转换
     - `mission.py` — MissionMixin，任务生命周期 CRUD（`missions` + `mission_iterations` 表），SqliteStore MRO 首位
 
 ## 数据流总图
@@ -147,7 +153,7 @@ RAG 检索 (decision/rag) ──→ 农药知识库 (ChromaDB)
 起飞确认 (manual: 等待人工 / auto: 自动继续)
     │
     ▼
-无人机执行 (drone/controller → PX4/SITL)
+无人机执行 (drone/controller → PX4 animated_demo / MAVSDK real / DJI OSDK)
     │
     ▼
 大屏展示 (frontend)
@@ -220,11 +226,15 @@ _run_mission_loop（异步 Task）
 
 ```
 端口 18000: app/main.py → api_app (主 API)
-端口 8010:  app/yolo_api.py (YOLO 推理 API)
+端口 8010:  app/yolo_api.py (内嵌 YOLO 推理 API，仅回环监听)
 端口 5173:  frontend/ (Vite 开发服务器)
 ```
 
-**生产部署**：`deploy/nginx.conf` 反向代理 + `deploy/muye_backend.service` systemd 服务
+本地开发通过 `scripts/demo.sh` 或 `scripts/run.sh` 启动。默认 Docker Compose 使用 `docker/Dockerfile.backend`、`docker/Dockerfile.frontend` 和 `docker/nginx.conf`，在宿主机回环地址暴露前端 `5173` 与 API `18000`，真实 YOLO API 只在后端容器回环地址监听。主处理进程通过 `/app/data/runtime/pipeline.ready` 向独立 API 进程发布 readiness。
+
+`docker-compose.smoke.yml` 使用独立命名数据卷和显式 fake YOLO，用于 CI 集成链验证；`docker-compose.real-smoke.yml` 同样隔离数据，但挂载 `models/best.pt` 并要求真实检测和像素坐标来源，用于有权重环境中的最终容器验收。
+
+生产入口要求 `.env.production`、本地 YOLO 模型和明确的无人机执行模式；模板见 `.env.production.example`。当前仓库未提供 systemd 部署单元。
 
 ## 设计决策记录
 

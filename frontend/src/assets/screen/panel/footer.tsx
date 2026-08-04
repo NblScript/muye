@@ -30,10 +30,10 @@ const Button = styled.button<{ $active?: boolean; $urgent?: boolean }>`
   width: 50px;
   height: 50px;
   overflow: hidden;
-  border: 1px solid rgba(234,88,12,.2);
+  border: 1px solid rgba(141,141,141,.28);
   border-radius: 12px;
-  color: #d35400;
-  background: rgba(255,255,255,.9);
+  color: rgba(255,255,255,.72);
+  background: rgba(10,15,16,.82);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -41,8 +41,8 @@ const Button = styled.button<{ $active?: boolean; $urgent?: boolean }>`
   pointer-events: auto;
   transition: all .3s cubic-bezier(.4,0,.2,1);
 
-  &::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg,rgba(234,88,12,.1),transparent); opacity: 0; transition: opacity .3s; }
-  &:hover:not(:disabled) { transform: translateY(-5px) scale(1.1); border-color: #ff6715; box-shadow: 0 0 15px rgba(255,103,21,.4); color: #ff6715; }
+  &::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg,rgba(127,229,168,.13),transparent); opacity: 0; transition: opacity .3s; }
+  &:hover:not(:disabled) { transform: translateY(-5px) scale(1.1); border-color: #7fe5a8; box-shadow: 0 0 15px rgba(127,229,168,.3); color: #7fe5a8; }
   &:hover::before { opacity: 1; }
   &:disabled { opacity: .42; cursor: not-allowed; }
 
@@ -52,8 +52,8 @@ const Button = styled.button<{ $active?: boolean; $urgent?: boolean }>`
     margin-bottom: 5px;
     border: none;
     color: white;
-    background: linear-gradient(135deg, ${$urgent ? '#c43a21' : '#ff6715'} 0%, ${$urgent ? '#eb6b32' : '#ff8c00'} 100%);
-    box-shadow: 0 4px 15px rgba(255,103,21,.5);
+    background: linear-gradient(135deg, ${$urgent ? '#a93f38' : '#4f8a72'} 0%, ${$urgent ? '#d36554' : '#7fe5a8'} 100%);
+    box-shadow: 0 4px 15px ${$urgent ? 'rgba(211,101,84,.42)' : 'rgba(127,229,168,.34)'};
   `}
 
   svg { position: relative; z-index: 1; width: 24px; height: 24px; }
@@ -61,10 +61,10 @@ const Button = styled.button<{ $active?: boolean; $urgent?: boolean }>`
 
 const Bg = () => (
   <svg viewBox="0 0 1920 100" preserveAspectRatio="none" width="100%" height="100%">
-    <defs><linearGradient id="footer-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff5e8" stopOpacity=".5" /><stop offset="1" stopColor="#fff5e8" /></linearGradient></defs>
+    <defs><linearGradient id="footer-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#101617" stopOpacity="0" /><stop offset="1" stopColor="#101617" stopOpacity=".9" /></linearGradient></defs>
     <path d="M0,100 H1920 V100 Q1600,100 1450,100 Q1300,80 1200,60 Q960,10 720,60 Q620,80 470,100 Q320,100 0,100 Z" fill="url(#footer-gradient)" />
-    <path d="M0,100 Q320,100 470,100 Q620,80 720,60 Q960,10 1200,60 Q1300,80 1450,100 Q1600,100 1920,100" fill="none" stroke="#ff6715" strokeWidth="1" strokeOpacity=".4" />
-    <path d="M720,60 Q960,10 1200,60" fill="none" stroke="#ff6715" strokeWidth="2" strokeLinecap="round" />
+    <path d="M0,100 Q320,100 470,100 Q620,80 720,60 Q960,10 1200,60 Q1300,80 1450,100 Q1600,100 1920,100" fill="none" stroke="#7fe5a8" strokeWidth="1" strokeOpacity=".35" />
+    <path d="M720,60 Q960,10 1200,60" fill="none" stroke="#7fe5a8" strokeWidth="2" strokeLinecap="round" />
   </svg>
 )
 

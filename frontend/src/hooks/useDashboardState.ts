@@ -1,12 +1,13 @@
-import { type ChangeEvent, useEffect, useRef, useState } from 'react'
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   confirmDroneTakeoff,
+  fetchLatestHeatmap,
   uploadInspectionImage,
 } from '../api/workflow'
 import { useWorkflowRealtimeState } from './useWorkflowRealtimeState'
 import { useToast } from '../components/ui'
-import type { WorkflowTaskState } from '../types/workflow'
+import type { HeatmapSnapshotDetail, WorkflowTaskState } from '../types/workflow'
 import { derivePipelineProgress } from '../utils/pipelineStages'
 import { retainLatestEventBusTask } from '../utils/workflowState'
 
@@ -16,8 +17,10 @@ export function useDashboardState() {
   const [uploading, setUploading] = useState(false)
   const [confirmingTakeoff, setConfirmingTakeoff] = useState(false)
   const [latestTask, setLatestTask] = useState<WorkflowTaskState | null>(null)
+  const [latestHeatmap, setLatestHeatmap] = useState<HeatmapSnapshotDetail | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const notifiedReconnectCountRef = useRef(0)
+  const heatmapRequestRef = useRef(0)
 
   const {
     data: wsData,
@@ -39,6 +42,28 @@ export function useDashboardState() {
     toast.success('实时连接已恢复')
   }, [reconnectCount, toast])
 
+  const rawFieldId = latestTask?.field?.field_id
+  const activeFieldId = typeof rawFieldId === 'string' && rawFieldId.trim()
+    ? rawFieldId.trim()
+    : undefined
+
+  const refreshHeatmap = useCallback(async (fieldId?: string) => {
+    const requestNumber = heatmapRequestRef.current + 1
+    heatmapRequestRef.current = requestNumber
+    try {
+      const snapshot = await fetchLatestHeatmap(fieldId)
+      if (heatmapRequestRef.current === requestNumber) setLatestHeatmap(snapshot)
+      return snapshot
+    } catch {
+      // Keep the last valid snapshot on transient API/connection failures.
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshHeatmap(activeFieldId)
+  }, [activeFieldId, refreshHeatmap])
+
   // The API keeps a legacy PX4 demo fallback for older consumers. This screen
   // renders only real event-bus tasks and retains the last valid snapshot when
   // a transient WebSocket message contains no workflow state.
@@ -49,7 +74,7 @@ export function useDashboardState() {
   const refreshWorkflow = async () => {
     setRefreshing(true)
     try {
-      await refreshCombinedState()
+      await Promise.all([refreshCombinedState(), refreshHeatmap(activeFieldId)])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '刷新工作流失败')
     } finally {
@@ -97,6 +122,12 @@ export function useDashboardState() {
     toast,
     workflowLoading,
     latestTask,
+    latestHeatmap: latestHeatmap
+      && activeFieldId
+      && latestHeatmap.field_id
+      && latestHeatmap.field_id !== activeFieldId
+      ? null
+      : latestHeatmap,
     pipelineProgress,
     showTakeoffBanner,
     weather,

@@ -26,6 +26,7 @@ export interface WorkflowDetectionPosition {
 }
 
 export interface WorkflowDetectionEntry {
+  image_path?: string | null
   pest_type?: string
   confidence?: number
   position?: WorkflowDetectionPosition
@@ -40,6 +41,7 @@ export interface DensityGridCell {
 
 export interface DensityGridMetadata {
   source?: string
+  algorithm_version?: string
   density_kind?: string
   coordinate_space?: string
   projection?: string
@@ -50,6 +52,21 @@ export interface DensityGridMetadata {
   accepted_detection_count?: number
   rejected_detection_count?: number
   is_simulated?: boolean
+  status?: string
+  reason?: string
+}
+
+export interface SprayRateBand {
+  label: string
+  minimum: number
+  maximum_exclusive?: number | null
+  multiplier: number
+}
+
+export interface SprayRatePolicy {
+  basis?: string
+  base_rate_lpm?: number | string | null
+  bands?: SprayRateBand[]
 }
 
 export interface WorkflowDroneInstruction {
@@ -64,6 +81,13 @@ export interface WorkflowDroneInstruction {
   density_metadata?: DensityGridMetadata
   spray_schedule?: number[]
   source?: string
+  planning_mode?: 'variable_rate' | 'uniform_fallback' | string
+  heatmap_snapshot_id?: string | null
+  heatmap_algorithm_version?: string | null
+  heatmap_snapshot_source?: string
+  heatmap_trace_status?: string
+  degradation_reason?: string
+  spray_rate_policy?: SprayRatePolicy
 }
 
 export interface WorkflowDronePosition {
@@ -210,6 +234,9 @@ export interface MissionIteration {
   pre_pest_count?: number | null
   post_pest_count?: number | null
   kill_rate?: number | null
+  heatmap_snapshot_id?: string | null
+  heatmap_algorithm_version?: string | null
+  spray_plan?: WorkflowDroneInstruction
   spray_completed_at?: string | null
   inspected_at?: string | null
   evaluated_at?: string | null
@@ -274,6 +301,58 @@ export interface WorkflowHistoryEntry {
 export interface WorkflowHistoryResponse {
   total: number
   items: WorkflowHistoryEntry[]
+}
+
+export type HeatmapInspectionKind = 'pre_spray' | 'reinspection'
+
+export interface HeatmapSnapshotSummary {
+  snapshot_id: string
+  batch_id: string
+  request_id: string
+  field_id?: string | null
+  mission_id?: string | null
+  iteration_number: number
+  inspection_kind: HeatmapInspectionKind
+  captured_at: string
+  algorithm_version: string
+  pest_counts: Record<string, number>
+  total_detection_count: number
+  hotspot_cell_count: number
+  peak_relative_heat: number
+  source: string
+  is_simulated: boolean
+  legacy: boolean
+  created_at?: string | null
+}
+
+export interface HeatmapSnapshotDetail extends HeatmapSnapshotSummary {
+  density_grid: DensityGridCell[]
+  density_metadata: DensityGridMetadata
+  image_paths: string[]
+  detections: WorkflowDetectionEntry[]
+}
+
+export interface HeatmapSnapshotListResponse {
+  total: number
+  limit: number
+  offset: number
+  items: HeatmapSnapshotSummary[]
+}
+
+export interface HeatmapComparisonMetrics {
+  detection_count_change: number
+  hotspot_cell_count_change: number
+  peak_relative_heat_change: number
+}
+
+export interface HeatmapComparisonResponse {
+  request_id: string
+  mission_id?: string | null
+  iteration_number: number
+  status: 'paired' | 'pending_pre_spray' | 'pending_reinspection'
+  pre_spray?: HeatmapSnapshotDetail | null
+  reinspection?: HeatmapSnapshotDetail | null
+  metrics?: HeatmapComparisonMetrics | null
 }
 
 export interface DashboardContextResponse {

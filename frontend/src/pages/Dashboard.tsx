@@ -14,6 +14,7 @@ export default function Dashboard() {
     showTakeoffBanner,
     connected,
     latestTask,
+    latestHeatmap,
     weather,
     pipelineProgress,
     handleUploadChange,
@@ -36,6 +37,7 @@ export default function Dashboard() {
         <Screen
           weather={weather}
           latestTask={latestTask}
+          latestHeatmap={latestHeatmap}
           progress={pipelineProgress}
           connected={connected}
           actions={{

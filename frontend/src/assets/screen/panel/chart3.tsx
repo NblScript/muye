@@ -18,26 +18,26 @@ const Row = styled.div<{ $status: PipelineStageMetric['status'] }>`
   padding: 4px 7px;
   border-radius: 5px;
   background: ${({ $status }) => $status === 'active'
-    ? 'rgba(234, 88, 12, 0.09)'
+    ? 'rgba(127, 229, 168, 0.1)'
     : $status === 'error'
       ? 'rgba(191, 81, 70, 0.09)'
-      : 'rgba(255, 255, 255, 0.42)'};
+      : 'rgba(255, 255, 255, 0.035)'};
 
   .dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
     background: ${({ $status }) => $status === 'done'
-      ? '#4f8f63'
+      ? '#7fe5a8'
       : $status === 'active'
-        ? '#ea580c'
+        ? '#7fe5a8'
         : $status === 'error'
           ? '#bf5146'
-          : '#d6c9bc'};
-    box-shadow: ${({ $status }) => $status === 'active' ? '0 0 10px rgba(234, 88, 12, 0.85)' : 'none'};
+          : '#6f7776'};
+    box-shadow: ${({ $status }) => $status === 'active' ? '0 0 10px rgba(127, 229, 168, 0.72)' : 'none'};
   }
-  .name { color: #56483f; font-size: 12px; font-weight: 650; }
-  .message { color: rgba(90, 74, 66, 0.58); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .name { color: rgba(255, 255, 255, 0.84); font-size: 12px; font-weight: 650; }
+  .message { color: rgba(255, 255, 255, 0.5); font-size: 11px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 `
 
 export default function Chart3({ stages }: { stages: PipelineStageMetric[] }) {

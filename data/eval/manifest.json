@@ -1,0 +1,246 @@
+{
+  "version": 2,
+  "name": "muye-heatmap-fixed-eval-v1",
+  "description": "固定图片与人工回归标注，用于验证相对热力网格、变量喷洒计划和安全降级的确定性。",
+  "dataset_sources": [
+    {
+      "name": "IP102",
+      "project_url": "https://github.com/xpwu95/IP102",
+      "paper_url": "https://openaccess.thecvf.com/content_CVPR_2019/html/Wu_IP102_A_Large-Scale_Benchmark_Dataset_for_Insect_Pest_Recognition_CVPR_2019_paper.html",
+      "usage": "academic_only",
+      "note": "图片已由项目准备流程从本地 IP102 验证集选取；本清单不重新分发完整数据集。"
+    }
+  ],
+  "regression_defaults": {
+    "field_context": {
+      "field_id": "fixed-eval-field",
+      "name": "固定回归田",
+      "area_mu": 12.0,
+      "geofence": [
+        [113.6241, 34.7467],
+        [113.6247, 34.7467],
+        [113.6247, 34.74706],
+        [113.6241, 34.74706]
+      ]
+    },
+    "current_weather": {
+      "temperature": 25.0,
+      "humidity": 62.0,
+      "wind_speed": 2.5
+    },
+    "flight_constraints": {
+      "altitude_range_m": [2.0, 8.0],
+      "speed_range_mps": [1.0, 6.0],
+      "spray_rate_range_lpm": [0.3, 3.0],
+      "max_safe_wind_speed_mps": 8.0
+    }
+  },
+  "cases": [
+    {
+      "id": "aphid-variable-rate",
+      "image": "../samples/aphids_01.jpg",
+      "image_sha256": "699b683ad35a516c012883f042b334a343a4182b44b8e350e26cc9ab0a0c1acd",
+      "source_image_id": "IP024000016.jpg",
+      "source_class_id": 25,
+      "source_class_name": "aphids",
+      "expected_pest": "aphid",
+      "crop": "wheat",
+      "crop_display_name": "冬小麦",
+      "weather_scenario": "normal",
+      "expected_compliance": "passed",
+      "annotation_provenance": "manually_authored_regression_fixture_not_official_ground_truth",
+      "detections": [
+        {
+          "pest_type": "aphid",
+          "confidence": 0.97,
+          "position": {
+            "x1": 30,
+            "y1": 0,
+            "x2": 560,
+            "y2": 499,
+            "coordinate_space": "image_pixel",
+            "image_width": 639,
+            "image_height": 499
+          }
+        }
+      ],
+      "expected_regression": {
+        "status": "ok",
+        "planning_mode": "variable_rate",
+        "accepted_detection_count": 1,
+        "rejected_detection_count": 0,
+        "sha256": "e8db3eb7a06dffde0efa302e392da8721b0a7752ded75ca6517fbfd0f004d180"
+      }
+    },
+    {
+      "id": "brown-planthopper-variable-rate",
+      "image": "../samples/brown_planthopper_01.jpg",
+      "image_sha256": "a36330db5a90a2f56f57091784dfec69097f2d2abf58d5452d51f7336e835aab",
+      "source_image_id": "IP007000004.jpg",
+      "source_class_id": 8,
+      "source_class_name": "brown plant hopper",
+      "expected_pest": "brown_planthopper",
+      "crop": "rice",
+      "crop_display_name": "水稻",
+      "weather_scenario": "humid",
+      "expected_compliance": "passed",
+      "annotation_provenance": "manually_authored_regression_fixture_not_official_ground_truth",
+      "detections": [
+        {
+          "pest_type": "brown_planthopper",
+          "confidence": 0.94,
+          "position": {
+            "x1": 210,
+            "y1": 170,
+            "x2": 1020,
+            "y2": 830,
+            "coordinate_space": "image_pixel",
+            "image_width": 1200,
+            "image_height": 868
+          }
+        }
+      ],
+      "current_weather": {
+        "humidity": 84.0,
+        "wind_speed": 1.8
+      },
+      "expected_regression": {
+        "status": "ok",
+        "planning_mode": "variable_rate",
+        "accepted_detection_count": 1,
+        "rejected_detection_count": 0,
+        "sha256": "ae02312f96308f39c87ed68384dd4f02c02750c6319f0f7ae20d867386a70b83"
+      }
+    },
+    {
+      "id": "rice-leaf-roller-variable-rate",
+      "image": "../samples/rice_leaf_roller_01.jpg",
+      "image_sha256": "c119d90e5da5777dcce166a8c1d8a9433d4a304aa43790714bf2a8c601c85407",
+      "source_image_id": "IP000000000.jpg",
+      "source_class_id": 1,
+      "source_class_name": "rice leaf roller",
+      "expected_pest": "rice_leaf_roller",
+      "crop": "rice",
+      "crop_display_name": "水稻",
+      "weather_scenario": "normal",
+      "expected_compliance": "passed",
+      "annotation_provenance": "manually_authored_regression_fixture_not_official_ground_truth",
+      "detections": [
+        {
+          "pest_type": "rice_leaf_roller",
+          "confidence": 0.92,
+          "position": {
+            "x1": 78,
+            "y1": 185,
+            "x2": 535,
+            "y2": 330,
+            "coordinate_space": "image_pixel",
+            "image_width": 650,
+            "image_height": 420
+          }
+        }
+      ],
+      "expected_regression": {
+        "status": "ok",
+        "planning_mode": "variable_rate",
+        "accepted_detection_count": 1,
+        "rejected_detection_count": 0,
+        "sha256": "c055f33f7d389512778d0232bf1c1235f7ed170a6fb48d1a44ad4ce057b21065"
+      }
+    },
+    {
+      "id": "empty-detection-fallback",
+      "image": "../samples/corn_borer_01.jpg",
+      "image_sha256": "42e8fec0903523692b19b8c0efa7de43d00e8157c0b06f5e7c63ad16cdd77f9d",
+      "source_image_id": "IP023000056.jpg",
+      "source_class_id": 24,
+      "source_class_name": "army worm",
+      "expected_pest": "none_detected",
+      "crop": "corn",
+      "crop_display_name": "玉米",
+      "weather_scenario": "normal",
+      "expected_compliance": "passed",
+      "fixture_role": "deliberately_empty_detector_output",
+      "annotation_provenance": "synthetic_edge_case_no_model_claim",
+      "detections": [],
+      "expected_regression": {
+        "status": "ok",
+        "planning_mode": "uniform_fallback",
+        "accepted_detection_count": 0,
+        "rejected_detection_count": 0,
+        "sha256": "db441acd375463c626c730de3efae20089f78d0f498c0350df3d76b26397e050"
+      }
+    },
+    {
+      "id": "missing-coordinate-fallback",
+      "image": "../samples/corn_borer_01.jpg",
+      "image_sha256": "42e8fec0903523692b19b8c0efa7de43d00e8157c0b06f5e7c63ad16cdd77f9d",
+      "source_image_id": "IP023000056.jpg",
+      "source_class_id": 24,
+      "source_class_name": "army worm",
+      "expected_pest": "army_worm",
+      "crop": "corn",
+      "crop_display_name": "玉米",
+      "weather_scenario": "normal",
+      "expected_compliance": "warning",
+      "fixture_role": "detection_without_spatial_coordinates",
+      "annotation_provenance": "synthetic_edge_case_no_model_claim",
+      "detections": [
+        {
+          "pest_type": "army_worm",
+          "confidence": 0.88
+        }
+      ],
+      "expected_regression": {
+        "status": "ok",
+        "planning_mode": "uniform_fallback",
+        "accepted_detection_count": 0,
+        "rejected_detection_count": 1,
+        "sha256": "43988e7f6f03a9bbbb98cbc420d0dbd3e258b810dfd8c0965442756ab02b8e21"
+      }
+    },
+    {
+      "id": "invalid-geofence-blocked",
+      "image": "../samples/rice_leaf_roller_01.jpg",
+      "image_sha256": "c119d90e5da5777dcce166a8c1d8a9433d4a304aa43790714bf2a8c601c85407",
+      "source_image_id": "IP000000000.jpg",
+      "source_class_id": 1,
+      "source_class_name": "rice leaf roller",
+      "expected_pest": "rice_leaf_roller",
+      "crop": "rice",
+      "crop_display_name": "水稻",
+      "weather_scenario": "normal",
+      "expected_compliance": "blocked",
+      "fixture_role": "invalid_two_point_geofence",
+      "annotation_provenance": "synthetic_edge_case_no_model_claim",
+      "field_context": {
+        "geofence": [
+          [113.6241, 34.7467],
+          [113.6247, 34.74706]
+        ]
+      },
+      "detections": [
+        {
+          "pest_type": "rice_leaf_roller",
+          "confidence": 0.92,
+          "position": {
+            "x1": 78,
+            "y1": 185,
+            "x2": 535,
+            "y2": 330,
+            "coordinate_space": "image_pixel",
+            "image_width": 650,
+            "image_height": 420
+          }
+        }
+      ],
+      "expected_regression": {
+        "status": "error",
+        "planning_mode": "error",
+        "accepted_detection_count": 0,
+        "rejected_detection_count": 1,
+        "sha256": "c4fb3fe0f45be6638a990303775cc15e8ac158e7dae7dd5735dc0206f3732254"
+      }
+    }
+  ]
+}

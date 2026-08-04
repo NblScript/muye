@@ -61,15 +61,19 @@ if [[ "${FULL_CHECK}" == "1" ]]; then
       -q
 fi
 
-# 3. 前端测试
+# 3. 固定样例回归：锁定图片、完整热力网格、航线和喷洒速率表。
+run_step "固定热力图回归" \
+  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/eval_fixed_set.py"
+
+# 4. 前端测试
 run_step "前端测试" \
   bash -c 'cd "${0}/frontend" && npx vitest run' "${ROOT_DIR}"
 
-# 4. 前端构建
+# 5. 前端构建
 run_step "前端构建" \
   bash -c 'cd "${0}/frontend" && npx vite build' "${ROOT_DIR}"
 
-# 5. 文档一致性
+# 6. 文档一致性
 run_step "文档校验" \
   "${PYTHON_BIN}" "${ROOT_DIR}/scripts/verify_docs.py"
 

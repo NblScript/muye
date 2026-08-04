@@ -18,7 +18,9 @@
 | Zustand | 大屏面板和图层开关状态 |
 | GSAP | 地图入场与面板过渡 |
 | Axios | HTTP API 客户端 |
+| Browser History API | 三个静态页面的轻量 SPA 路由与前进/后退 |
 | Vitest + React Testing Library | 单元与渲染测试 |
+| Playwright + Chromium | 多分辨率布局、WebGL 大屏与失败 trace |
 
 ## 当前目录结构
 
@@ -37,6 +39,7 @@ frontend/src/
 │   ├── panel/                 # 顶栏、轻量统计面板和底部操作栏
 │   └── hooks/                 # 面板过渡工具
 ├── components/
+│   ├── heatmap/               # 历史快照筛选、趋势、网格与喷洒前后对比
 │   ├── ui/                    # 历史/设置页共用基础组件
 │   └── ErrorBoundary.tsx
 ├── hooks/
@@ -57,8 +60,13 @@ frontend/src/
 │   ├── pipelineStages.ts
 │   └── workflowState.ts       # 实时工作流校验与最后有效帧保留
 ├── App.tsx
+├── router.tsx                # 无外部路由依赖的 History API 导航层
 ├── index.css                  # 全局/辅助页面样式
 └── main.tsx
+
+frontend/e2e/
+├── fixtures.ts               # 确定性工作流/热力 API 数据
+└── layout.visual.spec.ts     # 大屏与历史页多视口几何契约
 ```
 
 删除或移动上述关键入口时，必须同步更新本文件、相关测试和 `vite.config.ts` 的构建分包规则。
@@ -94,6 +102,8 @@ buildScreenViewModel
 
 ## 昆虫热力图规则
 
+产品语义和阶段范围以 [昆虫热力图产品规格](docs/product-specs/insect-heatmap.md) 为准；本节规定前端实现边界。
+
 热力数据优先使用：
 
 ```text
@@ -124,7 +134,7 @@ YOLO 像素检测框必须携带 `coordinate_space: "image_pixel"`、`image_widt
 - 可复用的运行时校验放在 `utils/`，同时提供纯函数测试。
 - Three.js 创建的纹理、材质、几何体或计时器必须在 effect cleanup 中释放。
 - 不要在 render 阶段创建网络连接或 Three.js 资源。
-- 首页使用固定相机目标保持竞赛展示视角；不要重新引入轨道控制或允许误操作改变视角。
+- 首页地图沿用 `sc-datav` Demo1 的 OrbitControls 交互：允许旋转、平移和缩放，缩放距离限制为 100–300，最大俯角为 1.5；旋转中心固定为当前虚拟田地中心，且不为此重新引入 Drei。
 - 地图标题、热力图例和等待提示使用 DOM 覆盖层，三维场景只渲染确实需要透视关系的对象。
 
 ## API 与代理
@@ -133,6 +143,10 @@ YOLO 像素检测框必须携带 `coordinate_space: "image_pixel"`、`image_widt
 
 - `GET /workflow/state`：最新工作流聚合状态
 - `GET /workflow/history`：任务历史
+- `GET /heatmaps/snapshots`：按虫种、来源、阶段和时间组合筛选持久热力快照
+- `GET /heatmaps/snapshots/{id}`：读取单个完整热力快照
+- `GET /heatmaps/comparison/{request_id}`：读取同一闭环的喷洒前后快照配对
+- `GET /api/mission/{mission_uuid}`：读取各喷洒轮次消费的热力快照、算法版本和喷洒倍率策略
 - `POST /workflow/inspection-image`：上传巡检图像
 - `POST /drone/confirm-takeoff`：人工确认起飞
 - `GET /health`：设置页运行诊断
@@ -144,7 +158,9 @@ YOLO 像素检测框必须携带 `coordinate_space: "image_pixel"`、`image_widt
 
 - 首页大屏设计基准为 1920×1080，由 `panel/autoFit.tsx` 等比适配浏览器窗口。
 - 首页视觉由 `assets/screen/` 内的 styled-components 管理；历史和设置页沿用 `index.css` 的全局变量。
+- 首页颜色与玻璃面板风格以 `sc-datav` Demo0 为视觉基准，使用 `#26282a` 深色背景和 `#7fe5a8` 薄荷绿高光；不因此替换牧野业务布局、数据或交互。
 - 信息必须在 16:9 屏幕完整可见；新增面板前先验证 1366×768、1920×1080 和浏览器缩放场景。
+- `desktop-1920-at-125pct` 使用 1536×864 CSS 视口表示 1920×1080 在 125% 系统/浏览器缩放下的等效可用区域。
 - 静态色值尽量集中在组件主题或语义常量中，动态坐标和进度允许 inline style。
 - 动画只表达状态变化，不得让热力值、统计数字或连接状态持续闪烁。
 
@@ -156,10 +172,12 @@ YOLO 像素检测框必须携带 `coordinate_space: "image_pixel"`、`image_widt
 - `PestChart.test.tsx`：虫情统计数量、置信度、最多五类和空状态。
 - `RouteGeometry.test.ts`：连续航线、虚线分段和重复航点边界。
 - `ScreenModel.test.ts`：真实工作流到地块、虫情、决策、无人机、复检和热力模型的映射。
+- `HeatmapHistoryPanel.test.tsx`：历史筛选查询契约、趋势、快照网格、喷洒前后静态对比和喷洒轮次追溯。
 - `workflowState.test.ts`：空包、回退包和畸形包不会覆盖最后有效任务。
 - `PipelineStepper.test.ts`：处理阶段和进度派生。
 - `MainLayoutNavigation.test.tsx`：辅助页面导航。
 - `dashboardUtils.test.ts`：公共展示工具。
+- `e2e/layout.visual.spec.ts`：三种视口下大屏 6 张面板不重叠、不越界，地图标题/热力图例位于中央走廊；历史表格溢出限制在局部滚动容器。
 
 提交前运行：
 
@@ -168,7 +186,11 @@ cd frontend
 npm run lint
 npm test -- --run
 npm run build
+npx playwright install --with-deps chromium
+npm run test:e2e
 ```
+
+Playwright 通过 `playwright.config.ts` 启动已构建的 Vite preview，不依赖后端或外网。工作流、WebSocket、热力快照和历史数据由 `e2e/fixtures.ts` 固定；每个场景将视口截图写入 HTML 报告，失败时额外保留 trace。
 
 构建中的大型 Three.js vendor chunk 提示目前是已知提示；首页 `Screen` 已懒加载，历史和设置页也按路由加载，不应把这些依赖重新合并进首屏入口 chunk。
 

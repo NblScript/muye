@@ -6,6 +6,9 @@ import math
 from typing import Any
 
 
+DENSITY_ALGORITHM_VERSION = "relative-bbox-grid-v1"
+
+
 class DensityMap:
     """Map pest detections onto a geographic grid over a field."""
 
@@ -82,6 +85,7 @@ class DensityMap:
     def metadata(self) -> dict[str, Any]:
         return {
             "source": "yolo_bbox",
+            "algorithm_version": DENSITY_ALGORITHM_VERSION,
             "density_kind": "relative_detection_weight",
             "coordinate_space": "image_normalized",
             "projection": "image_frame_to_geofence_bbox",

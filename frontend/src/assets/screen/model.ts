@@ -1,5 +1,6 @@
 import type {
   ComplianceResult,
+  HeatmapSnapshotDetail,
   MissionIteration,
   WorkflowEventEntry,
   WorkflowTaskState,
@@ -107,6 +108,10 @@ export interface FieldTwinMetric {
   densitySourceLabel: string
   densitySimulated: boolean
   densityAcceptedCount: number | null
+  snapshotCapturedAt: string
+  snapshotAlgorithmVersion: string
+  snapshotInspectionKind: string
+  selectedPestLabel: string
 }
 
 export interface ScreenViewModel {
@@ -204,7 +209,7 @@ function normalizeRate(value: number | null): number {
   return Math.max(0, Math.min(1, value > 1 ? value / 100 : value))
 }
 
-function pestLabel(value: string): string {
+export function pestLabel(value: string): string {
   const normalized = value.trim().toLowerCase()
   return PEST_LABELS[normalized] ?? value.trim() ?? '未知害虫'
 }
@@ -531,25 +536,58 @@ function normalizedDetectionCenter(
 
 function buildTwinPestPoints(task: WorkflowTaskState | null): TwinPestPoint[] {
   const detections = (task?.detections ?? []).slice(0, 24)
-  const positioned = detections.map((detection) => normalizedDetectionCenter(detection.position))
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5))
-
-  return detections.map((detection, index) => {
-    const point = positioned[index]
-    const fallbackRadius = 0.26 * Math.sqrt((index + 0.5) / Math.max(1, detections.length))
-    const virtualX = point
-      ? 0.16 + point.x * 0.68
-      : 0.5 + Math.cos(index * goldenAngle) * fallbackRadius
-    const virtualY = point
-      ? 0.16 + point.y * 0.66
-      : 0.49 + Math.sin(index * goldenAngle) * fallbackRadius
-    return {
-      x: Math.max(0.16, Math.min(0.84, virtualX)),
-      y: Math.max(0.16, Math.min(0.82, virtualY)),
+  return detections.flatMap<TwinPestPoint>((detection) => {
+    const point = normalizedDetectionCenter(detection.position)
+    if (!point) return []
+    return [{
+      x: Math.max(0.16, Math.min(0.84, 0.16 + point.x * 0.68)),
+      y: Math.max(0.16, Math.min(0.82, 0.16 + point.y * 0.66)),
       name: pestLabel(firstText(detection.pest_type, '未知害虫')),
       confidence: normalizeRate(firstNumber(detection.confidence) ?? 0),
-    }
+    }]
   })
+}
+
+function buildPestSubsetDensityGrid(
+  snapshot: HeatmapSnapshotDetail,
+  detections: WorkflowTaskState['detections'],
+): { grid: HeatmapSnapshotDetail['density_grid']; acceptedCount: number } {
+  const metadataRows = firstNumber(snapshot.density_metadata.grid_rows)
+  const metadataCols = firstNumber(snapshot.density_metadata.grid_cols)
+  const rows = Math.max(
+    1,
+    Math.round(metadataRows ?? 0),
+    ...snapshot.density_grid.map((cell) => cell.row + 1),
+  )
+  const cols = Math.max(
+    1,
+    Math.round(metadataCols ?? 0),
+    ...snapshot.density_grid.map((cell) => cell.col + 1),
+  )
+  const weights = new Map<string, number>()
+  let acceptedCount = 0
+  let maxWeight = 0
+
+  for (const detection of detections) {
+    const center = normalizedDetectionCenter(detection.position)
+    const confidence = firstNumber(detection.confidence)
+    if (!center || confidence === null || confidence <= 0) continue
+    const row = Math.min(Math.floor(center.y * rows), rows - 1)
+    const col = Math.min(Math.floor(center.x * cols), cols - 1)
+    const key = `${row}:${col}`
+    const weight = (weights.get(key) ?? 0) + Math.min(confidence, 1)
+    weights.set(key, weight)
+    maxWeight = Math.max(maxWeight, weight)
+    acceptedCount += 1
+  }
+
+  const grid = snapshot.density_grid.map((cell) => ({
+    ...cell,
+    density: maxWeight > 0
+      ? Number(((weights.get(`${cell.row}:${cell.col}`) ?? 0) / maxWeight).toFixed(4))
+      : 0,
+  }))
+  return { grid, acceptedCount }
 }
 
 function interpolateRoute(route: TwinPoint[], progress: number): TwinPoint | null {
@@ -565,13 +603,17 @@ function interpolateRoute(route: TwinPoint[], progress: number): TwinPoint | nul
   }
 }
 
-function buildFieldTwin(task: WorkflowTaskState | null): FieldTwinMetric {
+function buildFieldTwin(
+  task: WorkflowTaskState | null,
+  snapshot: HeatmapSnapshotDetail | null,
+  selectedPestType: string,
+): FieldTwinMetric {
   const instruction = task?.drone?.instruction
   const densityMetadata = instruction?.density_metadata
   const coverage = (instruction?.覆盖区域?.coordinates ?? []).filter(validGeoPoint)
   const rawRoute = (instruction?.飞行路径 ?? []).filter(validGeoPoint)
   const densityCells = instruction?.density_grid ?? []
-  const densityPoints = densityCells.flatMap((cell) => cell.bounds.filter(validGeoPoint))
+  const densityPoints = densityCells.flatMap((cell) => (cell.bounds ?? []).filter(validGeoPoint))
   const boundsSource = coverage.length >= 3 ? coverage : [...rawRoute, ...densityPoints]
   const geoBounds = getGeoBounds(boundsSource)
   const boundary = VIRTUAL_FIELD_BOUNDARY
@@ -579,7 +621,7 @@ function buildFieldTwin(task: WorkflowTaskState | null): FieldTwinMetric {
   const pestPoints = buildTwinPestPoints(task)
   const heatCells = geoBounds && densityCells.length > 0
     ? densityCells.flatMap<TwinHeatCell>((cell) => {
-      const points = cell.bounds.filter(validGeoPoint)
+      const points = (cell.bounds ?? []).filter(validGeoPoint)
       if (points.length < 2 || cell.density <= 0) return []
       const normalized = points.map((point) => normalizeGeoPoint(point, geoBounds))
       const xs = normalized.map((point) => point.x)
@@ -609,6 +651,15 @@ function buildFieldTwin(task: WorkflowTaskState | null): FieldTwinMetric {
   const waypointIndex = Math.max(0, Math.round(firstNumber(task?.drone?.current_waypoint_index) ?? 0))
   const routePosition = route[waypointIndex] ?? interpolateRoute(route, progress)
 
+  const selectedPestLabel = selectedPestType === 'all' ? '全部虫种' : pestLabel(selectedPestType)
+  const sourceLabel = densityMetadata?.is_simulated
+    ? '模拟虫情数据'
+    : densityCells.length > 0
+      ? snapshot ? 'YOLO 批次相对检测热值' : 'YOLO 相对检测热值'
+      : pestPoints.length > 0
+        ? 'YOLO 检测点热值'
+        : '等待虫情数据'
+
   return {
     boundary,
     route,
@@ -617,15 +668,84 @@ function buildFieldTwin(task: WorkflowTaskState | null): FieldTwinMetric {
     dronePosition: actualPosition ?? routePosition,
     boundarySource: 'virtual',
     hasRoute: route.length >= 2,
-    densitySourceLabel: densityMetadata?.is_simulated
-      ? '模拟虫情数据'
-      : densityCells.length > 0
-        ? 'YOLO 相对检测热值'
-        : pestPoints.length > 0
-          ? 'YOLO 检测点热值'
-          : '等待虫情数据',
+    densitySourceLabel: selectedPestType === 'all'
+      ? sourceLabel
+      : `${sourceLabel}（仅筛选${selectedPestLabel}检测点）`,
     densitySimulated: Boolean(densityMetadata?.is_simulated),
     densityAcceptedCount: firstNumber(densityMetadata?.accepted_detection_count),
+    snapshotCapturedAt: firstText(snapshot?.captured_at, task?.updated_at, ''),
+    snapshotAlgorithmVersion: firstText(
+      snapshot?.algorithm_version,
+      densityMetadata?.algorithm_version,
+      '',
+    ),
+    snapshotInspectionKind: snapshot
+      ? snapshot.inspection_kind === 'reinspection' ? '喷洒后复检' : '喷洒前巡检'
+      : densityCells.length > 0 ? '任务内热力' : '',
+    selectedPestLabel,
+  }
+}
+
+function taskWithHeatmapSnapshot(
+  task: WorkflowTaskState | null,
+  snapshot: HeatmapSnapshotDetail | null,
+  selectedPestType: string,
+): WorkflowTaskState | null {
+  if (!snapshot) return task
+
+  const detections = snapshot.detections.filter((detection) => (
+    selectedPestType === 'all'
+    || firstText(detection.pest_type).toLowerCase() === selectedPestType.toLowerCase()
+  ))
+  const pestSubset = selectedPestType === 'all'
+    ? null
+    : buildPestSubsetDensityGrid(snapshot, detections)
+  const instruction = {
+    ...(task?.drone?.instruction ?? {}),
+    density_grid: pestSubset?.grid ?? snapshot.density_grid,
+    density_metadata: {
+      ...snapshot.density_metadata,
+      source: snapshot.source,
+      algorithm_version: snapshot.algorithm_version,
+      is_simulated: snapshot.is_simulated,
+      ...(pestSubset ? {
+        density_kind: 'relative_detection_weight_pest_subset',
+        detection_count: detections.length,
+        accepted_detection_count: pestSubset.acceptedCount,
+        rejected_detection_count: detections.length - pestSubset.acceptedCount,
+      } : {}),
+    },
+  }
+
+  if (task) {
+    return {
+      ...task,
+      field: {
+        ...task.field,
+        field_id: task.field.field_id ?? snapshot.field_id,
+      },
+      detections,
+      drone: {
+        ...task.drone,
+        instruction,
+      },
+    }
+  }
+
+  return {
+    request_id: snapshot.request_id,
+    current_stage: 'heatmap_snapshot',
+    status: 'snapshot',
+    message: '已恢复最近一次巡检热力快照',
+    updated_at: snapshot.captured_at,
+    field: { field_id: snapshot.field_id ?? '未绑定地块' },
+    detections,
+    weather: {},
+    spray_summary: {},
+    decision: {},
+    drone: { status: 'idle', instruction },
+    drone_timeline: [],
+    recent_events: [],
   }
 }
 
@@ -642,8 +762,10 @@ export function buildScreenViewModel(
   weatherSource: Record<string, unknown> | undefined,
   progress = 0,
   connected = false,
+  snapshot: HeatmapSnapshotDetail | null = null,
+  selectedPestType = 'all',
 ): ScreenViewModel {
-  const currentTask = task ?? null
+  const currentTask = taskWithHeatmapSnapshot(task ?? null, snapshot, selectedPestType)
   const pests = buildPests(currentTask)
   const weather = buildWeather(weatherSource ?? currentTask?.weather ?? {})
   const status = firstText(currentTask?.status, 'idle')
@@ -665,6 +787,6 @@ export function buildScreenViewModel(
     decision: buildDecision(currentTask),
     drone: buildDrone(currentTask, progress),
     evaluation: buildEvaluation(currentTask),
-    fieldTwin: buildFieldTwin(currentTask),
+    fieldTwin: buildFieldTwin(currentTask, snapshot, selectedPestType),
   }
 }

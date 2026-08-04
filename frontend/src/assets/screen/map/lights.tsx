@@ -11,7 +11,7 @@ export default function Lights() {
         ref={lightRef}
         intensity={12}
         position={[0, 200, 20]}
-        color="#fff5e8"
+        color="#dfffee"
       />
     </>
   );

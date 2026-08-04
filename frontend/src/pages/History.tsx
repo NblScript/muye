@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { fetchWorkflowHistory } from '../api/workflow'
+import HeatmapHistoryPanel from '../components/heatmap/HeatmapHistoryPanel'
 import { Card, Empty, Select, Tag } from '../components/ui'
 import type { WorkflowHistoryEntry, WorkflowHistoryResponse } from '../types/workflow'
 
@@ -89,8 +90,8 @@ export default function History() {
   const innerH = chartH - padY * 2
 
   return (
-    <div className="page-container-lg">
-      <h2 className="page-title">喷洒历史报表</h2>
+    <div className="page-container-lg" data-testid="history-page">
+      <h2 className="page-title">作业历史与虫情分析</h2>
 
       <div className="history-stats-row">
         <Card className="history-stat-card">
@@ -108,6 +109,8 @@ export default function History() {
           </div>
         </Card>
       </div>
+
+      <HeatmapHistoryPanel />
 
       {trend && (
         <Card title="任务趋势" className="history-trend-card">

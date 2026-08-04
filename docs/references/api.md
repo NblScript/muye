@@ -31,6 +31,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
     "ai_config": {"status": "ok", "qwen_mode": "real", "providers": {"qwen": true, "deepseek": true, "xiaomi": true}},
     "weather_config": {"status": "ok", "mode": "real"},
     "event_bus": {"status": "ok", "path": "data/logs/events.jsonl"},
+    "pipeline_runtime": {"status": "skipped", "detail": "pipeline_ready_file_not_configured"},
     "rag_config": {"status": "ok", "enabled": true},
     "px4_runtime": {"status": "skipped", "running": false, "ready": false},
     "runtime_config": {
@@ -44,12 +45,16 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
       "router_enabled": true,
       "multi_agent_enabled": false,
       "yolo_active_model": "yolov8n",
-      "yolo_device": "auto"
+      "yolo_device": "auto",
+      "yolo_mode": "real",
+      "yolo_is_simulated": false
     }
   },
   "failures": []
 }
 ```
+
+隔离容器冒烟模式下，`yolo_model` 和 `runtime_config` 会返回 `mode: "smoke_fake"` 与 `is_simulated: true`，同时 `model_exists` 仍为 `false`；该状态只表示集成测试服务就绪，不表示真实模型可用。
 
 ### GET /slo
 
@@ -395,7 +400,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### POST /drone/dji/connect
 
-连接 DJI 无人机（osdk_real 模式需硬件，osdk_sim 模式立即返回）。
+连接 DJI 后端。`osdk_sim` 会立即建立仿真连接；当前 `osdk_real` 尚未实现串口/OSDK 通信，也会记录警告后以仿真方式连接，不能据此判断真机已接入。
 
 **响应**：
 ```json
@@ -421,7 +426,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### GET /drone/density-map?request_id={request_id}
 
-获取指定任务的害虫密度热力图数据（变量喷洒路径优化）。
+获取指定任务的昆虫相对热力图数据（变量喷洒路径优化）。`density` 是本次任务内按最大网格权重归一化的 0–1 相对值，不是绝对虫口密度。
 
 **查询参数**：
 - `request_id` (str): 任务请求 ID
@@ -457,6 +462,88 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 - `density >= 0.6` → `base_rate × 1.5`（高密度区加量喷洒）
 - `density 0.3-0.6` → `base_rate × 1.0`（标准喷洒）
 - `density < 0.3` → `base_rate × 0.5`（低密度区减量喷洒）
+
+## 热力快照查询
+
+以下端点查询独立持久化的巡检热力快照。`/api/heatmaps/...` 是供前端使用的等价别名；OpenAPI 只展示无 `/api` 前缀的规范路径。
+
+列表与详情中的 `peak_relative_heat` 和 `hotspot_cell_count` 都基于单次快照的相对热值计算，热点阈值固定为 `0.7`，不得解释为绝对虫口密度或跨任务杀灭率。
+
+### GET /heatmaps/latest
+
+返回全局最新快照；传入 `field_id` 时只查询该地块。没有匹配快照时返回 404。
+
+**查询参数**：
+- `field_id` (str, 可选)：地块 ID
+
+### GET /heatmaps/snapshots
+
+分页查询持久化快照摘要。所有筛选条件可以组合使用：
+
+- `field_id`、`request_id`、`mission_id`：精确关联筛选
+- `pest_type`：虫种精确筛选，英文大小写不敏感；未知虫种返回空列表
+- `source`：来源筛选，英文大小写不敏感，例如 `yolo_bbox`、`demo_seed`
+- `is_simulated`：`true` 或 `false`
+- `inspection_kind`：`pre_spray` 或 `reinspection`
+- `captured_from`、`captured_to`：ISO 8601 时间；起始时间晚于结束时间返回 422
+- `limit`：1–100，默认 50
+- `offset`：非负整数，默认 0
+
+**响应**：
+```json
+{
+  "total": 1,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "snapshot_id": "heatmap:req_abc123:pre_spray:1",
+      "request_id": "req_abc123",
+      "field_id": "field_001",
+      "inspection_kind": "pre_spray",
+      "iteration_number": 1,
+      "captured_at": "2026-08-04T08:00:00+00:00",
+      "algorithm_version": "relative-bbox-grid-v1",
+      "pest_counts": {"aphid": 4},
+      "total_detection_count": 4,
+      "hotspot_cell_count": 2,
+      "peak_relative_heat": 1.0,
+      "source": "yolo_bbox",
+      "is_simulated": false,
+      "legacy": false
+    }
+  ]
+}
+```
+
+### GET /heatmaps/snapshots/{snapshot_id}
+
+返回单个快照的完整 `density_grid`、`density_metadata`、图片引用和逐项检测结果。不存在时返回 404。
+
+旧任务可以使用 `legacy:{request_id}` 作为详情 ID。服务端会从历史任务和无人机指令只读转换，返回 `legacy=true`、`algorithm_version=legacy-unversioned`，不会向新表写入记录。旧任务不进入持久化快照列表。
+
+### GET /heatmaps/comparison/{request_id}
+
+将一次任务的喷洒前快照与指定轮次复检快照配对。`iteration_number` 可选；不传时使用最新复检轮次。
+
+若两侧齐全，`status=paired` 并返回检测数、热点网格数和峰值相对热值的差值；复检尚未产生时返回 `status=pending_reinspection`，而不是伪造对比结果。两侧均不存在时返回 404。
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "mission_id": "mission_abc123",
+  "iteration_number": 1,
+  "status": "paired",
+  "pre_spray": {"snapshot_id": "heatmap:req_abc123:pre_spray:1"},
+  "reinspection": {"snapshot_id": "heatmap:req_abc123:reinspection:1"},
+  "metrics": {
+    "detection_count_change": -3,
+    "hotspot_cell_count_change": -2,
+    "peak_relative_heat_change": -0.4
+  }
+}
+```
 
 ## 效果评估
 
@@ -621,7 +708,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ### 响应 Schema 说明
 
-**MissionIterationResult**：单次喷洒-复检迭代的完整记录。包含迭代序号 (`iteration_number`)、状态 (`status`: pending/spraying/inspecting/evaluated/passed/failed)、喷洒前后害虫计数、杀灭率、各阶段时间戳（`created_at`、`spray_completed_at`、`inspected_at`、`evaluated_at`）及备注。
+**MissionIterationResult**：单次喷洒-复检迭代的完整记录。除迭代序号、状态、喷洒前后害虫计数、杀灭率和时间戳外，还返回 `heatmap_snapshot_id`、`heatmap_algorithm_version` 与 `spray_plan`。`spray_plan` 中的 `planning_mode`、`spray_rate_policy` 和可选 `degradation_reason` 用于解释该轮航线采用的热力输入、0.5/1.0/1.5 倍喷洒分档或均匀喷洒降级原因。
 
 **MissionDetailResponse**：任务闭环的完整视图。包含任务元信息（地块、作物、农药、阈值配置）、汇总统计（总害虫数、最终杀灭率）以及 `iterations` 数组（所有 `MissionIterationResult` 迭代记录，按迭代序号排列）。
 

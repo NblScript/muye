@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildScreenViewModel } from '../src/assets/screen/model'
-import type { WorkflowTaskState } from '../src/types/workflow'
+import type { HeatmapSnapshotDetail, WorkflowTaskState } from '../src/types/workflow'
 
 function makeTask(overrides: Partial<WorkflowTaskState> = {}): WorkflowTaskState {
   return {
@@ -155,5 +155,56 @@ describe('buildScreenViewModel', () => {
     expect(model.fieldTwin.route).toEqual([])
     expect(model.fieldTwin.pestPoints).toEqual([])
     expect(model.fieldTwin.densitySourceLabel).toBe('等待虫情数据')
+  })
+
+  it('rebuilds the selected pest subset heatmap from traceable snapshot detections', () => {
+    const snapshot: HeatmapSnapshotDetail = {
+      snapshot_id: 'heatmap:req-screen-model:pre_spray:1',
+      batch_id: 'inspection:req-screen-model:pre_spray:1',
+      request_id: 'req-screen-model',
+      field_id: 'field-1',
+      mission_id: 'mission-1',
+      iteration_number: 1,
+      inspection_kind: 'pre_spray',
+      captured_at: '2026-08-03T08:00:00Z',
+      algorithm_version: 'relative-bbox-grid-v1',
+      pest_counts: { aphid: 1, planthopper: 1 },
+      total_detection_count: 2,
+      hotspot_cell_count: 2,
+      peak_relative_heat: 1,
+      source: 'yolo_bbox',
+      is_simulated: false,
+      legacy: false,
+      density_grid: [
+        { row: 0, col: 0, density: 1, bounds: [[113.58, 34.68], [113.65, 34.82]] },
+        { row: 0, col: 1, density: 0.8, bounds: [[113.65, 34.68], [113.72, 34.82]] },
+      ],
+      density_metadata: { grid_rows: 1, grid_cols: 2, source: 'yolo_bbox' },
+      image_paths: ['/tmp/inspection.jpg'],
+      detections: [
+        { pest_type: 'aphid', confidence: 0.9, position: { x1: 0.1, y1: 0.2, x2: 0.2, y2: 0.3, coordinate_space: 'image_normalized' } },
+        { pest_type: 'planthopper', confidence: 0.8, position: { x1: 0.7, y1: 0.2, x2: 0.8, y2: 0.3, coordinate_space: 'image_normalized' } },
+      ],
+    }
+
+    const model = buildScreenViewModel(makeTask(), undefined, 55, true, snapshot, 'planthopper')
+
+    expect(model.pests).toEqual([{ name: '稻飞虱', count: 1, confidence: 0.8 }])
+    expect(model.fieldTwin.heatCells).toHaveLength(1)
+    expect(model.fieldTwin.heatCells[0].density).toBe(1)
+    expect(model.fieldTwin.densityAcceptedCount).toBe(1)
+    expect(model.fieldTwin.densitySourceLabel).toContain('仅筛选稻飞虱检测点')
+  })
+
+  it('does not invent field positions when detections have no coordinate metadata', () => {
+    const task = makeTask({
+      detections: [{ pest_type: 'aphid', confidence: 0.92 }],
+      drone: { status: 'idle', instruction: {} },
+    })
+
+    const model = buildScreenViewModel(task)
+
+    expect(model.fieldTwin.pestPoints).toEqual([])
+    expect(model.fieldTwin.heatCells).toEqual([])
   })
 })

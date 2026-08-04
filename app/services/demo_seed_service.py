@@ -7,12 +7,14 @@ from typing import Any
 
 from app.deps import iso_utc_offset
 from app.services import workflow_service
+from app.services.pipeline_planning_service import attach_heatmap_trace
 from modules.infra.event_bus import FileEventBus
 from modules.infra.sqlite_store import SqliteStore, utc_now_iso
 
 
 DEMO_REQUEST_ID = "demo-fixed-consultation"
 DEMO_FIELD_ID = "px4-sitl-demo"
+DEMO_DENSITY_ALGORITHM_VERSION = "demo-synthetic-surface-v1"
 
 
 def _demo_field() -> dict[str, Any]:
@@ -233,6 +235,7 @@ def seed_demo_state(
         "density_grid": _density_grid(),
         "density_metadata": {
             "source": "demo_seed",
+            "algorithm_version": DEMO_DENSITY_ALGORITHM_VERSION,
             "density_kind": "synthetic_relative_surface",
             "coordinate_space": "virtual_field_normalized",
             "projection": "synthetic_demo_surface",
@@ -275,6 +278,21 @@ def seed_demo_state(
     )
     store.mark_task_started(DEMO_REQUEST_ID, "data/samples/aphids_01.jpg", field_id)
     store.replace_detections(DEMO_REQUEST_ID, detections)
+    snapshot_id = store.save_heatmap_snapshot(
+        request_id=DEMO_REQUEST_ID,
+        field_id=field_id,
+        inspection_kind="pre_spray",
+        iteration_number=1,
+        image_paths=["data/samples/aphids_01.jpg"],
+        detections=detections,
+        density_grid=instruction["density_grid"],
+        density_metadata=instruction["density_metadata"],
+    )
+    instruction = attach_heatmap_trace(
+        instruction,
+        snapshot_id=snapshot_id,
+        density_metadata=instruction["density_metadata"],
+    )
     store.add_weather_snapshot(DEMO_REQUEST_ID, weather)
     store.add_decision(DEMO_REQUEST_ID, decision)
     store.upsert_spray_record(

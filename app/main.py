@@ -62,6 +62,7 @@ from app.routes.demo_readiness import register_demo_readiness_routes
 from app.routes.drone import ensure_px4_ready, register_drone_routes
 from app.routes.evaluation import register_evaluation_routes
 from app.routes.health import register_health_routes
+from app.routes.heatmaps import register_heatmap_routes
 from app.routes.mission import register_mission_routes
 from app.routes.sim import register_sim_routes
 from app.routes.tasks import register_tasks_routes
@@ -73,7 +74,11 @@ from app.services.pipeline_policy_service import (
     resolve_policy_takeoff_mode,
     resolve_runtime_takeoff_mode,
 )
-from app.services.pipeline_planning_service import plan_spray_mission
+from app.services.pipeline_planning_service import (
+    attach_heatmap_trace,
+    build_density_payload,
+    plan_spray_mission,
+)
 
 # Import core configuration
 from app.config import build_local_yolo_urls
@@ -104,6 +109,7 @@ api_app.add_middleware(RateLimitMiddleware, limit_per_minute=_rate_limit)
 
 # Register all routes
 register_health_routes(api_app)
+register_heatmap_routes(api_app)
 register_workflow_routes(api_app)
 register_dashboard_routes(api_app)
 register_demo_routes(api_app)
@@ -126,6 +132,10 @@ class MuyeApplication:
         ensure_runtime_dirs()
         load_environment()
         self.logger = build_logger("muye")
+        ready_file = os.getenv("MUYE_PIPELINE_READY_FILE", "").strip()
+        self.pipeline_ready_path = Path(ready_file) if ready_file else None
+        if self.pipeline_ready_path is not None:
+            self.pipeline_ready_path.unlink(missing_ok=True)
         self.drone_config = load_json(CONFIG_DIR / "drone_config.json")
         self.config = config or MuyeConfig.from_env(drone_config=self.drone_config)
         self._apply_runtime_drone_overrides()
@@ -417,6 +427,9 @@ class MuyeApplication:
             enable_scheduler=enable_scheduler,
             capture_on_startup=capture_on_startup,
         )
+        if self.pipeline_ready_path is not None:
+            self.pipeline_ready_path.parent.mkdir(parents=True, exist_ok=True)
+            self.pipeline_ready_path.write_text("ready\n", encoding="utf-8")
         log_event(
             self.logger,
             logging.INFO,
@@ -433,6 +446,8 @@ class MuyeApplication:
         )
 
     async def shutdown(self) -> None:
+        if self.pipeline_ready_path is not None:
+            self.pipeline_ready_path.unlink(missing_ok=True)
         await self.data_collector.shutdown()
         for task in self.worker_tasks:
             task.cancel()
@@ -574,6 +589,24 @@ class MuyeApplication:
                 "replace_detections",
                 lambda: self.sqlite_store.replace_detections(request_id, detections),
             )
+            density_grid, density_metadata = build_density_payload(
+                field_context=field_context,
+                detections=detections,
+            )
+            heatmap_snapshot_id = self._sqlite_write(
+                request_id,
+                "save_pre_spray_heatmap_snapshot",
+                lambda: self.sqlite_store.save_heatmap_snapshot(
+                    request_id=request_id,
+                    field_id=field_context.get("field_id"),
+                    inspection_kind="pre_spray",
+                    iteration_number=1,
+                    image_paths=[str(image_path)],
+                    detections=detections,
+                    density_grid=density_grid,
+                    density_metadata=density_metadata,
+                ),
+            )
             if not detections:
                 self._finish_pipeline_no_pests(request_id, image_path, worker_id, started)
                 return
@@ -600,6 +633,11 @@ class MuyeApplication:
                 field_context=field_context,
                 current_weather=bundle["weather"],
                 detections=detections,
+            )
+            execution_plan = attach_heatmap_trace(
+                execution_plan,
+                snapshot_id=heatmap_snapshot_id,
+                density_metadata=density_metadata,
             )
             self._rag_indexer.schedule_incremental_rag_index(
                 request_id=request_id,
@@ -893,6 +931,7 @@ class MuyeApplication:
             self._mission_manager.schedule_reinspection(
                 request_id, bundle["decision"], detections, field_context, image_path,
                 weather=bundle["weather"],
+                execution_plan=execution_plan,
             )
 
     def _handle_pipeline_error(
@@ -957,9 +996,9 @@ class MuyeApplication:
         self,
         request_id: str,
         operation: str,
-        callback: Callable[[], None],
-    ) -> None:
-        safe_sqlite_write(
+        callback: Callable[[], Any],
+    ) -> Any:
+        return safe_sqlite_write(
             self.logger, request_id, self.client_ip,
             str(self.sqlite_store.db_path), operation, callback,
         )

@@ -62,7 +62,7 @@ logger.info("决策完成", extra={
 ## 配置管理
 
 - **配置文件**：`config/` 目录（`.env`, `.json`, `.yaml`）
-- **敏感信息**：`config/api_keys.env`（不入 Git），模板在 `.env.example`
+- **敏感信息**：`.env.production` / `config/api_keys.env`（不入 Git），模板分别为 `.env.production.example` / `config/api_keys.env.example`
 - **加载方式**：`app/config.py` 统一加载，通过 `app/config_types.py` 定义类型
 - **运行时配置**：`config/drone_config.json`（无人机参数）、`config/yolo_config.yaml`（检测参数）
 
@@ -102,11 +102,11 @@ frontend/src/
 
 ## 测试策略
 
-- **单元测试**：覆盖核心业务逻辑（66+ 测试用例）
-- **测试位置**：`tests/` 目录，文件名 `test_<模块名>.py`
-- **Mock 策略**：仅 Mock 外部服务（Qwen API、和风天气、PX4 SITL），不 Mock 内部模块
+- **单元测试**：当前全量基线为后端 367 passed / 1 skipped、前端 33 passed
+- **测试位置**：后端在 `tests/`，前端在 `frontend/tests/`
+- **Mock 策略**：仅 Mock 外部服务和硬件边界；内部纯业务逻辑优先真实调用
 - **测试数据**：使用 `data/samples/` 和 `data/seeds/` 中的种子数据
-- **运行方式**：`pytest tests/ -v`
+- **运行方式**：`MUYE_FULL_CHECK=1 ./scripts/check.sh`
 
 ## 文档规范
 

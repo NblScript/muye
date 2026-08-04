@@ -32,6 +32,14 @@ def test_px4_backend_is_drone_backend():
     assert isinstance(backend, DroneBackend)
 
 
+def test_px4_backend_rejects_unknown_execution_mode():
+    config = build_config()
+    config["px4"]["execution_mode"] = "sitl"
+
+    with pytest.raises(ValueError, match="expected 'animated_demo' or 'real'"):
+        PX4Backend(config)
+
+
 @pytest.mark.asyncio
 async def test_px4_backend_connect_disconnect():
     backend = PX4Backend(build_config())

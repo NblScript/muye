@@ -1023,6 +1023,16 @@ def test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path) -> None:
             """,
             (request_id,),
         )
+        heatmap_snapshot = app.sqlite_store.fetch_heatmap_snapshot_by_request(
+            request_id,
+            include_legacy=False,
+        )
+        mission = app.sqlite_store.fetch_mission_by_request_id(request_id)
+        mission_iterations = (
+            app.sqlite_store.fetch_iterations(mission["mission_id"])
+            if mission is not None
+            else []
+        )
     finally:
         asyncio.run(app.shutdown())
 
@@ -1062,6 +1072,19 @@ def test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path) -> None:
     assert spray_row["result_status"] == "completed"
     assert json.loads(spray_row["weather_snapshot"])["summary"] == "多云"
     assert "农药名称=吡虫啉" in spray_row["notes"]
+
+    assert heatmap_snapshot is not None
+    assert heatmap_snapshot["request_id"] == request_id
+    assert heatmap_snapshot["field_id"] == expected_field_id
+    assert heatmap_snapshot["inspection_kind"] == "pre_spray"
+    assert heatmap_snapshot["algorithm_version"] == "relative-bbox-grid-v1"
+    assert heatmap_snapshot["pest_counts"] == {"aphid": 1}
+    assert heatmap_snapshot["mission_id"] is not None
+    assert mission is not None
+    assert len(mission_iterations) == 1
+    assert mission_iterations[0]["heatmap_snapshot_id"] == heatmap_snapshot["snapshot_id"]
+    assert mission_iterations[0]["heatmap_algorithm_version"] == "relative-bbox-grid-v1"
+    assert mission_iterations[0]["spray_plan"]["heatmap_trace_status"] == "linked"
 
 
 def test_main_persists_pipeline_to_sqlite(monkeypatch, tmp_path) -> None:

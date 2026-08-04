@@ -6,13 +6,13 @@ const Wrapper = styled.div`
   z-index: 999;
   display: grid;
   place-items: center;
-  background: #fff5e8;
+  background: #26282a;
 
   .loader {
     width: 48px;
     height: 48px;
-    border: 4px solid rgba(196, 138, 42, 0.2);
-    border-top-color: #c48a2a;
+    border: 4px solid rgba(127, 229, 168, 0.16);
+    border-top-color: #7fe5a8;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -26,7 +26,7 @@ const Wrapper = styled.div`
 
 const Text = styled.div`
   margin-top: 16px;
-  color: #b8705a;
+  color: rgba(255, 255, 255, 0.64);
   font-size: 14px;
   letter-spacing: 2px;
 `

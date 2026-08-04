@@ -10,7 +10,7 @@ const Grid = styled.div`
 `
 
 const toneColor: Record<PanelTone, string> = {
-  green: '#4f8f63', amber: '#d18420', red: '#bf5146', blue: '#4d7f9f', muted: '#9c8f84',
+  green: '#7fe5a8', amber: '#d6b56f', red: '#df7469', blue: '#78a8c5', muted: '#8c9695',
 }
 
 const Metric = styled.div<{ $tone: PanelTone }>`
@@ -23,10 +23,10 @@ const Metric = styled.div<{ $tone: PanelTone }>`
   flex-direction: column;
   justify-content: space-between;
 
-  .label { color: rgba(90, 74, 66, 0.66); font-size: 12px; }
+  .label { color: rgba(255, 255, 255, 0.62); font-size: 12px; }
   .value { color: ${({ $tone }) => toneColor[$tone]}; font-size: 25px; font-weight: 750; line-height: 1.1; }
   .value.is-text { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .unit { margin-left: 4px; color: rgba(90, 74, 66, 0.54); font-size: 11px; font-weight: 500; }
+  .unit { margin-left: 4px; color: rgba(255, 255, 255, 0.48); font-size: 11px; font-weight: 500; }
 `
 
 const Suitability = styled.div<{ $ok: boolean }>`
@@ -35,8 +35,8 @@ const Suitability = styled.div<{ $ok: boolean }>`
   right: 14px;
   padding: 3px 8px;
   border-radius: 999px;
-  color: ${({ $ok }) => $ok ? '#3d7a50' : '#b66b17'};
-  background: ${({ $ok }) => $ok ? 'rgba(79, 143, 99, 0.1)' : 'rgba(209, 132, 32, 0.12)'};
+  color: ${({ $ok }) => $ok ? '#7fe5a8' : '#d6b56f'};
+  background: ${({ $ok }) => $ok ? 'rgba(127, 229, 168, 0.1)' : 'rgba(214, 181, 111, 0.12)'};
   font-size: 10px;
   letter-spacing: 0.08em;
 `

@@ -18,9 +18,6 @@ frontend/node_modules
 .vscode
 *.swp
 
-# Docker
-docker
-
 # Test / CI
 tests
 .github

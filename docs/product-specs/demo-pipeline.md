@@ -31,8 +31,9 @@
 **固定样例评测集**：`python scripts/eval_fixed_set.py --output data/eval/latest_report.md`
 
 - 样例清单：`data/eval/manifest.json`
-- 覆盖：常规虫害、高湿、强风、合规 warning、合规 blocked
-- 输出：Markdown 表格，列出图片、预期害虫、作物、天气场景和合规结果
+- 覆盖：蚜虫、褐飞虱、稻纵卷叶螟变量喷洒，以及空检测、缺少坐标、非法围栏降级
+- 校验：图片 SHA-256、完整 8×10 热力网格、航线、喷洒速率表和规划模式
+- 输出：带逐场景哈希与 PASS/FAIL 的 Markdown 报告；标注边界与 IP102 来源见 `data/eval/README.md`
 
 ### 阶段 2：系统启动
 
@@ -159,11 +160,11 @@
 
 | 故障 | 处理方式 |
 |------|----------|
-| YOLO 推理失败 | 重试 1 次，失败则使用模拟数据 |
+| YOLO 推理失败 | 重试 1 次；演示模式可使用明确标记的模拟种子，生产模式不得伪装为真实检测 |
 | 天气 API 超时 | 使用缓存数据 |
 | Qwen API 失败 | 重试 1 次，失败则显示错误 |
 | RAG 检索失败 | 降级到无上下文决策 |
-| PX4 连接失败 | 切换到动画演示模式 |
+| PX4 连接失败 | 生产任务明确失败并停止执行；演示必须显式选择 `animated_demo` |
 | WebSocket 断开 | 自动重连 + HTTP 轮询降级 |
 
 ## 生产模式
@@ -173,6 +174,7 @@
 ### 启动方式
 
 ```bash
+cp .env.production.example .env.production
 ./scripts/prepare.sh --production  # 环境准备 + 生产检查
 ./scripts/run.sh                   # 启动 24h 自动巡检
 ```
@@ -183,7 +185,7 @@
 |--------|----------------|---------------|
 | 起飞模式 | `manual`（前端确认） | `auto`（自动起飞） |
 | 图片采集 | `--no-capture-on-startup`（手动注入） | 启动即采集，每 24h 循环 |
-| PX4 模式 | `animated_demo` | `sitl`（真实 SITL 仿真） |
+| PX4 模式 | `animated_demo` | `real`（MAVSDK，可连接 SITL 或真机） |
 | 任务闭环 | 单次喷洒 | 自动重试至杀灭率 ≥ 90% |
 | 前端 | 必须启动 | 可选（`--no-frontend` 无头运行） |
 | AI/天气 | mock 模式 | 真实 API（需配置 `.env.production`） |
@@ -197,6 +199,7 @@
 | `--frontend-port <port>` | `5173` | 前端端口 |
 | `--no-frontend` | - | 不启动前端（无头运行） |
 | `--skip-precheck` | - | 跳过环境检查 |
+| `--allow-default-env` | - | 仅用于本地联调；缺少生产配置时显式启用 mock 与动画模式 |
 
 ### 生产配置
 
@@ -206,24 +209,28 @@
 MUYE_TAKEOFF_MODE=auto
 MUYE_EVALUATION_AUTO_RETRY=true
 MUYE_EVALUATION_KILL_RATE_THRESHOLD=0.9
-PX4_EXECUTION_MODE=sitl
+PX4_EXECUTION_MODE=real
 # QWEN_API_KEY=<your-key>
 # QWEATHER_API_KEY=<your-key>
 
 # 无人机后端选择
-# DRONE_BACKEND=px4    # PX4 SITL 仿真（默认）
-# DRONE_BACKEND=dji_osdk  # DJI OSDK 真实无人机
+# DRONE_BACKEND=px4    # MAVSDK 执行链路，可连接 PX4 SITL 或真机（默认）
+# DRONE_BACKEND=dji_osdk  # DJI OSDK 后端；当前仅完成仿真适配
 
 # DJI OSDK 配置（仅 DRONE_BACKEND=dji_osdk 时需要）
 # DJI_OSDK_EXECUTION_MODE=osdk_real
 # DJI_OSDK_SERIAL_PORT=/dev/ttyACM0
 ```
 
-### 接入真实无人机
+`PX4_EXECUTION_MODE` 只接受 `animated_demo` 或 `real`。生产入口默认使用 `real`，未知值会直接报错，不会静默降级为动画。
 
-系统支持通过 DJI OSDK 接入真实 DJI 无人机（Matrice M300 / M350 / 30T 等），步骤如下：
+### DJI OSDK 当前边界
 
-1. 在 `.env.production` 中设置 `DRONE_BACKEND=dji_osdk` 和 `DJI_OSDK_EXECUTION_MODE=osdk_real`
-2. 配置串口路径，默认为 `/dev/ttyACM0`（根据实际连接修改）
-3. 重启 `run.sh` 即可切换到真实无人机执行
-4. 如需在无硬件环境下测试 DJI OSDK 链路，可使用 `DJI_OSDK_EXECUTION_MODE=osdk_sim`
+系统已经保留面向 Matrice M300 / M350 / 30T 等机型的 DJI OSDK 后端接口，但当前 `osdk_real` 尚未实现串口/OSDK 握手、遥测和任务下发。设置 `DJI_OSDK_EXECUTION_MODE=osdk_real` 只会记录警告并继续使用仿真实现，不代表真机已连接。
+
+当前联调应使用 `DRONE_BACKEND=dji_osdk` 和 `DJI_OSDK_EXECUTION_MODE=osdk_sim`。真正接入硬件前需要完成：
+
+1. 串口或 UDP 通信与 OSDK 握手。
+2. 真机遥测读取、任务上传、状态回调和异常中止。
+3. 机型适配、权限配置、地理围栏和人工接管验证。
+4. 硬件在环测试与现场飞行安全验收。

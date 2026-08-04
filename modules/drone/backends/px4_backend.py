@@ -32,9 +32,14 @@ class PX4Backend(DroneBackend):
         if execution_mode == "real":
             self._executor = PX4RealExecutor(drone_config, logger=self.logger)
             self.execution_mode = "real"
-        else:
+        elif execution_mode == "animated_demo":
             self._executor = PX4Simulator(drone_config, logger=self.logger)
             self.execution_mode = "animated_demo"
+        else:
+            raise ValueError(
+                "Unsupported PX4 execution_mode "
+                f"{execution_mode!r}; expected 'animated_demo' or 'real'"
+            )
 
     async def connect(self) -> None:
         pass

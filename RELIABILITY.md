@@ -55,8 +55,8 @@ PX4 SITL 不可用 → 使用动画演示模式
 ### DJI OSDK 降级
 
 ```
-DJI OSDK 真机连接可用 → 真实 DJI 无人机执行
-DJI OSDK 真机不可用 → 使用 osdk_sim 仿真模式
+DJI OSDK `osdk_sim` → 确定性仿真执行
+DJI OSDK `osdk_real` → 当前记录警告后仍走仿真实现；完成串口/OSDK 通信和硬件验收前不得表述为真机执行
 PX4 也可用 → 回退到 PX4 后端
 ```
 
@@ -123,6 +123,9 @@ curl http://localhost:8010/health
 # 烟雾测试（不依赖 PX4/Gazebo，验证 API + mock 链路）
 ./scripts/demo_smoke.sh
 
+# 容器端到端冒烟（构建双镜像，使用显式 fake YOLO 和独立数据卷）
+./scripts/docker_smoke.sh
+
 # 现场诊断报告（聚合 health/SLO/workflow/事件流/错误日志）
 ./scripts/demo_doctor.sh
 
@@ -130,7 +133,9 @@ curl http://localhost:8010/health
 python scripts/eval_fixed_set.py --output data/eval/latest_report.md
 ```
 
-`/live` 用于快速判断 FastAPI 进程是否可响应；`/health` 用于 readiness 诊断，会检查 SQLite、YOLO、AI 配置、天气配置、事件流、RAG、PX4 和当前生效运行配置。
+`/live` 用于快速判断 FastAPI 进程是否可响应；`/health` 用于 readiness 诊断，会检查 SQLite、YOLO、AI 配置、天气配置、事件流、RAG、PX4 和当前生效运行配置。Docker 中主处理链与 API 分进程运行，通过共享 `pipeline.ready` 文件证明工作线程和图片监听器已经启动；默认 Compose 健康检查必须访问 `/health`。
+
+`scripts/docker_smoke.sh` 通过 Compose `--wait` 等待服务健康，再校验 Nginx 代理、模拟 YOLO 健康标记、图片上传、watchdog 入队和工作流检测结果。失败时打印容器日志，默认总是清理容器与独立数据卷。
 
 人工确认起飞状态由 `app/services/takeoff_confirmation_service.py` 管理：SQLite `pending_actions` 表是跨进程确认状态的主记录，`data/runtime/takeoff/` 下的 pending/confirmed 文件保留为兼容层。
 
@@ -146,7 +151,7 @@ tail -f data/logs/system.log
 tail -f data/logs/px4.log
 
 # 查看事件流
-tail -f data/logs/demo_events.jsonl | jq .
+tail -f data/logs/events.jsonl | jq .
 ```
 
 ## 演示前检查清单

@@ -1,54 +1,55 @@
-# Muye Non-PX4 Demo Stack
-# 
+# Muye local integration stack
+#
 # 一键启动：
+#   先准备真实模型 models/best.pt
 #   docker compose up --build
 #
 # 访问地址：
-#   - Frontend:     http://localhost:8501
+#   - Frontend:     http://localhost:5173
 #   - Backend API:  http://localhost:18000
-#   - YOLO API:     http://localhost:8010 (内部)
-#   - Virtual Drone:http://localhost:9010 (内部)
 #
 # 注意：
-#   - 此配置不含 PX4/Gazebo，适用于本地联调和稳定演示
-#   - 如需 PX4 演示，请继续使用 scripts/start_px4_visual_demo.sh
+#   - AI 决策与天气使用 mock，昆虫识别使用真实本地 YOLO 模型
+#   - 无人机使用固定的 animated_demo 后端，不会连接或控制真机
 #
-version: "3.8"
-
 services:
   # ==================
   # Backend Service
   # ==================
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.backend
     ports:
-      - "18000:8000"      # Frontend API
-      - "8010:8010"       # YOLO API (内部，调试用)
-      - "9010:9010"       # Virtual Drone API (内部，调试用)
+      - "127.0.0.1:${MUYE_COMPOSE_API_PORT:-18000}:8000"
     volumes:
-      - ../data:/app/data               # 持久化 SQLite / images / logs
-      - ../config:/app/config:ro        # 只读配置
+      - ./data:/app/data
+      - ./config:/app/config:ro
+      - ./models:/app/models:ro
     environment:
-      - MUYE_API_PORT=8000
-      - MUYE_SQLITE_PATH=/app/data/muye.db
-      - MUYE_ENABLE_SQLITE_DECISION_CONTEXT=${MUYE_ENABLE_SQLITE_DECISION_CONTEXT:-false}
-      # 天气 / 千问 API Key（走环境变量注入，不写死）
-      - QWEN_API_KEY=${QWEN_API_KEY:-}
-      - QWEATHER_API_KEY=${QWEATHER_API_KEY:-}
-      # YOLO 配置（内嵌模式时无需外部 Key）
-      - YOLO_API_URL=http://127.0.0.1:8010
-      # PX4 工作流程
-      - DRONE_BACKEND=px4
-      - PX4_SYSTEM_ADDRESS=${PX4_SYSTEM_ADDRESS:-udpin://0.0.0.0:14540}
-      - PX4_AUTO_START_ON_SPRAY=${PX4_AUTO_START_ON_SPRAY:-true}
+      MUYE_API_PORT: "8000"
+      MUYE_SQLITE_PATH: /app/data/muye.db
+      MUYE_PIPELINE_READY_FILE: /app/data/runtime/pipeline.ready
+      MUYE_ENABLE_SQLITE_DECISION_CONTEXT: "false"
+      YOLO_API_URL: http://127.0.0.1:8010/detect
+      YOLO_LOCAL_MODEL_PATH: /app/models/best.pt
+      QWEN_USE_MOCK: "true"
+      QWEATHER_USE_MOCK: "true"
+      RAG_ENABLED: "false"
+      MUYE_MULTI_AGENT_ENABLED: "false"
+      MUYE_ROUTER_ENABLED: "false"
+      DRONE_BACKEND: px4
+      PX4_EXECUTION_MODE: animated_demo
+      PX4_AUTO_START_ON_SPRAY: "false"
+      PX4_ALLOW_FORCE_ARM: "false"
+      PX4_REQUIRE_GLOBAL_POSITION: "false"
+      MUYE_TAKEOFF_MODE: manual
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 12
+      start_period: 60s
     restart: unless-stopped
 
   # ==================
@@ -56,15 +57,11 @@ services:
   # ==================
   frontend:
     build:
-      context: ..
+      context: .
       dockerfile: docker/Dockerfile.frontend
     ports:
-      - "8501:80"
+      - "127.0.0.1:${MUYE_COMPOSE_FRONTEND_PORT:-5173}:80"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
-
-# 数据持久化（可选：使用 named volume 替代 bind mount）
-# volumes:
-#   muye-data:

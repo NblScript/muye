@@ -5,10 +5,10 @@
 ## 概述
 
 - **数据库**：SQLite
-- **路径**：`data/muye.db`（可通过 `MUYE_DB_PATH` 环境变量覆盖）
+- **路径**：`data/muye.db`（可通过 `MUYE_SQLITE_PATH` 环境变量覆盖）
 - **模式**：WAL（Write-Ahead Logging）
-- **表数量**：20
-- **SqliteStore 类**：通过 Mixin 组合（MissionMixin → EvaluationMixin → CatalogMixin → AgriDataMixin → FieldMixin → TaskMixin → BaseMixin）
+- **表数量**：22
+- **SqliteStore 类**：通过 Mixin 组合（MissionMixin → EvaluationMixin → HeatmapMixin → CatalogMixin → AgriDataMixin → FieldMixin → TaskMixin → BaseMixin）
 
 ## 表分类
 
@@ -148,7 +148,69 @@
 | spray_completed_at | DATETIME | | 喷洒完成时间 |
 | inspected_at | DATETIME | | 复检执行时间 |
 | evaluated_at | DATETIME | | 评估完成时间 |
+| heatmap_snapshot_id | TEXT | FK → heatmap_snapshots | 本轮喷洒消费的热力快照 |
+| heatmap_algorithm_version | TEXT | | 本轮规划使用的热力算法版本 |
+| spray_plan | TEXT | JSON | 航线、喷洒速率、变量分档策略和降级原因 |
 | notes | TEXT | | 备注 |
+
+#### inspection_batches
+
+一次喷洒前巡检或药效复检对应一个批次。批次保存图片引用、来源和任务轮次，并作为检测项与热力快照的稳定关联点。
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| id | INTEGER | PK, AUTOINCREMENT | 记录 ID |
+| batch_id | TEXT | UNIQUE, NOT NULL | 稳定批次标识 |
+| request_id | TEXT | FK → tasks, INDEX | 原始处理请求 |
+| field_id | TEXT | INDEX | 关联地块 |
+| mission_id | TEXT | FK → missions, INDEX | 关联闭环任务 |
+| iteration_number | INTEGER | NOT NULL | 闭环轮次，从 1 开始 |
+| inspection_kind | TEXT | CHECK(pre_spray/reinspection) | 喷洒前巡检或复检 |
+| captured_at | DATETIME | NOT NULL | 采集时间 |
+| image_paths | TEXT | JSON | 本批次图片引用 |
+| source | TEXT | NOT NULL | `yolo_bbox`、`demo_seed` 等来源 |
+| is_simulated | INTEGER | CHECK(0/1) | 是否为模拟数据 |
+| created_at | DATETIME | NOT NULL | 首次写入时间 |
+
+UNIQUE(request_id, inspection_kind, iteration_number)
+
+#### inspection_detections
+
+巡检批次内的逐项检测记录。与旧 `detections` 任务表并行保存，增加批次、轮次和逐图引用能力。
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| id | INTEGER | PK, AUTOINCREMENT | 记录 ID |
+| batch_id | TEXT | FK → inspection_batches, INDEX | 所属巡检批次 |
+| image_path | TEXT | | 检测项对应图片 |
+| pest_type | TEXT | INDEX | 昆虫类别 |
+| confidence | REAL | | 检测置信度 |
+| bbox | TEXT | JSON | 带坐标空间和图像尺寸的检测框 |
+| created_at | DATETIME | NOT NULL | 写入时间 |
+
+#### heatmap_snapshots
+
+与巡检批次一一对应的不可随机变化热力快照。保存完整相对热值网格、来源元数据和算法版本，可在进程重启后直接恢复。
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| id | INTEGER | PK, AUTOINCREMENT | 记录 ID |
+| snapshot_id | TEXT | UNIQUE, NOT NULL | 稳定快照标识 |
+| batch_id | TEXT | UNIQUE, FK → inspection_batches | 对应巡检批次 |
+| request_id | TEXT | FK → tasks, INDEX | 原始处理请求 |
+| field_id | TEXT | INDEX | 关联地块 |
+| mission_id | TEXT | FK → missions, INDEX | 关联闭环任务 |
+| iteration_number | INTEGER | NOT NULL | 闭环轮次 |
+| inspection_kind | TEXT | CHECK(pre_spray/reinspection) | 快照阶段 |
+| captured_at | DATETIME | NOT NULL | 采集时间 |
+| algorithm_version | TEXT | NOT NULL | 热力生成算法版本 |
+| density_grid | TEXT | JSON | 完整相对热值网格 |
+| density_metadata | TEXT | JSON | 投影、归一化、来源和接收/拒绝统计 |
+| pest_counts | TEXT | JSON | 按昆虫类别汇总的检测数量 |
+| total_detection_count | INTEGER | NOT NULL | 检测项总数 |
+| source | TEXT | NOT NULL | 数据来源 |
+| is_simulated | INTEGER | CHECK(0/1) | 是否为模拟快照 |
+| created_at | DATETIME | NOT NULL | 首次写入时间 |
 
 ### 2. 农业基础/参考表
 

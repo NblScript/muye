@@ -11,7 +11,8 @@
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=111)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![PX4](https://img.shields.io/badge/PX4-SITL-1B1F23?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-330_backend_%7C_28_frontend-success?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-372_backend_%7C_33_frontend_%7C_6_browser-success?style=flat-square)
+[![CI](https://github.com/NblScript/muye/actions/workflows/ci.yml/badge.svg)](https://github.com/NblScript/muye/actions/workflows/ci.yml)
 
 [快速开始](#快速开始) · [系统架构](#系统架构) · [真实数据边界](#真实数据边界) · [项目文档](#项目文档)
 
@@ -116,12 +117,13 @@ cp .env.demo.example .env.demo
 ## 接入真实服务
 
 1. 将训练好的模型放到 `models/best.pt`，或在环境变量中指定其他模型路径。
-2. 从 `.env.example` 创建 `.env.production`，配置 Qwen、和风天气、可选的 DeepSeek/Xiaomi 和 PX4 参数。
-3. 启动 PX4 SITL，或配置支持的无人机后端。
+2. 从 `.env.production.example` 创建 `.env.production`，配置 Qwen、和风天气、可选的 DeepSeek/Xiaomi 和 PX4 参数。
+3. 启动 PX4 SITL 或连接真机；两者均通过 `PX4_EXECUTION_MODE=real` 的 MAVSDK 执行链路接入。
 4. 运行生产入口：
 
 ```bash
-cp .env.example .env.production
+cp .env.production.example .env.production
+./scripts/prepare.sh --production
 ./scripts/run.sh
 ```
 
@@ -136,6 +138,33 @@ cp .env.example .env.production
 
 API 密钥只应写入本地环境文件，不要提交到仓库。生产运行参数和安全边界参见 [安全说明](SECURITY.md) 与 [演示流程规范](docs/product-specs/demo-pipeline.md)。
 
+### Docker 本地联调
+
+Docker Compose 使用真实本地 YOLO 模型、固定 mock AI/天气和动画无人机，适合确定性联调，不会连接真机：
+
+```bash
+# 先将模型放到 models/best.pt
+docker compose up --build
+```
+
+启动后访问前端 <http://localhost:5173> 和 API <http://localhost:18000>。端口默认只绑定宿主机回环地址；YOLO API 仅在后端容器内监听，不对宿主机暴露。Compose readiness 会同时检查真实模型、内嵌 YOLO 和跨进程处理链标记，而不只判断 API 进程存活。
+
+准备好权重后，可用专用验收栈完成一次真实图片推理并自动清理：
+
+```bash
+./scripts/docker_real_smoke.sh
+```
+
+该脚本使用 `docker-compose.real-smoke.yml`，默认在 `18081` / `5175` 启动独立数据卷环境，验证前端代理、上传监听、真实 YOLO 检测以及像素框原图尺寸契约。它不会设置 `MUYE_CONTAINER_SMOKE`，样本无检测或返回模拟标记都会失败。
+
+若只需验证镜像、Nginx 代理、图片监听和完整处理链，可运行不依赖模型权重的隔离冒烟栈：
+
+```bash
+./scripts/docker_smoke.sh
+```
+
+该脚本使用 `docker-compose.smoke.yml`，默认只在回环地址暴露前端 `5174`、API `18080` 和模拟 YOLO `18010`，并使用独立命名数据卷。它会上传真实图片、等待工作流产生固定 `aphid` 检测，然后自动删除测试容器和数据卷。模拟响应显式标记 `mode=smoke_fake` 和 `is_simulated=true`，不得用于模型精度或生产验收。
+
 ## 真实数据边界
 
 为了避免“好看但不真实”，项目对热力数据做了以下约束：
@@ -146,7 +175,7 @@ API 密钥只应写入本地环境文件，不要提交到仓库。生产运行�
 - 当前 `image_frame_to_geofence_bbox` 投影假定图像覆盖田块且图像顶部对应北侧；没有正射影像或相机位姿时，不宣称虫点具有测绘级 GPS 精度。
 - 演示种子通过 `density_metadata.is_simulated` 明确标记，前端同步显示数据来源。
 
-详细契约参见 [数据模型](docs/references/data-model.md) 和 [前端热力规则](FRONTEND.md#昆虫热力图规则)。
+详细契约参见 [昆虫热力图产品规格](docs/product-specs/insect-heatmap.md)、[数据模型](docs/references/data-model.md) 和 [前端热力规则](FRONTEND.md#昆虫热力图规则)。
 
 ## 主要 API
 
@@ -155,6 +184,8 @@ API 密钥只应写入本地环境文件，不要提交到仓库。生产运行�
 | `GET` | `/live` | 进程存活检查 |
 | `GET` | `/health` | 依赖与运行状态检查 |
 | `GET` | `/workflow/state` | 当前聚合工作流 |
+| `GET` | `/heatmaps/latest` | 当前田地最新热力快照 |
+| `GET` | `/heatmaps/snapshots` | 按虫种、时间和来源筛选历史快照 |
 | `WS` | `/ws/enhanced-state` | 实时任务、遥测与热力状态 |
 | `POST` | `/demo/upload-image` | 上传巡检图片并进入处理链 |
 | `POST` | `/drone/confirm-takeoff` | 确认人工起飞 |
@@ -171,11 +202,25 @@ API 密钥只应写入本地环境文件，不要提交到仓库。生产运行�
 # 后端全量回归 + 前端测试/构建 + 文档校验
 MUYE_FULL_CHECK=1 ./scripts/check.sh
 
+# 单独检查固定图片、热力网格、航线和喷洒速率基线
+python scripts/eval_fixed_set.py --output data/eval/latest_report.md
+
 # 前端静态检查
 cd frontend && npm run lint
+
+# 1366×768、1920×1080 与 125% 缩放等效视口验收
+cd frontend && npx playwright install --with-deps chromium && npm run build && npm run test:e2e
 ```
 
-当前基线：后端 `330 passed / 1 skipped`，前端 `28 passed`，生产构建与文档一致性检查通过。
+固定评测集包含 3 类 IP102 害虫正样本和空检测、缺少坐标、非法围栏 3 类降级场景。图片及算法输出均使用 SHA-256 锁定；清单、数据来源和标注边界见 [data/eval/README.md](data/eval/README.md)。
+
+GitHub Actions 在每次 push、pull request、merge queue 和手动触发时并行执行：
+
+- Python 3.11 后端全量回归、固定数据回归与文档契约校验。
+- Node.js 22 前端依赖锁定安装、lint、单元测试、生产构建和 6 个 Chromium 多视口布局验收。
+- Docker Compose 三套配置解析、后端/前端镜像构建，以及无权重隔离容器的 HTTP 端到端冒烟。
+
+CI 保存固定评测报告、前端 `dist` 产物与 Playwright 视口截图/失败 trace 14 天。CI 不保存私有模型权重，因此只解析真实模型验收配置；完整推理验收需在提供 `models/best.pt` 的环境运行 `./scripts/docker_real_smoke.sh`。
 
 ## 项目文档
 
@@ -183,6 +228,8 @@ cd frontend && npm run lint
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统边界、模块依赖和关键数据流 |
 | [FRONTEND.md](FRONTEND.md) | 指挥大屏架构、实时状态和热力规则 |
+| [docs/product-specs/insect-heatmap.md](docs/product-specs/insect-heatmap.md) | 昆虫热力产品范围、数据语义和展示边界 |
+| [docs/exec-plans/2026-08-04-insect-heatmap-productization.md](docs/exec-plans/2026-08-04-insect-heatmap-productization.md) | 下一阶段实施顺序与验收标准 |
 | [docs/references/api.md](docs/references/api.md) | API 与 WebSocket 接口参考 |
 | [docs/references/data-model.md](docs/references/data-model.md) | 检测框、密度网格和存储模型 |
 | [docs/demo-script.md](docs/demo-script.md) | 演示操作说明 |

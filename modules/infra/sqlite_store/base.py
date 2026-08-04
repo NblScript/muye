@@ -354,11 +354,87 @@ CREATE TABLE IF NOT EXISTS mission_iterations (
   spray_completed_at DATETIME,
   inspected_at DATETIME,
   evaluated_at DATETIME,
+  heatmap_snapshot_id TEXT,
+  heatmap_algorithm_version TEXT,
+  spray_plan TEXT,
   notes TEXT,
-  UNIQUE(mission_id, iteration_number)
+  UNIQUE(mission_id, iteration_number),
+  FOREIGN KEY (heatmap_snapshot_id) REFERENCES heatmap_snapshots(snapshot_id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_mission_iter_mission_id
 ON mission_iterations(mission_id);
+
+CREATE TABLE IF NOT EXISTS inspection_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id TEXT UNIQUE NOT NULL,
+  request_id TEXT NOT NULL,
+  field_id TEXT,
+  mission_id TEXT,
+  iteration_number INTEGER NOT NULL DEFAULT 1,
+  inspection_kind TEXT NOT NULL
+    CHECK(inspection_kind IN ('pre_spray','reinspection')),
+  captured_at DATETIME NOT NULL,
+  image_paths TEXT NOT NULL,
+  source TEXT NOT NULL,
+  is_simulated INTEGER NOT NULL DEFAULT 0
+    CHECK(is_simulated IN (0, 1)),
+  created_at DATETIME NOT NULL,
+  UNIQUE(request_id, inspection_kind, iteration_number),
+  FOREIGN KEY (request_id) REFERENCES tasks(request_id) ON DELETE CASCADE,
+  FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_inspection_batches_request
+ON inspection_batches(request_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inspection_batches_field
+ON inspection_batches(field_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inspection_batches_mission
+ON inspection_batches(mission_id, iteration_number);
+
+CREATE TABLE IF NOT EXISTS inspection_detections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id TEXT NOT NULL,
+  image_path TEXT,
+  pest_type TEXT,
+  confidence REAL,
+  bbox TEXT,
+  created_at DATETIME NOT NULL,
+  FOREIGN KEY (batch_id) REFERENCES inspection_batches(batch_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inspection_detections_batch
+ON inspection_detections(batch_id, id);
+CREATE INDEX IF NOT EXISTS idx_inspection_detections_pest
+ON inspection_detections(pest_type);
+
+CREATE TABLE IF NOT EXISTS heatmap_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  snapshot_id TEXT UNIQUE NOT NULL,
+  batch_id TEXT UNIQUE NOT NULL,
+  request_id TEXT NOT NULL,
+  field_id TEXT,
+  mission_id TEXT,
+  iteration_number INTEGER NOT NULL DEFAULT 1,
+  inspection_kind TEXT NOT NULL
+    CHECK(inspection_kind IN ('pre_spray','reinspection')),
+  captured_at DATETIME NOT NULL,
+  algorithm_version TEXT NOT NULL,
+  density_grid TEXT NOT NULL,
+  density_metadata TEXT NOT NULL,
+  pest_counts TEXT NOT NULL,
+  total_detection_count INTEGER NOT NULL DEFAULT 0,
+  source TEXT NOT NULL,
+  is_simulated INTEGER NOT NULL DEFAULT 0
+    CHECK(is_simulated IN (0, 1)),
+  created_at DATETIME NOT NULL,
+  FOREIGN KEY (batch_id) REFERENCES inspection_batches(batch_id) ON DELETE CASCADE,
+  FOREIGN KEY (request_id) REFERENCES tasks(request_id) ON DELETE CASCADE,
+  FOREIGN KEY (mission_id) REFERENCES missions(mission_id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_heatmap_snapshots_request
+ON heatmap_snapshots(request_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_heatmap_snapshots_field
+ON heatmap_snapshots(field_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_heatmap_snapshots_mission
+ON heatmap_snapshots(mission_id, iteration_number);
 """
 
 from modules.infra.sqlite_store._private import utc_now_iso
@@ -489,6 +565,9 @@ class BaseMixin:
         self._ensure_table_column("tasks", "field_id", "TEXT")
         self._ensure_table_column("fields", "owner_user_id", "TEXT")
         self._ensure_table_column("crop_catalog", "water_demand_coefficient", "REAL")
+        self._ensure_table_column("mission_iterations", "heatmap_snapshot_id", "TEXT")
+        self._ensure_table_column("mission_iterations", "heatmap_algorithm_version", "TEXT")
+        self._ensure_table_column("mission_iterations", "spray_plan", "TEXT")
 
     _ALLOWED_TABLES = frozenset(
         {
@@ -500,6 +579,7 @@ class BaseMixin:
             "soil_records",
             "reference_data",
             "weather_history",
+            "mission_iterations",
         }
     )
 

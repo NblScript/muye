@@ -151,15 +151,27 @@ class MissionMixin:
         mission_id: str,
         iteration_number: int,
         spray_request_id: str | None = None,
+        heatmap_snapshot_id: str | None = None,
+        heatmap_algorithm_version: str | None = None,
+        spray_plan: dict[str, Any] | None = None,
     ) -> int:
         with self._lock:
             cursor = self._connection.execute(
                 """
                 INSERT INTO mission_iterations
-                  (mission_id, iteration_number, spray_request_id, status, created_at)
-                VALUES (?, ?, ?, 'pending', ?)
+                  (mission_id, iteration_number, spray_request_id, status, created_at,
+                   heatmap_snapshot_id, heatmap_algorithm_version, spray_plan)
+                VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
                 """,
-                (mission_id, iteration_number, spray_request_id, utc_now_iso()),
+                (
+                    mission_id,
+                    iteration_number,
+                    spray_request_id,
+                    utc_now_iso(),
+                    heatmap_snapshot_id,
+                    heatmap_algorithm_version,
+                    json.dumps(spray_plan or {}, ensure_ascii=False),
+                ),
             )
             self._connection.commit()
             return cursor.lastrowid
@@ -180,11 +192,14 @@ class MissionMixin:
             "spray_completed_at",
             "inspected_at",
             "evaluated_at",
+            "heatmap_snapshot_id",
+            "heatmap_algorithm_version",
+            "spray_plan",
             "notes",
         ):
             if key in kwargs:
                 val = kwargs[key]
-                if key == "captured_images" and isinstance(val, list):
+                if key in {"captured_images", "spray_plan"} and isinstance(val, (dict, list)):
                     val = json.dumps(val, ensure_ascii=False)
                 sets.append(f"{key} = ?")
                 values.append(val)
@@ -207,6 +222,7 @@ class MissionMixin:
         for row in rows:
             r = dict(row)
             r["captured_images"] = self._parse_json_value(r.get("captured_images"), default=[])
+            r["spray_plan"] = self._parse_json_value(r.get("spray_plan"), default={})
             results.append(r)
         return results
 
@@ -219,6 +235,7 @@ class MissionMixin:
             return None
         result = dict(row)
         result["captured_images"] = self._parse_json_value(result.get("captured_images"), default=[])
+        result["spray_plan"] = self._parse_json_value(result.get("spray_plan"), default={})
         return result
 
     def fetch_mission_with_iterations(self, mission_id: str) -> dict[str, Any] | None:
