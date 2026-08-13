@@ -1,0 +1,7 @@
+field_id,field_name,sample_date,depth_cm,ph,organic_matter_gkg,alkali_hydrolyzable_nitrogen_mgkg,available_phosphorus_mgkg,available_potassium_mgkg,moisture_percent,salinity_gkg,texture,source,notes
+henan-zz-001,郑州示范田1号,2025-03-18,20,6.8,18.6,92.4,24.8,128.5,22.1,0.9,壤土,henan_soil_records_seed,河南示例土壤检测 seed
+henan-kf-002,开封示范田1号,2025-03-19,20,7.3,14.2,78.6,18.4,116.2,19.8,1.1,砂壤土,henan_soil_records_seed,河南示例土壤检测 seed
+henan-xx-003,新乡示范田1号,2025-03-20,20,6.9,17.9,88.1,23.2,124.7,21.7,0.8,壤土,henan_soil_records_seed,河南示例土壤检测 seed
+henan-zmd-004,驻马店示范田1号,2025-03-21,20,6.6,16.8,84.3,21.5,120.9,23.4,1.0,黏壤土,henan_soil_records_seed,河南示例土壤检测 seed
+henan-ly-005,洛阳示范田1号,2025-03-22,20,7.1,15.7,81.9,19.6,118.1,20.2,0.7,壤土,henan_soil_records_seed,河南示例土壤检测 seed
+henan-ny-006,南阳示范田1号,2025-03-23,20,6.5,19.4,95.2,25.1,131.3,24.0,0.6,壤土,henan_soil_records_seed,河南示例土壤检测 seed

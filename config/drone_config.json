@@ -7,32 +7,328 @@
     "http_method": "GET"
   },
   "field": {
-    "name": "牧野示范田",
-    "weather_location": "上海",
+    "field_id": "px4-sitl-demo",
+    "name": "PX4 SITL 小麦作业田",
+    "area_mu": 10.0,
+    "soil_type": "作业地块",
+    "weather_location": "Zurich",
     "location": {
-      "city": "上海",
-      "latitude": 31.2304,
-      "longitude": 121.4737
+      "province": "Zurich",
+      "city": "Zurich",
+      "county": "SITL",
+      "latitude": 47.397742,
+      "longitude": 8.545594
     },
     "geofence": [
-      [121.4728, 31.2298],
-      [121.4746, 31.2298],
-      [121.4748, 31.2312],
-      [121.4729, 31.2314]
-    ]
+      [
+        8.545275,
+        47.397586
+      ],
+      [
+        8.545913,
+        47.397586
+      ],
+      [
+        8.545913,
+        47.397898
+      ],
+      [
+        8.545275,
+        47.397898
+      ]
+    ],
+    "explicit_route": [
+      [
+        8.54532,
+        47.397622
+      ],
+      [
+        8.545868,
+        47.397622
+      ],
+      [
+        8.545868,
+        47.397646
+      ],
+      [
+        8.54532,
+        47.397646
+      ],
+      [
+        8.54532,
+        47.39767
+      ],
+      [
+        8.545868,
+        47.39767
+      ],
+      [
+        8.545868,
+        47.397694
+      ],
+      [
+        8.54532,
+        47.397694
+      ],
+      [
+        8.54532,
+        47.397718
+      ],
+      [
+        8.545868,
+        47.397718
+      ],
+      [
+        8.545868,
+        47.397742
+      ],
+      [
+        8.54532,
+        47.397742
+      ],
+      [
+        8.54532,
+        47.397766
+      ],
+      [
+        8.545868,
+        47.397766
+      ],
+      [
+        8.545868,
+        47.39779
+      ],
+      [
+        8.54532,
+        47.39779
+      ],
+      [
+        8.54532,
+        47.397813
+      ],
+      [
+        8.545868,
+        47.397813
+      ],
+      [
+        8.545868,
+        47.397837
+      ],
+      [
+        8.54532,
+        47.397837
+      ],
+      [
+        8.54532,
+        47.397861
+      ],
+      [
+        8.545868,
+        47.397861
+      ]
+    ],
+    "crop_cycle": {
+      "crop_name": "小麦"
+    }
   },
   "flight_constraints": {
-    "altitude_range_m": [2.0, 8.0],
-    "speed_range_mps": [1.0, 6.0],
-    "spray_rate_range_lpm": [0.3, 3.0],
+    "altitude_range_m": [
+      2.0,
+      8.0
+    ],
+    "speed_range_mps": [
+      1.0,
+      6.0
+    ],
+    "spray_rate_range_lpm": [
+      0.3,
+      3.0
+    ],
     "max_safe_wind_speed_mps": 8.0
   },
   "network": {
     "client_ip": "127.0.0.1",
-    "ip_whitelist": ["127.0.0.1", "192.168.1.10"]
+    "ip_whitelist": [
+      "127.0.0.1",
+      "192.168.1.10"
+    ]
   },
   "execution": {
-    "simulate_only": true,
-    "request_timeout_seconds": 15
+    "backend": "px4",
+    "simulate_only": false,
+    "request_timeout_seconds": 15,
+    "takeoff_mode": "manual"
+  },
+  "dji_osdk": {
+    "execution_mode": "osdk_sim",
+    "connection_type": "serial",
+    "serial_port": "/dev/ttyACM0",
+    "baud_rate": 921600,
+    "app_id": "",
+    "app_key": "",
+    "connect_timeout_seconds": 30,
+    "mission_timeout_seconds": 300,
+    "drone_model": "Matrice 30T"
+  },
+  "px4": {
+    "system_address": "udpout://127.0.0.1:14580",
+    "connect_timeout_seconds": 30,
+    "mission_timeout_seconds": 300,
+    "arm_timeout_seconds": 45,
+    "arm_retries": 3,
+    "arm_retry_delay_seconds": 1.0,
+    "allow_force_arm": true,
+    "auto_arm": true,
+    "auto_start_mission": true,
+    "auto_start_on_spray": true,
+    "return_to_launch_after_mission": false,
+    "require_global_position": false,
+    "acceptance_radius_m": 1.0,
+    "execution_mode": "animated_demo",
+    "use_existing_mission": false,
+    "require_existing_mission": false,
+    "existing_mission_total_waypoints": 0,
+    "mission_takeoff_altitude_m": 2.0,
+    "mission_takeoff_before_start": false,
+    "mission_takeoff_timeout_seconds": 20.0,
+    "mission_takeoff_altitude_tolerance_m": 0.35,
+    "mission_emergency_max_altitude_m": 3.0,
+    "prefer_demo_field": true,
+    "demo_field": {
+      "field_id": "px4-sitl-demo",
+      "name": "PX4 SITL 小麦作业田",
+      "area_mu": 10.0,
+      "soil_type": "作业地块",
+      "weather_location": "Zurich",
+      "location": {
+        "province": "Zurich",
+        "city": "Zurich",
+        "county": "SITL",
+        "latitude": 47.397742,
+        "longitude": 8.545594
+      },
+      "geofence": [
+        [
+          8.545275,
+          47.397586
+        ],
+        [
+          8.545913,
+          47.397586
+        ],
+        [
+          8.545913,
+          47.397898
+        ],
+        [
+          8.545275,
+          47.397898
+        ]
+      ],
+      "explicit_route": [
+        [
+          8.54532,
+          47.397622
+        ],
+        [
+          8.545868,
+          47.397622
+        ],
+        [
+          8.545868,
+          47.397646
+        ],
+        [
+          8.54532,
+          47.397646
+        ],
+        [
+          8.54532,
+          47.39767
+        ],
+        [
+          8.545868,
+          47.39767
+        ],
+        [
+          8.545868,
+          47.397694
+        ],
+        [
+          8.54532,
+          47.397694
+        ],
+        [
+          8.54532,
+          47.397718
+        ],
+        [
+          8.545868,
+          47.397718
+        ],
+        [
+          8.545868,
+          47.397742
+        ],
+        [
+          8.54532,
+          47.397742
+        ],
+        [
+          8.54532,
+          47.397766
+        ],
+        [
+          8.545868,
+          47.397766
+        ],
+        [
+          8.545868,
+          47.39779
+        ],
+        [
+          8.54532,
+          47.39779
+        ],
+        [
+          8.54532,
+          47.397813
+        ],
+        [
+          8.545868,
+          47.397813
+        ],
+        [
+          8.545868,
+          47.397837
+        ],
+        [
+          8.54532,
+          47.397837
+        ],
+        [
+          8.54532,
+          47.397861
+        ],
+        [
+          8.545868,
+          47.397861
+        ]
+      ],
+      "presentation_profile": {
+        "target_speed_mps": 4.5,
+        "lane_spacing_m": 4.0,
+        "acceptance_radius_m": 0.15,
+        "waypoint_loiter_time_s": 0.0,
+        "fly_through": false,
+        "turn_mode": "in_place",
+        "turn_loiter_time_s": 0.8
+      },
+      "crop_cycle": {
+        "crop_name": "小麦"
+      }
+    },
+    "real_system_address": "udpin://0.0.0.0:14540",
+    "real_baud_rate": 57600
   }
 }

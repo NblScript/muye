@@ -1,0 +1,76 @@
+# RAG / LangChain 使用指南
+
+牧野系统的 RAG（检索增强生成）实现基于 LangChain + ChromaDB + Qwen Embeddings。
+
+## 架构
+
+```
+用户查询
+    │
+    ▼
+QwenEmbeddings (modules/decision/rag/embeddings.py)
+    │ 向量化
+    ▼
+ChromaDB 检索 (modules/decision/rag/vectorstore.py)
+    │ 相关文档
+    ▼
+DecisionRAGRetriever (modules/decision/rag/retriever.py)
+    │ 害虫感知过滤
+    ▼
+上下文注入 → Qwen API 决策（单 LLM 或多智能体会诊）
+```
+
+## 知识源
+
+1. **农药目录**：`data/seeds/henan/pesticide_catalog.json`
+2. **历史决策**：`data/muye.db` 中的 `decisions` 表
+3. **文档**：项目文档中的农业知识
+
+## 构建知识库
+
+```bash
+python scripts/build_rag_knowledge.py
+```
+
+该脚本：
+1. 从 SQLite 读取农药目录和历史决策
+2. 使用 QwenEmbeddings 生成向量
+3. 存储到 ChromaDB（`data/chroma_db/`）
+
+## 代码入口
+
+- `modules/decision/rag/vectorstore.py` — VectorStoreManager
+- `modules/decision/rag/retriever.py` — DecisionRAGRetriever
+- `modules/decision/rag/embeddings.py` — QwenEmbeddings
+- `modules/decision/rag/knowledge_loader.py` — 知识加载器
+
+## 降级策略
+
+RAG 检索失败时不阻断主流程：
+1. 发出 `rag_degraded` 事件
+2. 使用无上下文的 Qwen 决策
+3. 日志记录降级原因
+
+## 配置
+
+- Embedding 模型：通过 DashScope API（`DASHSCOPE_API_KEY`）
+- ChromaDB 路径：`data/chroma_db/`
+- 检索数量：默认 Top 5
+
+## 多智能体会诊模式
+
+启用后（`MUYE_MULTI_AGENT_ENABLED=true`），RAG 检索为每个专家角色提供不同角度的知识：
+
+| 专家角色 | LLM 提供商 | 模型 | 配置项 | RAG 检索重点 |
+|---------|-----------|------|--------|-------------|
+| 昆虫学家 | Qwen（千问） | `qwen-max-latest` | `QWEN_API_URL` / `QWEN_API_KEY` / `QWEN_MODEL` | 害虫生活习性、危害特征、繁殖规律 |
+| 农学家 | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_URL` / `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` | 作物状态、气象影响、综合防治策略 |
+| 植保专家 | Xiaomi Mimic | `mimo-v2.5-pro` | `XIAOMI_API_URL` / `XIAOMI_API_KEY` / `XIAOMI_MODEL` | 农药选择、用量计算、安全间隔期、禁忌 |
+
+`ExpertConsultation` 接收 `providers` 字典（每个角色对应 api_url/api_key/model），通过 `llm_provider` 字段路由到对应 LLM。系统提示词包含明确的 JSON 格式示例以规范输出。`_invoke_llm` 方法（原 `_invoke_qwen`）统一处理各提供商调用，`_normalize` 方法处理字段名别名和数组转对象。
+
+单 LLM 路径（Qwen）仍作为降级后备。
+
+代码位于 `modules/decision/agents/`：
+- `consultation.py` — 为每个角色调用 RAG 检索，通过 `providers` 字典并行调用 3 个不同 LLM
+- `expert_roles.py` — 定义每个角色的检索模板（`retrieval_query_template`）和 `llm_provider` 字段

@@ -1,0 +1,74 @@
+[
+  {
+    "source_id": "henan_stat_bulletin_2024",
+    "source_name": "2024年河南省国民经济和社会发展统计公报",
+    "publisher": "河南省统计局、国家统计局河南调查总队",
+    "region_scope": "河南省",
+    "source_type": "official_statistical_bulletin",
+    "source_url": "https://tjj.henan.gov.cn/2025/04-02/3143962.html",
+    "access_level": "public",
+    "retrieval_date": "2026-04-15",
+    "license": "",
+    "notes": "用于导入河南省 2024 年农业统计指标。"
+  },
+  {
+    "source_id": "henan_agricultural_census_2016_no1",
+    "source_name": "河南省第三次全国农业普查主要数据公报（第一号）",
+    "publisher": "河南省第三次全国农业普查领导小组办公室、河南省统计局",
+    "region_scope": "河南省",
+    "source_type": "official_agricultural_census_bulletin",
+    "source_url": "https://www.henan.gov.cn/2019/12-30/1150536.html",
+    "access_level": "public",
+    "retrieval_date": "2026-04-15",
+    "license": "",
+    "notes": "用于导入河南省农业普查基础统计指标。标准时点为 2016-12-31。"
+  },
+  {
+    "source_id": "cma_surf_cli_chn_mul_day_v3",
+    "source_name": "中国地面气候资料日值数据集（V3.0）",
+    "publisher": "国家气象信息中心 / 中国气象数据网",
+    "region_scope": "中国（可筛河南站点）",
+    "source_type": "official_weather_dataset",
+    "source_url": "https://m.data.cma.cn/data/detail/dataCode/SURF_CLI_CHN_MUL_DAY_V3.0.html",
+    "access_level": "registered",
+    "retrieval_date": "2026-04-15",
+    "license": "",
+    "notes": "后续用于导入河南站点历史天气日值数据。"
+  },
+  {
+    "source_id": "china_pesticide_info",
+    "source_name": "中国农药信息网",
+    "publisher": "农业农村部农药检定所",
+    "region_scope": "中国",
+    "source_type": "official_pesticide_registry",
+    "source_url": "https://www.chinapesticide.org.cn/",
+    "access_level": "public",
+    "retrieval_date": "2026-04-15",
+    "license": "",
+    "notes": "后续用于导入农药登记、适用作物和适用病虫害信息。"
+  },
+  {
+    "source_id": "henan_pesticide_catalog_seed",
+    "source_name": "河南农药目录示例 seed",
+    "publisher": "muye",
+    "region_scope": "河南省",
+    "source_type": "generated_seed",
+    "source_url": "local://data/seeds/henan/pesticide_catalog.json",
+    "access_level": "local",
+    "retrieval_date": "2026-04-16",
+    "license": "",
+    "notes": "用于本地联调和喷洒记录关联验证，后续应替换为官方登记导出数据。"
+  },
+  {
+    "source_id": "henan_soil_records_seed",
+    "source_name": "河南土壤检测示例 seed",
+    "publisher": "muye",
+    "region_scope": "河南省",
+    "source_type": "generated_seed",
+    "source_url": "local://data/seeds/henan/soil_records.csv",
+    "access_level": "local",
+    "retrieval_date": "2026-04-16",
+    "license": "",
+    "notes": "用于本地联调和土壤记录导入验证，后续应替换为真实检测数据。"
+  }
+]

@@ -1,0 +1,731 @@
+# API 参考
+
+> 牧野系统所有 HTTP API 端点。基础路径：`http://localhost:18000`
+
+## 健康检查
+
+### GET /live
+
+API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。适合反向代理、脚本和现场诊断先判断后端进程是否还活着。
+
+**响应**：
+```json
+{
+  "status": "ok"
+}
+```
+
+### GET /health
+
+系统健康状态检查（含 SQLite、数据目录、YOLO、AI、天气、事件流、RAG、PX4、运行配置等子检查）。任一子项 `error` 时整体返回 503。
+
+**响应**：
+```json
+{
+  "status": "ok",
+  "checks": {
+    "sqlite": {"status": "ok"},
+    "data_dir": {"status": "ok"},
+    "embedded_yolo": {"status": "ok", "detect_url": "http://127.0.0.1:8010/detect"},
+    "yolo_model": {"status": "ok", "active_model": "yolov8n", "model_exists": true, "device": "auto"},
+    "ai_config": {"status": "ok", "qwen_mode": "real", "providers": {"qwen": true, "deepseek": true, "xiaomi": true}},
+    "weather_config": {"status": "ok", "mode": "real"},
+    "event_bus": {"status": "ok", "path": "data/logs/events.jsonl"},
+    "pipeline_runtime": {"status": "skipped", "detail": "pipeline_ready_file_not_configured"},
+    "rag_config": {"status": "ok", "enabled": true},
+    "px4_runtime": {"status": "skipped", "running": false, "ready": false},
+    "runtime_config": {
+      "status": "ok",
+      "takeoff_mode": "manual",
+      "drone_backend": "px4",
+      "px4_execution_mode": "animated_demo",
+      "weather_mode": "mock",
+      "qwen_mode": "mock",
+      "rag_enabled": false,
+      "router_enabled": true,
+      "multi_agent_enabled": false,
+      "yolo_active_model": "yolov8n",
+      "yolo_device": "auto",
+      "yolo_mode": "real",
+      "yolo_is_simulated": false
+    }
+  },
+  "failures": []
+}
+```
+
+隔离容器冒烟模式下，`yolo_model` 和 `runtime_config` 会返回 `mode: "smoke_fake"` 与 `is_simulated: true`，同时 `model_exists` 仍为 `false`；该状态只表示集成测试服务就绪，不表示真实模型可用。
+
+### GET /slo
+
+获取 SLO 指标快照（API 成功率、管线完成率、WebSocket 稳定性、系统可用性）。
+
+## 检测模型管理
+
+> 以下端点在 YOLO API 服务上（端口 8010）
+
+### GET /models
+
+列出可用检测模型及当前激活模型。
+
+**响应**：
+```json
+{
+  "active_model": "yolov8n",
+  "models": [
+    {
+      "name": "yolov8n",
+      "path": "models/best.pt",
+      "device": "auto",
+      "description": "YOLOv8 默认模型",
+      "available": true,
+      "active": true
+    }
+  ]
+}
+```
+
+### POST /models/switch
+
+切换检测模型（运行时热切换，无需重启）。
+
+**请求**：
+```json
+{
+  "model_name": "yolov8s"
+}
+```
+
+**响应**：
+```json
+{
+  "model_name": "yolov8s",
+  "model_path": "/path/to/yolov8s.pt",
+  "device": "auto",
+  "description": "YOLOv8 小模型"
+}
+```
+
+## 工作流
+
+### GET /workflow/state
+
+获取当前工作流状态。
+
+**响应**：
+```json
+{
+  "current_step": "detection",
+  "steps": [
+    {"name": "upload", "status": "completed"},
+    {"name": "detection", "status": "in_progress"},
+    {"name": "weather", "status": "pending"},
+    {"name": "decision", "status": "pending"},
+    {"name": "drone", "status": "pending"}
+  ],
+  "request_id": "req_abc123"
+}
+```
+
+### GET /workflow/history
+
+获取工作流历史记录。
+
+**查询参数**：
+- `limit` (int, 可选): 返回条数，默认 20
+
+**响应**：
+```json
+{
+  "history": [
+    {
+      "request_id": "req_abc123",
+      "status": "completed",
+      "started_at": "2026-05-18T10:00:00Z",
+      "completed_at": "2026-05-18T10:05:00Z"
+    }
+  ]
+}
+```
+
+### POST /workflow/inspection-image
+
+上传一张巡检图片并写入工作流图片目录。前端通过 `/api/workflow/inspection-image` 访问同一端点。
+
+**请求**：`multipart/form-data`
+
+- `file`：扩展名为 `.jpg`、`.jpeg` 或 `.png` 的有效图片
+- 空文件、伪造图片内容、不支持的扩展名或超过服务端大小限制时返回 400
+
+**响应**：
+```json
+{
+  "filename": "20260803-201500-a1b2c3d4-field.jpg",
+  "path": "data/images/20260803-201500-a1b2c3d4-field.jpg"
+}
+```
+
+## 仪表盘
+
+### GET /dashboard/context
+
+获取仪表盘上下文数据（天气、最新决策、任务统计）。
+
+**响应**：
+```json
+{
+  "weather": {"temperature": 25, "humidity": 60, "desc": "晴"},
+  "latest_decision": {"pesticide": "吡虫啉", "dosage": "10ml/亩"},
+  "stats": {"total_tasks": 5, "completed": 4, "failed": 1}
+}
+```
+
+## 展示
+
+### POST /demo/upload-image
+
+上传害虫图片触发检测流程。
+
+**请求**：`multipart/form-data`
+- `file`: 图片文件（.jpg, .png, .bmp，< 10MB）
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "status": "processing"
+}
+```
+
+### POST /demo/reset-events
+
+重置事件流（清空 `data/logs/events.jsonl`）。需 `?confirm=true` 查询参数。
+
+**响应**：
+```json
+{
+  "status": "cleared"
+}
+```
+
+### GET /demo/readiness
+
+获取展示就绪状态（前端 DemoReadinessBar 使用）。
+
+**响应**：
+```json
+{
+  "ready": true,
+  "checks": {
+    "backend": {"status": "ok"},
+    "frontend": {"status": "ok"},
+    "demo_data": {"status": "ok"},
+    "px4": {"status": "ok", "running": true}
+  }
+}
+```
+
+## 任务
+
+### GET /tasks/{request_id}
+
+获取指定任务详情。
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "status": "completed",
+  "detections": [...],
+  "weather": {...},
+  "decision": {...},
+  "drone_mission": {...}
+}
+```
+
+### GET /tasks/{request_id}/original-image
+
+获取原始上传图片。
+
+### GET /tasks/{request_id}/annotated-image
+
+获取 YOLO 标注后的图片。
+
+### GET /tasks/{request_id}/report
+
+生成任务 Markdown 报告。包含地块信息、虫害检测、气象数据、合规推理链（五项检查 + 证据 + 执行策略）、AI 决策方案、会诊过程、无人机执行记录。
+
+**响应**：`text/markdown; charset=utf-8`
+
+## 仿真
+
+### GET /sim/map-state
+
+获取仿真地图状态（农田、无人机位置、轨迹）。
+
+**响应**：
+```json
+{
+  "field": {"points": [...]},
+  "drone": {"lat": 47.397, "lng": 8.545, "alt": 5, "battery": 85},
+  "trajectory": [{"lat": 47.397, "lng": 8.545}],
+  "mission": {"status": "in_progress", "progress": 0.6}
+}
+```
+
+### WebSocket /sim/ws/map-state
+
+实时仿真地图状态推送。
+
+### WebSocket /ws/enhanced-state
+
+增强状态推送（含 GPS 坐标、遥测数据、任务进度和聚合工作流）。浏览器通过 Vite 代理使用 `/api/ws/enhanced-state` 别名。
+
+**消息格式**：
+```json
+{
+  "timestamp": 1785768900.25,
+  "drone": {
+    "id": "px4-sitl",
+    "name": "PX4 SITL 飞行器",
+    "status": "spraying",
+    "message": "变量喷洒中",
+    "position": null,
+    "battery": {"remaining": 0.82},
+    "telemetry": {"speed": 4.2}
+  },
+  "mission": {
+    "task_id": "req_abc123",
+    "status": "spraying",
+    "progress": 62,
+    "current_waypoint": 4,
+    "total_waypoints": 12,
+    "planned_route": []
+  },
+  "trajectory": {"recent_points": [], "total_distance": 0.0},
+  "field": {"id": "field-01", "name": "虚拟试验田", "boundary": []},
+  "workflow_state": {
+    "source": "event_bus",
+    "event_count": 18,
+    "latest_task": {},
+    "recent_tasks": []
+  }
+}
+```
+
+如果某一轮工作流状态构建失败，连接不会中断，该帧的 `workflow_state` 为 `null`；消费者应保留上一帧有效工作流，而不是清空当前展示。
+
+## 无人机
+
+### POST /drone/confirm-takeoff
+
+确认无人机起飞（manual 模式下）。
+
+**响应**：
+```json
+{
+  "status": "confirmed",
+  "message": "Takeoff confirmed"
+}
+```
+
+### GET /drone/px4-status
+
+获取 PX4 SITL 运行状态。
+
+**响应**：
+```json
+{
+  "running": true,
+  "ready": true,
+  "pid": 12345
+}
+```
+
+### POST /drone/start-px4-demo
+
+启动 PX4 SITL 展示环境。
+
+**响应**：
+```json
+{
+  "status": "started",
+  "pid": 12345,
+  "world": "default",
+  "log": "/path/to/px4.log"
+}
+```
+
+### POST /drone/stop-px4-demo
+
+停止 PX4 SITL 展示环境。
+
+**响应**：
+```json
+{
+  "status": "stopped"
+}
+```
+
+### GET /drone/dji/status
+
+获取 DJI 无人机连接状态。
+
+**响应**：
+```json
+{
+  "backend": "dji_osdk",
+  "execution_mode": "osdk_sim",
+  "drone_model": "Matrice 30T",
+  "connected": false
+}
+```
+
+### GET /drone/dji/telemetry
+
+获取 DJI 无人机遥测数据（位置、电量、高度）。
+
+**响应**：
+```json
+{
+  "latitude": 34.7467,
+  "longitude": 113.6241,
+  "altitude": 0.0,
+  "battery_percent": 100.0,
+  "drone_model": "Matrice 30T",
+  "connected": false,
+  "mode": "osdk_sim"
+}
+```
+
+### POST /drone/dji/connect
+
+连接 DJI 后端。`osdk_sim` 会立即建立仿真连接；当前 `osdk_real` 尚未实现串口/OSDK 通信，也会记录警告后以仿真方式连接，不能据此判断真机已接入。
+
+**响应**：
+```json
+{
+  "status": "connected",
+  "backend": "dji_osdk",
+  "execution_mode": "osdk_sim",
+  "drone_model": "Matrice 30T",
+  "connected": true
+}
+```
+
+### POST /drone/dji/disconnect
+
+断开 DJI 无人机连接。
+
+**响应**：
+```json
+{
+  "status": "disconnected"
+}
+```
+
+### GET /drone/density-map?request_id={request_id}
+
+获取指定任务的昆虫相对热力图数据（变量喷洒路径优化）。`density` 是本次任务内按最大网格权重归一化的 0–1 相对值，不是绝对虫口密度。
+
+**查询参数**：
+- `request_id` (str): 任务请求 ID
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "grid_rows": 8,
+  "grid_cols": 10,
+  "cells": [
+    {"row": 0, "col": 0, "density": 0.0, "bounds": [[lon1, lat1], [lon2, lat2]]},
+    {"row": 0, "col": 1, "density": 0.35, "bounds": [[lon1, lat1], [lon2, lat2]]}
+  ],
+  "spray_schedule": [0.5, 1.0, 1.5, 1.5, 1.0, 0.5, 0.5, 1.0],
+  "metadata": {
+    "source": "yolo_bbox",
+    "density_kind": "relative_detection_weight",
+    "coordinate_space": "image_normalized",
+    "projection": "image_frame_to_geofence_bbox",
+    "normalization": "max_cell_weight",
+    "detection_count": 12,
+    "accepted_detection_count": 11,
+    "rejected_detection_count": 1,
+    "is_simulated": false
+  }
+}
+```
+
+`density` 是单次任务内的相对检测热值，不是绝对虫口密度。`metadata.is_simulated` 用于区分演示种子和真实 YOLO 检测；像素框必须携带原图宽高才能参与密度计算。
+
+**密度等级与喷洒速率**：
+- `density >= 0.6` → `base_rate × 1.5`（高密度区加量喷洒）
+- `density 0.3-0.6` → `base_rate × 1.0`（标准喷洒）
+- `density < 0.3` → `base_rate × 0.5`（低密度区减量喷洒）
+
+## 热力快照查询
+
+以下端点查询独立持久化的巡检热力快照。`/api/heatmaps/...` 是供前端使用的等价别名；OpenAPI 只展示无 `/api` 前缀的规范路径。
+
+列表与详情中的 `peak_relative_heat` 和 `hotspot_cell_count` 都基于单次快照的相对热值计算，热点阈值固定为 `0.7`，不得解释为绝对虫口密度或跨任务杀灭率。
+
+### GET /heatmaps/latest
+
+返回全局最新快照；传入 `field_id` 时只查询该地块。没有匹配快照时返回 404。
+
+**查询参数**：
+- `field_id` (str, 可选)：地块 ID
+
+### GET /heatmaps/snapshots
+
+分页查询持久化快照摘要。所有筛选条件可以组合使用：
+
+- `field_id`、`request_id`、`mission_id`：精确关联筛选
+- `pest_type`：虫种精确筛选，英文大小写不敏感；未知虫种返回空列表
+- `source`：来源筛选，英文大小写不敏感，例如 `yolo_bbox`、`demo_seed`
+- `is_simulated`：`true` 或 `false`
+- `inspection_kind`：`pre_spray` 或 `reinspection`
+- `captured_from`、`captured_to`：ISO 8601 时间；起始时间晚于结束时间返回 422
+- `limit`：1–100，默认 50
+- `offset`：非负整数，默认 0
+
+**响应**：
+```json
+{
+  "total": 1,
+  "limit": 50,
+  "offset": 0,
+  "items": [
+    {
+      "snapshot_id": "heatmap:req_abc123:pre_spray:1",
+      "request_id": "req_abc123",
+      "field_id": "field_001",
+      "inspection_kind": "pre_spray",
+      "iteration_number": 1,
+      "captured_at": "2026-08-04T08:00:00+00:00",
+      "algorithm_version": "relative-bbox-grid-v1",
+      "pest_counts": {"aphid": 4},
+      "total_detection_count": 4,
+      "hotspot_cell_count": 2,
+      "peak_relative_heat": 1.0,
+      "source": "yolo_bbox",
+      "is_simulated": false,
+      "legacy": false
+    }
+  ]
+}
+```
+
+### GET /heatmaps/snapshots/{snapshot_id}
+
+返回单个快照的完整 `density_grid`、`density_metadata`、图片引用和逐项检测结果。不存在时返回 404。
+
+旧任务可以使用 `legacy:{request_id}` 作为详情 ID。服务端会从历史任务和无人机指令只读转换，返回 `legacy=true`、`algorithm_version=legacy-unversioned`，不会向新表写入记录。旧任务不进入持久化快照列表。
+
+### GET /heatmaps/comparison/{request_id}
+
+将一次任务的喷洒前快照与指定轮次复检快照配对。`iteration_number` 可选；不传时使用最新复检轮次。
+
+若两侧齐全，`status=paired` 并返回检测数、热点网格数和峰值相对热值的差值；复检尚未产生时返回 `status=pending_reinspection`，而不是伪造对比结果。两侧均不存在时返回 404。
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "mission_id": "mission_abc123",
+  "iteration_number": 1,
+  "status": "paired",
+  "pre_spray": {"snapshot_id": "heatmap:req_abc123:pre_spray:1"},
+  "reinspection": {"snapshot_id": "heatmap:req_abc123:reinspection:1"},
+  "metrics": {
+    "detection_count_change": -3,
+    "hotspot_cell_count_change": -2,
+    "peak_relative_heat_change": -0.4
+  }
+}
+```
+
+## 效果评估
+
+### GET /api/evaluation/{request_id}
+
+获取指定任务的效果评估记录。
+
+**响应**：
+```json
+{
+  "request_id": "req_abc123",
+  "status": "scheduled",
+  "estimated_action_time": "2026-05-27T14:00:00Z",
+  "scheduled_at": "2026-05-27T12:00:00Z",
+  "reinspection_at": null,
+  "effectiveness_score": null,
+  "pest_count_before": 5,
+  "pest_count_after": null,
+  "verdict": null,
+  "cancelled_at": null
+}
+```
+
+### GET /api/evaluations
+
+获取所有效果评估记录列表。
+
+**查询参数**：
+- `status` (str, 可选): 按状态过滤（scheduled/inspecting/evaluated/retry_scheduled/passed/cancelled）
+- `limit` (int, 可选): 返回条数，默认 50
+
+**响应**：
+```json
+{
+  "evaluations": [
+    {
+      "request_id": "req_abc123",
+      "status": "evaluated",
+      "effectiveness_score": 0.8,
+      "verdict": "effective"
+    }
+  ]
+}
+```
+
+### POST /api/evaluation/{request_id}/cancel
+
+取消指定任务的待执行效果评估（仅 scheduled 状态可取消）。
+
+**响应**：
+```json
+{
+  "status": "cancelled",
+  "message": "Evaluation cancelled"
+}
+```
+
+## 任务闭环
+
+### GET /api/mission/by-request/{request_id}
+
+通过原始请求 ID 获取任务闭环详情（含所有迭代记录）。
+
+**响应**：`MissionDetailResponse`
+```json
+{
+  "mission_id": "mission_abc123",
+  "original_request_id": "req_abc123",
+  "field_id": "field_001",
+  "status": "completed",
+  "kill_rate_threshold": 0.9,
+  "max_iterations": 3,
+  "current_iteration": 2,
+  "final_kill_rate": 0.95,
+  "total_pre_pest_count": 12,
+  "total_post_pest_count": 1,
+  "pest_types": ["蚜虫", "红蜘蛛"],
+  "pesticide_name": "吡虫啉",
+  "crop_name": "小麦",
+  "created_at": "2026-05-27T10:00:00Z",
+  "completed_at": "2026-05-27T11:30:00Z",
+  "notes": null,
+  "iterations": [
+    {
+      "iteration_number": 1,
+      "status": "passed",
+      "pre_pest_count": 12,
+      "post_pest_count": 2,
+      "kill_rate": 0.83,
+      "created_at": "2026-05-27T10:00:00Z",
+      "spray_completed_at": "2026-05-27T10:20:00Z",
+      "inspected_at": "2026-05-27T10:40:00Z",
+      "evaluated_at": "2026-05-27T10:45:00Z",
+      "notes": null
+    },
+    {
+      "iteration_number": 2,
+      "status": "passed",
+      "pre_pest_count": 2,
+      "post_pest_count": 1,
+      "kill_rate": 0.95,
+      "created_at": "2026-05-27T10:45:00Z",
+      "spray_completed_at": "2026-05-27T11:00:00Z",
+      "inspected_at": "2026-05-27T11:15:00Z",
+      "evaluated_at": "2026-05-27T11:20:00Z",
+      "notes": null
+    }
+  ]
+}
+```
+
+### GET /api/mission/{mission_uuid}
+
+通过任务闭环 UUID 获取任务闭环详情（含所有迭代记录）。
+
+**响应**：`MissionDetailResponse`（同上）
+
+### GET /api/missions
+
+获取任务闭环列表，支持按状态过滤和分页。
+
+**查询参数**：
+- `status` (str, 可选): 按状态过滤（active/completed/failed/cancelled）
+- `limit` (int, 可选): 返回条数，默认 50
+- `offset` (int, 可选): 偏移量，默认 0
+
+**响应**：`MissionListResponse`
+```json
+{
+  "missions": [
+    {
+      "mission_id": "mission_abc123",
+      "original_request_id": "req_abc123",
+      "field_id": "field_001",
+      "status": "completed",
+      "current_iteration": 2,
+      "max_iterations": 3,
+      "final_kill_rate": 0.95,
+      "pesticide_name": "吡虫啉",
+      "crop_name": "小麦",
+      "created_at": "2026-05-27T10:00:00Z",
+      "completed_at": "2026-05-27T11:30:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### POST /api/mission/{mission_uuid}/cancel
+
+取消正在执行的任务闭环（仅 active 状态可取消）。
+
+**响应**：
+```json
+{
+  "status": "cancelled",
+  "message": "Mission cancelled"
+}
+```
+
+### 响应 Schema 说明
+
+**MissionIterationResult**：单次喷洒-复检迭代的完整记录。除迭代序号、状态、喷洒前后害虫计数、杀灭率和时间戳外，还返回 `heatmap_snapshot_id`、`heatmap_algorithm_version` 与 `spray_plan`。`spray_plan` 中的 `planning_mode`、`spray_rate_policy` 和可选 `degradation_reason` 用于解释该轮航线采用的热力输入、0.5/1.0/1.5 倍喷洒分档或均匀喷洒降级原因。
+
+**MissionDetailResponse**：任务闭环的完整视图。包含任务元信息（地块、作物、农药、阈值配置）、汇总统计（总害虫数、最终杀灭率）以及 `iterations` 数组（所有 `MissionIterationResult` 迭代记录，按迭代序号排列）。
+
+## SLO 监控
+
+### GET /slo
+
+获取 SLO 指标快照（API 成功率、管线完成率、WebSocket 稳定性、系统可用性）。
+
+**响应**：
+```json
+{
+  "api_success_rate": {"current": 1.0, "target": 0.99},
+  "pipeline_completion_rate": {"current": 1.0, "target": 0.95},
+  "websocket_stability": {"current": 1.0, "target": 0.99},
+  "system_availability": {"current": 1.0, "target": 0.999},
+  "window_seconds": 60,
+  "timestamp": "2026-05-26T10:00:00Z"
+}
+```

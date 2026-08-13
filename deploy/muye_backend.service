@@ -1,0 +1,27 @@
+[Unit]
+Description=Muye FastAPI Backend
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/muye/backend
+EnvironmentFile=/var/www/muye/backend/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/var/www/muye/backend
+Environment=PATH=/var/www/muye/backend/.venv/bin:/usr/bin:/bin
+# Deployment note:
+#   mkdir -p /var/www/muye/backend/data
+#   chown -R www-data:www-data /var/www/muye/backend/data
+ExecStart=/var/www/muye/backend/.venv/bin/uvicorn app.main:api_app --host 127.0.0.1 --port 8000 --proxy-headers
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGINT
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

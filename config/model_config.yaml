@@ -1,0 +1,14 @@
+# 决策模型配置
+# 专家角色 → LLM 提供商映射
+# 可选值：qwen, deepseek, xiaomi（需在 .env 中配置对应 API KEY）
+
+expert_providers:
+  entomologist: qwen        # 昆虫学家
+  agronomist: deepseek      # 农学家
+  pesticide_specialist: xiaomi  # 植保专家
+
+# 可选：覆盖默认模型名（取消注释并修改即可）
+# model_overrides:
+#   qwen: qwen-max-latest
+#   deepseek: deepseek-chat
+#   xiaomi: mimo-v2.5-pro

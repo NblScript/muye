@@ -1,0 +1,380 @@
+[
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "grain_sown_area_kha",
+    "indicator_name": "粮食播种面积",
+    "value": 10777.13,
+    "unit": "千公顷",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "全年全省粮食播种面积10777.13千公顷。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "wheat_sown_area_kha",
+    "indicator_name": "小麦播种面积",
+    "value": 5675.38,
+    "unit": "千公顷",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "其中小麦播种面积5675.38千公顷。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "corn_sown_area_kha",
+    "indicator_name": "玉米播种面积",
+    "value": 3866.62,
+    "unit": "千公顷",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "玉米播种面积3866.62千公顷。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "oil_crops_sown_area_kha",
+    "indicator_name": "油料播种面积",
+    "value": 1628.19,
+    "unit": "千公顷",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "油料播种面积1628.19千公顷。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "peanut_sown_area_kha",
+    "indicator_name": "花生播种面积",
+    "value": 1318.41,
+    "unit": "千公顷",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "其中花生播种面积1318.41千公顷。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "vegetable_sown_area_kha",
+    "indicator_name": "蔬菜播种面积",
+    "value": 1829.75,
+    "unit": "千公顷",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "蔬菜播种面积1829.75千公顷。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "grain_output_10k_tons",
+    "indicator_name": "粮食产量",
+    "value": 6719.37,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "全年全省粮食产量6719.37万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "summer_grain_output_10k_tons",
+    "indicator_name": "夏粮产量",
+    "value": 3785.70,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "其中，夏粮产量3785.70万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "autumn_grain_output_10k_tons",
+    "indicator_name": "秋粮产量",
+    "value": 2933.67,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "秋粮产量2933.67万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "wheat_output_10k_tons",
+    "indicator_name": "小麦产量",
+    "value": 3785.31,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "小麦产量3785.31万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "corn_output_10k_tons",
+    "indicator_name": "玉米产量",
+    "value": 2238.63,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "玉米产量2238.63万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "oil_output_10k_tons",
+    "indicator_name": "油料产量",
+    "value": 704.87,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "全年全省油料产量704.87万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "peanut_output_10k_tons",
+    "indicator_name": "花生产量",
+    "value": 638.22,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "其中花生产量638.22万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "meat_output_10k_tons",
+    "indicator_name": "猪牛羊禽肉产量",
+    "value": 688.21,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "全年全省猪牛羊禽肉产量688.21万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "egg_output_10k_tons",
+    "indicator_name": "禽蛋产量",
+    "value": 418.25,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "禽蛋产量418.25万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2024,
+    "period": "annual",
+    "indicator_code": "milk_output_10k_tons",
+    "indicator_name": "牛奶产量",
+    "value": 230.35,
+    "unit": "万吨",
+    "source_id": "henan_stat_bulletin_2024",
+    "source_excerpt": "牛奶产量230.35万吨。",
+    "raw_payload": {
+      "section": "二、农业"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2016,
+    "period": "census",
+    "indicator_code": "registered_farm_households_10k",
+    "indicator_name": "登记农户数量",
+    "value": 1962.75,
+    "unit": "万户",
+    "source_id": "henan_agricultural_census_2016_no1",
+    "source_excerpt": "登记了1962.75万个农户。",
+    "raw_payload": {
+      "section": "农业农村农民基本情况"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2016,
+    "period": "census",
+    "indicator_code": "villages_count",
+    "indicator_name": "普查村数量",
+    "value": 48700,
+    "unit": "个",
+    "source_id": "henan_agricultural_census_2016_no1",
+    "source_excerpt": "登记了4.87万个村。",
+    "raw_payload": {
+      "section": "农业农村农民基本情况"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2016,
+    "period": "census",
+    "indicator_code": "townships_count",
+    "indicator_name": "普查乡镇数量",
+    "value": 1822,
+    "unit": "个",
+    "source_id": "henan_agricultural_census_2016_no1",
+    "source_excerpt": "登记了1822个乡镇。",
+    "raw_payload": {
+      "section": "农业农村农民基本情况"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2016,
+    "period": "census",
+    "indicator_code": "agricultural_business_units_10k",
+    "indicator_name": "农业经营单位数量",
+    "value": 12.42,
+    "unit": "万个",
+    "source_id": "henan_agricultural_census_2016_no1",
+    "source_excerpt": "登记了12.42万个农业经营单位。",
+    "raw_payload": {
+      "section": "农业农村农民基本情况"
+    }
+  },
+  {
+    "region_level": "province",
+    "region_name": "河南省",
+    "province": "河南省",
+    "city": null,
+    "county": null,
+    "year": 2016,
+    "period": "census",
+    "indicator_code": "remote_sensing_records_10k",
+    "indicator_name": "遥感与样方数据记录量",
+    "value": 112.0,
+    "unit": "万笔",
+    "source_id": "henan_agricultural_census_2016_no1",
+    "source_excerpt": "取得了112万笔数据。",
+    "raw_payload": {
+      "section": "农业农村农民基本情况"
+    }
+  }
+]

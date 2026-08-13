@@ -7,6 +7,9 @@ __pycache__/
 
 # Local secrets
 /config/api_keys.env
+.env.demo
+.env.dev
+.env.production
 
 # Local model artifacts
 /models/*.pt
@@ -14,11 +17,27 @@ __pycache__/
 /models/*.engine
 
 # Runtime data
+/data/eval/latest_report.md
 /data/images/*
 !/data/images/.gitkeep
 /data/logs/*
 !/data/logs/.gitkeep
+/data/*.db
+/data/*.db-wal
+/data/*.db-shm
+/data/chroma_db/
+/data/runtime/smoke/
+/data/runtime/px4.pid
+/data/runtime/pipeline-worker.log
+/data/runtime/takeoff/
 
 # Streamlit / editor noise
 .streamlit/
 .DS_Store
+.claude/
+.claude-plugin/
+CLAUDE.md
+
+# Node
+node_modules/
+.vite/

@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from modules.weather_integration import WeatherClient, WeatherIntegrationError
+from modules.infra.weather import WeatherClient, WeatherIntegrationError
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,7 @@ async def test_weather_client_uses_mock_payload_when_enabled() -> None:
     )
     try:
         result = await client.fetch_current_weather(
-            location_query="上海",
+            location_query="郑州",
             request_id="req-weather-mock-1",
         )
     finally:
@@ -45,18 +45,18 @@ async def test_weather_client_uses_mock_payload_when_enabled() -> None:
 async def test_weather_client_fetches_qweather_in_two_steps() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/v2/city/lookup"):
-            assert request.url.params["location"] == "上海"
+            assert request.url.params["location"] == "郑州"
             assert request.url.params["key"] == "weather-key"
             return httpx.Response(
                 200,
                 json={
                     "code": "200",
-                    "location": [{"id": "101020100", "name": "上海"}],
+                    "location": [{"id": "101180101", "name": "郑州"}],
                 },
             )
 
         if request.url.path.endswith("/v7/weather/now"):
-            assert request.url.params["location"] == "101020100"
+            assert request.url.params["location"] == "101180101"
             assert request.url.params["key"] == "weather-key"
             return httpx.Response(
                 200,
@@ -82,7 +82,7 @@ async def test_weather_client_fetches_qweather_in_two_steps() -> None:
     )
     try:
         result = await client.fetch_current_weather(
-            location_query="上海",
+            location_query="郑州",
             request_id="req-weather-1",
         )
     finally:
@@ -128,7 +128,7 @@ async def test_weather_client_rejects_invalid_qweather_humidity() -> None:
                 200,
                 json={
                     "code": "200",
-                    "location": [{"id": "101020100", "name": "上海"}],
+                    "location": [{"id": "101180101", "name": "郑州"}],
                 },
             )
         return httpx.Response(
@@ -154,7 +154,7 @@ async def test_weather_client_rejects_invalid_qweather_humidity() -> None:
     try:
         with pytest.raises(WeatherIntegrationError):
             await client.fetch_current_weather(
-                location_query="上海",
+                location_query="郑州",
                 request_id="req-weather-3",
             )
     finally:

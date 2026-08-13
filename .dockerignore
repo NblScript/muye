@@ -1,0 +1,46 @@
+# Version control
+.git
+.gitignore
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+
+# Node
+frontend/node_modules
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Test / CI
+tests
+.github
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Secrets (never include these!)
+config/api_keys.env
+
+# Local model weights (too large)
+models/*.pt
+models/*.onnx
+models/*.engine
+
+# Runtime data (mounted as volume)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/chroma_db
+data/images/*
+!data/images/.gitkeep
+data/logs/*
+!data/logs/.gitkeep

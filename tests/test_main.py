@@ -1,30 +1,1991 @@
 from __future__ import annotations
 
+import asyncio
+import io
+import json
 import os
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock
 
-from main import MuyeApplication, _build_local_yolo_urls, _resolve_loopback_host
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
+from PIL import Image
+import pytest
+
+# Import main module for MuyeApplication and parse_args
+import app.main as main_module
+from app.main import MuyeApplication, parse_args
+
+# Import route handlers
+from app.routes.workflow import get_workflow_history, get_workflow_state
+from app.routes.demo import upload_demo_image, reset_demo_events, MAX_UPLOAD_BYTES
+from app.routes.drone import confirm_drone_takeoff
+from app.routes.health import api_health, api_live, check_sqlite_health, check_data_dir_health, check_embedded_yolo_health, collect_health_status
+from app.routes.tasks import get_task_annotated_image, get_task_original_image, annotate_image
+from app.routes.sim import get_sim_map_state
+from app.routes.dashboard import get_dashboard_context
+
+# Import services
+import app.services.workflow_service as workflow_service
+import app.routes.health as health_routes
+import app.routes.demo as demo_routes
+import app.routes.sim as sim_routes
+import app.routes.tasks as tasks_routes
+from app.services.telemetry_service import TelemetryService
+import modules.infra.event_bus as event_bus
+from app.config import build_local_yolo_urls, resolve_loopback_host
+from app.config_types import MuyeConfig
+from modules.infra.common import CONFIG_DIR, load_json
+
+# Import models
+from fastapi import WebSocketDisconnect
+from models.schemas import HistoryTaskEntry, SimMapStateResponse, WorkflowHistoryResponse
+
+
+async def _fake_ensure_px4_ready() -> dict[str, object]:
+    return {"status": "ready", "ready": True}
 
 
 def test_resolve_loopback_host() -> None:
-    assert _resolve_loopback_host("0.0.0.0") == "127.0.0.1"
-    assert _resolve_loopback_host("::") == "127.0.0.1"
-    assert _resolve_loopback_host("192.168.1.20") == "192.168.1.20"
+    assert resolve_loopback_host("0.0.0.0") == "127.0.0.1"
+    assert resolve_loopback_host("::") == "127.0.0.1"
+    assert resolve_loopback_host("192.168.1.20") == "192.168.1.20"
+
+
+def test_muye_config_defaults() -> None:
+    """Test that MuyeConfig has sensible defaults."""
+    config = MuyeConfig()
+    assert config.client_ip == "127.0.0.1"
+    assert config.yolo_api_url == "http://127.0.0.1:8010/detect"
+    assert config.qwen_model == "qwen-max"
+    assert config.qwen_use_mock is False
+    assert config.rag_enabled is True
+
+
+def test_muye_config_from_env_reads_environment_variables(monkeypatch, tmp_path) -> None:
+    """Test that MuyeConfig.from_env reads environment variables correctly."""
+    monkeypatch.setenv("QWEN_USE_MOCK", "true")
+    monkeypatch.setenv("QWEN_MODEL", "qwen-plus")
+    monkeypatch.setenv("QWEATHER_USE_MOCK", "true")
+    monkeypatch.setenv("YOLO_API_URL", "http://custom:9000/detect")
+    monkeypatch.setenv("MUYE_SQLITE_PATH", str(tmp_path / "custom.db"))
+
+    config = MuyeConfig.from_env()
+
+    assert config.qwen_use_mock is True
+    assert config.qwen_model == "qwen-plus"
+    assert config.qweather_use_mock is True
+    assert config.yolo_api_url == "http://custom:9000/detect"
+    assert config.sqlite_path == tmp_path / "custom.db"
+
+
+def test_muye_config_can_be_constructed_directly(tmp_path) -> None:
+    """Test that MuyeConfig can be constructed directly for testing."""
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "test.db",
+        qwen_use_mock=True,
+        qwen_api_key="test-key",
+        drone_backend="px4",
+        px4_system_address="udp://0.0.0.0:14540",
+    )
+
+    assert config.sqlite_path == tmp_path / "test.db"
+    assert config.qwen_use_mock is True
+    assert config.qwen_api_key == "test-key"
+    assert config.drone_backend == "px4"
+    assert config.px4_system_address == "udp://0.0.0.0:14540"
+
+
+def test_muye_config_reads_px4_auto_start_on_spray(monkeypatch) -> None:
+    monkeypatch.setenv("PX4_AUTO_START_ON_SPRAY", "false")
+
+    config = MuyeConfig.from_env({"px4": {"auto_start_on_spray": True}})
+
+    assert config.px4_auto_start_on_spray is False
+
+
+def test_muye_config_reads_px4_arm_controls(monkeypatch) -> None:
+    monkeypatch.setenv("PX4_ARM_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("PX4_ARM_RETRIES", "2")
+    monkeypatch.setenv("PX4_ARM_RETRY_DELAY_SECONDS", "0.5")
+    monkeypatch.setenv("PX4_ALLOW_FORCE_ARM", "true")
+
+    config = MuyeConfig.from_env()
+
+    assert config.px4_arm_timeout_seconds == 45
+    assert config.px4_arm_retries == 2
+    assert config.px4_arm_retry_delay_seconds == 0.5
+    assert config.px4_allow_force_arm is True
 
 
 def test_build_local_yolo_urls() -> None:
-    detect_url, health_url = _build_local_yolo_urls("0.0.0.0", 8010)
+    detect_url, health_url = build_local_yolo_urls("0.0.0.0", 8010)
 
     assert detect_url == "http://127.0.0.1:8010/detect"
     assert health_url == "http://127.0.0.1:8010/health"
 
 
-def test_main_reads_qwen_mock_flag(monkeypatch) -> None:
+def test_sim_map_state_route_returns_expected_shape() -> None:
+    payload = asyncio.run(get_sim_map_state()).model_dump()
+
+    assert "timestamp" in payload
+    assert len(payload["drones"]) == 1
+    assert payload["drones"][0]["status"] in {"作业中", "返航"}
+    assert {"x", "y"} <= set(payload["drones"][0]["position"].keys())
+    assert len(payload["drones"][0]["route"]) >= 2
+
+
+def test_sim_map_state_ws_keeps_legacy_simulation_shape(monkeypatch) -> None:
+    class FakeSimulator:
+        def snapshot(self) -> SimMapStateResponse:
+            return SimMapStateResponse(
+                timestamp=123.0,
+                drones=[
+                    {
+                        "id": "drone-1",
+                        "name": "测试无人机",
+                        "status": "作业中",
+                        "battery": 88,
+                        "position": {"x": 12, "y": 34},
+                        "route": [{"x": 12, "y": 34}, {"x": 56, "y": 78}],
+                    }
+                ],
+            )
+
+    class FakeWebSocket:
+        def __init__(self) -> None:
+            self.accepted = False
+            self.payloads: list[dict[str, object]] = []
+
+        async def accept(self) -> None:
+            self.accepted = True
+
+        async def send_json(self, payload: dict[str, object]) -> None:
+            self.payloads.append(payload)
+            raise WebSocketDisconnect()
+
+    def raise_workflow_error() -> None:
+        raise RuntimeError("workflow exploded")
+
+    websocket = FakeWebSocket()
+    monkeypatch.setattr(sim_routes, "_simulator", FakeSimulator())
+    monkeypatch.setattr(sim_routes.workflow_service, "build_workflow_state_response", raise_workflow_error)
+
+    asyncio.run(sim_routes.sim_map_state_ws(websocket))
+
+    assert websocket.accepted is True
+    assert len(websocket.payloads) == 1
+    assert websocket.payloads[0]["timestamp"] == 123.0
+    assert "drones" in websocket.payloads[0]
+    assert "drone" not in websocket.payloads[0]
+    assert websocket.payloads[0]["drones"][0]["position"] == {"x": 12.0, "y": 34.0}
+
+
+def test_enhanced_state_ws_keeps_stream_alive_when_workflow_state_build_fails(monkeypatch) -> None:
+    class FakeWebSocket:
+        def __init__(self) -> None:
+            self.accepted = False
+            self.payloads: list[dict[str, object]] = []
+
+        async def accept(self) -> None:
+            self.accepted = True
+
+        async def send_json(self, payload: dict[str, object]) -> None:
+            self.payloads.append(payload)
+            raise WebSocketDisconnect()
+
+    def raise_workflow_error() -> None:
+        raise RuntimeError("workflow exploded")
+
+    websocket = FakeWebSocket()
+    monkeypatch.setattr(sim_routes, "get_telemetry_service", TelemetryService)
+    monkeypatch.setattr(sim_routes.workflow_service, "build_workflow_state_response", raise_workflow_error)
+
+    asyncio.run(sim_routes.enhanced_state_ws(websocket))
+
+    assert websocket.accepted is True
+    assert len(websocket.payloads) == 1
+    assert websocket.payloads[0]["drone"]["status"] == "connecting"
+    assert websocket.payloads[0]["mission"]["status"] == "unknown"
+    assert websocket.payloads[0]["trajectory"] == {"recent_points": [], "total_distance": 0.0}
+    assert websocket.payloads[0]["workflow_state"] is None
+
+
+def test_dashboard_context_route_returns_current_modes(monkeypatch) -> None:
+    monkeypatch.setenv("QWEATHER_USE_MOCK", "true")
     monkeypatch.setenv("QWEN_USE_MOCK", "true")
-    app = MuyeApplication()
+    monkeypatch.setenv("DRONE_BACKEND", "px4")
+
+    payload = asyncio.run(get_dashboard_context()).model_dump()
+    assert payload["modes"] == {
+        "yolo": "real",
+        "weather": "mock",
+        "qwen": "mock",
+        "drone": "px4",
+    }
+    assert payload["upload_accept"] == ["jpg", "jpeg", "png"]
+
+
+def test_workflow_history_route_uses_query_parameters(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_build_history_response(*, limit: int, status: str | None, search: str | None) -> WorkflowHistoryResponse:
+        captured["limit"] = limit
+        captured["status"] = status
+        captured["search"] = search
+        return WorkflowHistoryResponse(
+            total=1,
+            items=[
+                HistoryTaskEntry(
+                    request_id="req-history-1",
+                    current_stage="decision",
+                    status="completed",
+                    message="历史任务",
+                    updated_at="2026-04-17T12:00:00Z",
+                    image_path="/tmp/sample.jpg",
+                    field={"field_name": "郑州示范田 1 号"},
+                    detections=[{"pest_type": "aphid", "confidence": 0.9}],
+                    weather={"summary": "多云"},
+                    spray_summary={"spray_area_mu": 18},
+                    decision={"用药": {"农药名称": "吡虫啉"}},
+                    drone={"task_id": "px4-1"},
+                    error=None,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(workflow_service, "build_history_response", fake_build_history_response)
+
+    payload = asyncio.run(
+        get_workflow_history(
+            limit=5,
+            status="completed",
+            search="aphid",
+        )
+    ).model_dump()
+
+    assert captured == {
+        "limit": 5,
+        "status": "completed",
+        "search": "aphid",
+    }
+    assert payload["total"] == 1
+    assert payload["items"][0]["request_id"] == "req-history-1"
+    assert payload["items"][0]["decision"]["用药"]["农药名称"] == "吡虫啉"
+
+
+def test_build_fallback_workflow_state_uses_px4_demo_field() -> None:
+    drone_config = load_json(CONFIG_DIR / "drone_config.json")
+    demo_field = drone_config["px4"]["demo_field"]
+
+    payload = workflow_service.build_fallback_workflow_state().model_dump()
+    latest_task = payload["latest_task"]
+
+    assert latest_task["field"]["field_id"] == demo_field["field_id"]
+    assert latest_task["field"]["field_name"] == demo_field["name"]
+    assert latest_task["field"]["geofence"] == demo_field["geofence"]
+    assert latest_task["field"]["crop_cycle"] == demo_field["crop_cycle"]
+    assert latest_task["drone"]["instruction"]["飞行路径"] == demo_field["explicit_route"]
+    assert latest_task["drone"]["instruction"]["覆盖区域"]["coordinates"] == demo_field["geofence"]
+
+
+def test_default_field_matches_px4_demo_field() -> None:
+    drone_config = load_json(CONFIG_DIR / "drone_config.json")
+
+    assert drone_config["field"]["field_id"] == drone_config["px4"]["demo_field"]["field_id"]
+    assert drone_config["field"]["name"] == drone_config["px4"]["demo_field"]["name"]
+    assert drone_config["field"]["area_mu"] == drone_config["px4"]["demo_field"]["area_mu"]
+    assert drone_config["field"]["location"] == drone_config["px4"]["demo_field"]["location"]
+    assert drone_config["field"]["geofence"] == drone_config["px4"]["demo_field"]["geofence"]
+
+
+def _build_png_bytes(color: str = "red") -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color=color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_upload_demo_image_route_saves_file(monkeypatch, tmp_path) -> None:
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir()
+
+    class FakeUploadFile:
+        def __init__(self, filename: str, content: bytes) -> None:
+            self.filename = filename
+            self._content = content
+
+        async def read(self) -> bytes:
+            return self._content
+
+    def fake_save_uploaded_image(uploaded_file, content: bytes) -> Path:
+        target = uploads_dir / uploaded_file.filename
+        target.write_bytes(content)
+        return target
+
+    monkeypatch.setattr(demo_routes, "_save_uploaded_image", fake_save_uploaded_image)
+
+    upload_file = FakeUploadFile("sample.png", _build_png_bytes())
+    payload = asyncio.run(upload_demo_image(upload_file))
+
+    assert payload["filename"] == "sample.png"
+    saved = uploads_dir / "sample.png"
+    assert saved.exists()
+    assert saved.read_bytes() == _build_png_bytes()
+    assert payload["path"] == str(saved)
+
+
+def test_upload_demo_image_route_rejects_invalid_image_content() -> None:
+    class FakeUploadFile:
+        filename = "fake.jpg"
+
+        async def read(self) -> bytes:
+            return b"not-a-real-image"
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(upload_demo_image(FakeUploadFile()))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "invalid_image_content"
+
+
+def test_upload_demo_image_route_rejects_large_file() -> None:
+    class FakeUploadFile:
+        filename = "large.png"
+
+        async def read(self) -> bytes:
+            return b"x" * (MAX_UPLOAD_BYTES + 1)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(upload_demo_image(FakeUploadFile()))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "file_too_large"
+
+
+def test_save_uploaded_image_uses_unique_filename(monkeypatch, tmp_path) -> None:
+    class FakeUploadFile:
+        filename = "sample.png"
+
+    monkeypatch.setattr(demo_routes, "IMAGES_DIR", tmp_path)
+    monkeypatch.setattr(workflow_service, "sanitize_filename", lambda name: name)
+
+    first = demo_routes._save_uploaded_image(FakeUploadFile(), _build_png_bytes())
+    second = demo_routes._save_uploaded_image(FakeUploadFile(), _build_png_bytes())
+
+    assert first != second
+    assert first.name != second.name
+    assert first.exists()
+    assert second.exists()
+
+
+def test_reset_demo_events_route_requires_confirm() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(reset_demo_events())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "confirm_required"
+
+
+def test_reset_demo_events_route_clears_bus_and_sqlite(monkeypatch) -> None:
+    state = {"cleared": False}
+    sqlite_state = {"cleared": False}
+
+    class FakeEventBus:
+        def clear(self) -> None:
+            state["cleared"] = True
+
+    monkeypatch.setattr(event_bus, "FileEventBus", FakeEventBus)
+    monkeypatch.setattr(
+        workflow_service,
+        "clear_demo_runtime_state",
+        lambda: sqlite_state.__setitem__("cleared", True),
+    )
+
+    payload = asyncio.run(reset_demo_events(confirm=True))
+    assert payload == {"status": "cleared"}
+    assert state["cleared"] is True
+    assert sqlite_state["cleared"] is True
+
+
+def test_confirm_drone_takeoff_returns_503_when_not_initialized(monkeypatch) -> None:
+    """confirm-takeoff should return 503 when no takeoff event is set."""
+    from unittest.mock import AsyncMock, patch
+    import app.deps as deps
+    monkeypatch.setattr(deps, "takeoff_confirmation_event", None)
+    # Clear shared state files so the function sees "nothing initialized"
+    deps.clear_takeoff_confirmation_state()
+    start_px4_mock = AsyncMock()
+
+    with patch('app.routes.drone.start_px4_demo', start_px4_mock), \
+         pytest.raises(HTTPException) as exc_info:
+        asyncio.run(confirm_drone_takeoff())
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "takeoff_not_initialized"
+    start_px4_mock.assert_not_awaited()
+
+
+def test_confirm_drone_takeoff_sets_event() -> None:
+    """confirm-takeoff should set the event and return confirmed."""
+    from unittest.mock import patch
+    import asyncio as aio
+    import app.deps as deps
+
+    deps.clear_takeoff_confirmation_state()
+    event = aio.Event()
+    deps.takeoff_confirmation_event = event
+    try:
+        with patch('app.routes.drone._read_pid_file', return_value={"pid": 99999}), \
+             patch('app.routes.drone._is_process_alive', return_value=True), \
+             patch('app.routes.drone._is_port_open', return_value=True):
+            payload = asyncio.run(confirm_drone_takeoff())
+        assert payload["status"] == "confirmed"
+        assert event.is_set()
+    finally:
+        deps.takeoff_confirmation_event = None
+
+
+def test_confirm_drone_takeoff_returns_already_confirmed() -> None:
+    """confirm-takeoff should return already_confirmed if event is already set."""
+    import asyncio as aio
+    import app.deps as deps
+
+    event = aio.Event()
+    event.set()
+    deps.takeoff_confirmation_event = event
+    try:
+        payload = asyncio.run(confirm_drone_takeoff())
+        assert payload == {"status": "already_confirmed"}
+    finally:
+        deps.takeoff_confirmation_event = None
+
+
+def test_confirm_drone_takeoff_uses_shared_pending_request_file(monkeypatch, tmp_path) -> None:
+    """confirm-takeoff should work across processes via shared pending-request state."""
+    from unittest.mock import patch
+    import app.deps as deps
+
+    pending_request_path = tmp_path / "pending_request.json"
+    confirmation_flag_path = tmp_path / "confirmed.flag"
+    pending_request_path.write_text(
+        json.dumps({"request_id": "req-manual-1"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(deps, "takeoff_confirmation_event", None)
+    monkeypatch.setattr(
+        deps,
+        "TAKEOFF_PENDING_REQUEST_PATH",
+        pending_request_path,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        deps,
+        "TAKEOFF_CONFIRMATION_FLAG_PATH",
+        confirmation_flag_path,
+        raising=False,
+    )
+
+    with patch('app.routes.drone._read_pid_file', return_value={"pid": 99999}), \
+         patch('app.routes.drone._is_process_alive', return_value=True), \
+         patch('app.routes.drone._is_port_open', return_value=True):
+        payload = asyncio.run(confirm_drone_takeoff())
+
+    assert payload["status"] == "confirmed"
+    assert confirmation_flag_path.exists()
+
+
+def test_confirm_drone_takeoff_auto_starts_px4_when_pending_request_exists(monkeypatch, tmp_path) -> None:
+    """confirm-takeoff should start PX4 when a takeoff request is pending and PX4 is offline."""
+    from unittest.mock import AsyncMock, patch
+    import app.deps as deps
+
+    pending_request_path = tmp_path / "pending_request.json"
+    confirmation_flag_path = tmp_path / "confirmed.flag"
+    pending_request_path.write_text(json.dumps({"request_id": "req-manual-2"}), encoding="utf-8")
+
+    monkeypatch.setattr(deps, "takeoff_confirmation_event", None)
+    monkeypatch.setattr(deps, "TAKEOFF_PENDING_REQUEST_PATH", pending_request_path, raising=False)
+    monkeypatch.setattr(deps, "TAKEOFF_CONFIRMATION_FLAG_PATH", confirmation_flag_path, raising=False)
+
+    start_px4_mock = AsyncMock(return_value={
+        "status": "started",
+        "pid": "12345",
+        "world": "muye_demo_field",
+        "ready": True,
+    })
+
+    with patch('app.routes.drone._read_pid_file', return_value=None), \
+         patch('app.routes.drone.start_px4_demo', start_px4_mock):
+        payload = asyncio.run(confirm_drone_takeoff())
+
+    assert payload["status"] == "confirmed"
+    assert payload["px4"]["status"] == "started"
+    assert confirmation_flag_path.exists()
+    start_px4_mock.assert_awaited_once()
+
+
+def test_confirm_drone_takeoff_returns_503_when_px4_process_alive_but_not_ready(monkeypatch) -> None:
+    """confirm-takeoff should not confirm takeoff while PX4 is still starting."""
+    from unittest.mock import AsyncMock, patch
+    import asyncio as aio
+    import app.deps as deps
+
+    deps.clear_takeoff_confirmation_state()
+    event = aio.Event()
+    deps.takeoff_confirmation_event = event
+    start_px4_mock = AsyncMock()
+    try:
+        with patch('app.routes.drone._read_pid_file', return_value={"pid": 99999, "world": "muye_demo_field"}), \
+             patch('app.routes.drone._is_process_alive', return_value=True), \
+             patch('app.routes.drone._is_port_open', return_value=False), \
+             patch('app.routes.drone.start_px4_demo', start_px4_mock), \
+             pytest.raises(HTTPException) as exc_info:
+            asyncio.run(confirm_drone_takeoff())
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == "px4_not_ready"
+        assert event.is_set() is False
+        start_px4_mock.assert_not_awaited()
+    finally:
+        deps.takeoff_confirmation_event = None
+
+
+def test_health_status_collects_check_results(monkeypatch) -> None:
+    monkeypatch.setattr(health_routes, "check_sqlite_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_data_dir_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_embedded_yolo_health", lambda: {"status": "skipped"})
+    monkeypatch.setattr(health_routes, "check_yolo_model_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_ai_config_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_weather_config_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_event_bus_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_rag_config_health", lambda: {"status": "ok"})
+    monkeypatch.setattr(health_routes, "check_px4_runtime_health", lambda: {"status": "skipped"})
+    monkeypatch.setattr(health_routes, "check_runtime_config_health", lambda: {"status": "ok"})
+
+    payload, healthy = collect_health_status()
+
+    assert healthy is True
+    assert payload["status"] == "ok"
+    assert payload["checks"]["embedded_yolo"]["status"] == "skipped"
+
+
+def test_live_route_returns_ok_without_dependency_checks(monkeypatch) -> None:
+    monkeypatch.setattr(
+        health_routes,
+        "collect_health_status",
+        lambda: (_ for _ in ()).throw(RuntimeError("should_not_run")),
+    )
+
+    payload = asyncio.run(api_live())
+
+    assert payload == {"status": "ok"}
+
+
+def test_runtime_config_health_exposes_effective_demo_switches(monkeypatch) -> None:
+    monkeypatch.setenv("MUYE_TAKEOFF_MODE", "manual")
+    monkeypatch.setenv("DRONE_BACKEND", "px4")
+    monkeypatch.setenv("PX4_EXECUTION_MODE", "animated_demo")
+    monkeypatch.setenv("PX4_AUTO_START_ON_SPRAY", "true")
+    monkeypatch.setenv("QWEATHER_USE_MOCK", "true")
+    monkeypatch.setenv("QWEN_USE_MOCK", "true")
+    monkeypatch.setenv("RAG_ENABLED", "false")
+    monkeypatch.setenv("MUYE_ROUTER_ENABLED", "true")
+    monkeypatch.setenv("MUYE_MULTI_AGENT_ENABLED", "false")
+
+    payload = health_routes.check_runtime_config_health()
+
+    assert payload["status"] == "ok"
+    assert payload["takeoff_mode"] == "manual"
+    assert payload["drone_backend"] == "px4"
+    assert payload["px4_execution_mode"] == "animated_demo"
+    assert payload["weather_mode"] == "mock"
+    assert payload["qwen_mode"] == "mock"
+    assert payload["rag_enabled"] is False
+    assert payload["router_enabled"] is True
+    assert payload["multi_agent_enabled"] is False
+    assert "yolo_active_model" in payload
+
+
+def test_health_route_returns_503_when_dependency_fails(monkeypatch) -> None:
+    monkeypatch.setattr(
+        health_routes,
+        "collect_health_status",
+        lambda: (
+            {
+                "status": "error",
+                "failures": ["sqlite"],
+                "checks": {
+                    "sqlite": {"status": "error", "detail": "db_down"},
+                    "data_dir": {"status": "ok"},
+                    "embedded_yolo": {"status": "skipped"},
+                },
+            },
+            False,
+        ),
+    )
+
+    response = asyncio.run(api_health())
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 503
+    assert b'"failures":["sqlite"]' in response.body
+
+
+def test_build_history_response_uses_real_total(monkeypatch) -> None:
+    monkeypatch.setattr(workflow_service, "count_sqlite_tasks", lambda **kwargs: 2)
+    monkeypatch.setattr(
+        workflow_service,
+        "load_sqlite_task_views",
+        lambda **kwargs: [
+            {
+                "request_id": "req-1",
+                "current_stage": "decision",
+                "status": "completed",
+                "message": "历史任务 1",
+                "updated_at": "2026-04-17T12:00:00Z",
+                "image_path": "/tmp/1.jpg",
+                "field": {},
+                "detections": [{"pest_type": "aphid", "confidence": 0.9}],
+                "weather": {},
+                "spray_summary": {},
+                "decision": {},
+                "drone": {},
+                "error": None,
+            },
+            {
+                "request_id": "req-2",
+                "current_stage": "drone",
+                "status": "running",
+                "message": "历史任务 2",
+                "updated_at": "2026-04-17T11:00:00Z",
+                "image_path": "/tmp/2.jpg",
+                "field": {},
+                "detections": [{"pest_type": "aphid", "confidence": 0.8}],
+                "weather": {},
+                "spray_summary": {},
+                "decision": {},
+                "drone": {},
+                "error": None,
+            },
+        ],
+    )
+    monkeypatch.setattr(event_bus, "load_events", lambda limit=500: [])
+    monkeypatch.setattr(event_bus, "build_task_views", lambda events: [])
+
+    payload = workflow_service.build_history_response(limit=2, status="completed", search="aphid")
+
+    assert payload.total == 1
+    assert len(payload.items) == 1
+    assert payload.items[0].request_id == "req-1"
+
+
+def test_build_history_response_applies_limit_after_merge(monkeypatch) -> None:
+    monkeypatch.setattr(workflow_service, "count_sqlite_tasks", lambda **kwargs: 1)
+    monkeypatch.setattr(
+        workflow_service,
+        "load_sqlite_task_views",
+        lambda **kwargs: [
+            {
+                "request_id": "req-sqlite",
+                "current_stage": "decision",
+                "status": "completed",
+                "message": "sqlite task",
+                "updated_at": "2026-04-17T12:00:00Z",
+                "image_path": "/tmp/sqlite.jpg",
+                "field": {},
+                "detections": [],
+                "weather": {},
+                "spray_summary": {},
+                "decision": {},
+                "drone": {},
+                "error": None,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        event_bus,
+        "load_events",
+        lambda limit=500: [
+            {
+                "request_id": "req-event-only",
+                "timestamp": "2026-04-17T12:01:00Z",
+                "stage": "decision",
+                "status": "completed",
+                "message": "event only task",
+                "payload": {
+                    "image_path": "/tmp/event.jpg",
+                    "detections": [{"pest_type": "aphid", "confidence": 0.8}],
+                },
+            }
+        ],
+    )
+    monkeypatch.setattr(event_bus, "build_task_views", event_bus.build_task_views)
+
+    payload = workflow_service.build_history_response(limit=1, status=None, search=None)
+
+    assert payload.total == 2
+    assert len(payload.items) == 1
+    assert payload.items[0].request_id == "req-event-only"
+
+
+def test_task_original_image_route_returns_file(monkeypatch, tmp_path) -> None:
+    image_path = tmp_path / "original.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    monkeypatch.setattr(
+        workflow_service,
+        "load_task_by_request_id",
+        lambda request_id: {
+            "request_id": request_id,
+            "image_path": str(image_path),
+            "detections": [],
+        },
+    )
+
+    response = asyncio.run(get_task_original_image("req-1"))
+
+    assert response.path == image_path
+    assert response.media_type == "image/jpeg"
+
+
+def test_task_annotated_image_route_returns_png(monkeypatch, tmp_path) -> None:
+    image_path = tmp_path / "original.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    monkeypatch.setattr(
+        workflow_service,
+        "load_task_by_request_id",
+        lambda request_id: {
+            "request_id": request_id,
+            "image_path": str(image_path),
+            "detections": [{"pest_type": "aphid"}],
+        },
+    )
+    monkeypatch.setattr(
+        tasks_routes,
+        "annotate_image",
+        lambda image_path, detections: Image.new("RGB", (4, 4), color="red"),
+    )
+
+    response = asyncio.run(get_task_annotated_image("req-2"))
+
+    assert response.media_type == "image/png"
+    assert response.body_iterator is not None
+
+
+def test_main_reads_qwen_mock_flag(monkeypatch, tmp_path) -> None:
+    """Test that QWEN_USE_MOCK is properly read via MuyeConfig."""
+    from app.config_types import MuyeConfig
+
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        qwen_use_mock=True,
+    )
+    app = MuyeApplication(config=config)
     try:
         assert app.decision_engine.use_mock is True
     finally:
-        import asyncio
-
         asyncio.run(app.shutdown())
-    os.environ.pop("QWEN_USE_MOCK", None)
+
+
+def test_main_reads_px4_backend_override(monkeypatch, tmp_path) -> None:
+    """Test that PX4 backend override is properly read via MuyeConfig."""
+    from app.config_types import MuyeConfig
+
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        drone_backend="px4",
+        px4_system_address="udpin://0.0.0.0:14550",
+    )
+    app = MuyeApplication(config=config)
+    try:
+        assert app.drone_config["execution"]["backend"] == "px4"
+        assert app.drone_config["execution"]["simulate_only"] is False
+        assert app.drone_config["px4"]["system_address"] == "udpin://0.0.0.0:14550"
+    finally:
+        asyncio.run(app.shutdown())
+
+
+def test_main_reads_px4_demo_field_override(monkeypatch, tmp_path) -> None:
+    """Test that PX4 demo field override is properly read via MuyeConfig."""
+    from app.config_types import MuyeConfig
+
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        drone_backend="px4",
+        px4_prefer_demo_field=True,
+    )
+    app = MuyeApplication(config=config)
+    try:
+        assert app.drone_config["px4"]["prefer_demo_field"] is True
+        field_context = app.field_resolver.resolve()
+        assert field_context["field_id"] == "px4-sitl-demo"
+        assert field_context["location"]["city"] == "Zurich"
+        assert field_context["explicit_route"] is not None
+        assert len(field_context["explicit_route"]) >= 2
+        field_row = app.sqlite_store.fetch_one(
+            "SELECT field_id, field_name, source FROM fields WHERE field_id = ?",
+            ("px4-sitl-demo",),
+        )
+        assert field_row is not None
+        assert field_row["field_id"] == "px4-sitl-demo"
+        assert field_row["source"] == "px4_sitl_demo"
+    finally:
+        asyncio.run(app.shutdown())
+
+
+def test_main_forces_px4_demo_field(monkeypatch, tmp_path) -> None:
+    """PX4 runtime uses Zurich SITL coordinates even if config asks otherwise."""
+    from app.config_types import MuyeConfig
+
+    config = MuyeConfig(
+        sqlite_path=tmp_path / "muye.db",
+        drone_backend="px4",
+        px4_prefer_demo_field=False,
+    )
+    app = MuyeApplication(config=config)
+    try:
+        assert app.drone_config["px4"]["prefer_demo_field"] is True
+        field_context = app.field_resolver.resolve()
+        assert field_context["field_id"] == "px4-sitl-demo"
+        assert field_context["location"]["city"] == "Zurich"
+        assert field_context["location"]["longitude"] != 113.62
+    finally:
+        asyncio.run(app.shutdown())
+
+
+def test_main_incrementally_indexes_decision_into_rag(tmp_path) -> None:
+    async def run_test() -> list[tuple[str, list[object]]]:
+        config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+        app = MuyeApplication(config=config)
+
+        class FakeVectorStore:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, list[object]]] = []
+
+            def add_documents(self, collection_name: str, documents: list[object]) -> list[str]:
+                self.calls.append((collection_name, documents))
+                return ["doc-1"]
+
+        fake_store = FakeVectorStore()
+        app.rag_vector_store = fake_store  # type: ignore[assignment]
+        app._rag_indexer.rag_vector_store = fake_store
+        try:
+            await app._rag_indexer._index_decision_into_rag(
+                request_id="req-rag-1",
+                decision={
+                    "用药": {
+                        "农药名称": "吡虫啉",
+                        "浓度": "1:1000",
+                        "配比": "1:1200",
+                        "总量": "10L",
+                        "安全提示": ["佩戴口罩"],
+                    },
+                    "农事建议": ["避开正午高温"],
+                },
+                pest_detections=[{"pest_type": "aphid"}],
+                field_context={
+                    "field_id": "field-001",
+                    "crop_cycle": {"crop_name": "冬小麦"},
+                },
+            )
+            return fake_store.calls
+        finally:
+            await app.shutdown()
+
+    calls = asyncio.run(run_test())
+
+    assert len(calls) == 1
+    collection_name, documents = calls[0]
+    assert collection_name == "decisions"
+    assert len(documents) == 1
+    document = documents[0]
+    assert document.metadata["request_id"] == "req-rag-1"
+    assert document.metadata["crop_name"] == "冬小麦"
+    assert "推荐农药：吡虫啉" in document.page_content
+
+
+def test_parse_args_supports_no_capture_on_startup(monkeypatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["app.main", "--with-yolo-api", "--drone-backend", "px4", "--no-capture-on-startup"],
+    )
+
+    args = parse_args()
+
+    assert args.with_yolo_api is True
+    assert args.drone_backend == "px4"
+    assert args.no_capture_on_startup is True
+
+
+def test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path) -> None:
+    """Test that pipeline writes to SQLite correctly using MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    expected_field = app.field_resolver.resolve()
+    expected_field_id = str(expected_field["field_id"])
+    expected_area_mu = float(expected_field["area_mu"])
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    detections = [
+        {
+            "pest_type": "aphid",
+            "confidence": 0.94,
+            "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+        }
+    ]
+    weather = {
+        "temperature": 26.5,
+        "humidity": 61,
+        "summary": "多云",
+        "wind_direction": "东南风",
+        "wind_scale_text": "2",
+        "wind_speed": 3.3,
+    }
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "500mL",
+            "安全提示": ["佩戴防护装备"],
+        },
+        "农事建议": ["优先处理高风险区"],
+    }
+    mission_result = {
+        "status": "submitted",
+        "task_id": "px4-req-1",
+        "accepted": True,
+        "final_status": "completed",
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {
+            "weather": weather,
+            "decision": decision,
+            "structured_input_text": "stub",
+        }
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        return mission_result
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", _fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> tuple[str, dict[str, object] | None]:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        queued_task = app.sqlite_store.fetch_one(
+            "SELECT request_id, field_id, image_path, status FROM tasks WHERE request_id = ?",
+            (request_id,),
+        )
+        try:
+            await app._process_image(request_id, queued_image, field_context, worker_id=1)
+            return request_id, queued_task
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id, queued_task = asyncio.run(run_pipeline())
+        task = app.sqlite_store.fetch_one(
+            "SELECT request_id, field_id, image_path, status, start_time, end_time FROM tasks WHERE request_id = ?",
+            (request_id,),
+        )
+        detection_rows = app.sqlite_store.fetch_all(
+            "SELECT label, confidence, bbox FROM detections WHERE request_id = ?",
+            (request_id,),
+        )
+        weather_row = app.sqlite_store.fetch_one(
+            "SELECT weather_data FROM weather_snapshots WHERE request_id = ?",
+            (request_id,),
+        )
+        decision_row = app.sqlite_store.fetch_one(
+            "SELECT decision_text FROM decisions WHERE request_id = ?",
+            (request_id,),
+        )
+        spray_row = app.sqlite_store.fetch_one(
+            """
+            SELECT request_id, field_id, drone_task_id, spray_rate_lpm, flight_height_m,
+                   flight_speed_mps, total_dosage, dosage_per_mu, dilution_ratio,
+                   result_status, weather_snapshot, notes
+            FROM spray_records
+            WHERE request_id = ?
+            """,
+            (request_id,),
+        )
+        heatmap_snapshot = app.sqlite_store.fetch_heatmap_snapshot_by_request(
+            request_id,
+            include_legacy=False,
+        )
+        mission = app.sqlite_store.fetch_mission_by_request_id(request_id)
+        mission_iterations = (
+            app.sqlite_store.fetch_iterations(mission["mission_id"])
+            if mission is not None
+            else []
+        )
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert queued_task is not None
+    assert queued_task["status"] == "queued"
+    assert queued_task["image_path"] == str(image_path)
+    assert queued_task["field_id"] == expected_field_id
+
+    assert task is not None
+    assert task["request_id"] == request_id
+    assert task["status"] == "completed"
+    assert task["image_path"] == str(image_path)
+    assert task["field_id"] == expected_field_id
+    assert task["start_time"] is not None
+    assert task["end_time"] is not None
+
+    assert len(detection_rows) == 1
+    assert detection_rows[0]["label"] == "aphid"
+    assert detection_rows[0]["confidence"] == 0.94
+    assert json.loads(detection_rows[0]["bbox"]) == {"x1": 1, "y1": 2, "x2": 3, "y2": 4}
+
+    assert weather_row is not None
+    assert json.loads(weather_row["weather_data"])["summary"] == "多云"
+
+    assert decision_row is not None
+    assert json.loads(decision_row["decision_text"])["用药"]["农药名称"] == "吡虫啉"
+
+    assert spray_row is not None
+    assert spray_row["field_id"] == expected_field_id
+    assert spray_row["drone_task_id"] == "px4-req-1"
+    assert spray_row["spray_rate_lpm"] is not None
+    assert spray_row["flight_height_m"] is not None
+    assert spray_row["flight_speed_mps"] is not None
+    assert spray_row["total_dosage"] == 0.5
+    assert spray_row["dosage_per_mu"] == round(0.5 / expected_area_mu, 4)
+    assert spray_row["dilution_ratio"] == "1:1000"
+    assert spray_row["result_status"] == "completed"
+    assert json.loads(spray_row["weather_snapshot"])["summary"] == "多云"
+    assert "农药名称=吡虫啉" in spray_row["notes"]
+
+    assert heatmap_snapshot is not None
+    assert heatmap_snapshot["request_id"] == request_id
+    assert heatmap_snapshot["field_id"] == expected_field_id
+    assert heatmap_snapshot["inspection_kind"] == "pre_spray"
+    assert heatmap_snapshot["algorithm_version"] == "relative-bbox-grid-v1"
+    assert heatmap_snapshot["pest_counts"] == {"aphid": 1}
+    assert heatmap_snapshot["mission_id"] is not None
+    assert mission is not None
+    assert len(mission_iterations) == 1
+    assert mission_iterations[0]["heatmap_snapshot_id"] == heatmap_snapshot["snapshot_id"]
+    assert mission_iterations[0]["heatmap_algorithm_version"] == "relative-bbox-grid-v1"
+    assert mission_iterations[0]["spray_plan"]["heatmap_trace_status"] == "linked"
+
+
+def test_main_persists_pipeline_to_sqlite(monkeypatch, tmp_path) -> None:
+    test_main_pipeline_writes_sqlite_records(monkeypatch, tmp_path)
+
+
+def test_main_px4_backend_auto_starts_px4_before_spray(monkeypatch, tmp_path) -> None:
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", drone_backend="px4", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    calls: list[str] = []
+    detections = [{"pest_type": "aphid", "confidence": 0.94, "position": {}}]
+    weather = {
+        "temperature": 26.5,
+        "humidity": 61,
+        "summary": "多云",
+        "wind_speed": 3.3,
+    }
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "500mL",
+            "安全提示": [],
+        },
+        "农事建议": [],
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {"weather": weather, "decision": decision}
+
+    async def fake_ensure_px4_ready():
+        calls.append("ensure_px4")
+        return {"status": "started", "ready": True}
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        calls.append("execute")
+        return {
+            "status": "submitted",
+            "task_id": "px4-req-1",
+            "accepted": True,
+            "final_status": "completed",
+        }
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> str:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        try:
+            await app._process_image(request_id, queued_image, field_context, worker_id=1)
+            return request_id
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id = asyncio.run(run_pipeline())
+        events = [
+            event
+            for event in event_bus.load_events(app.event_bus.path)
+            if event.get("request_id") == request_id and event.get("stage") == "drone"
+        ]
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert calls == ["ensure_px4", "execute"]
+    assert any(event.get("message") == "正在启动 PX4 飞行仿真" for event in events)
+    assert any(event.get("message") == "PX4 已就绪，准备执行喷洒航线" for event in events)
+
+
+def test_main_pipeline_blocks_drone_execution_when_compliance_blocks(monkeypatch, tmp_path) -> None:
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", drone_backend="px4", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    calls: list[str] = []
+    detections = [{"pest_type": "aphid", "confidence": 0.94, "position": {}}]
+    weather = {"temperature": 26.5, "humidity": 61, "summary": "多云", "wind_speed": 3.3}
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "500mL",
+            "安全提示": [],
+        },
+        "农事建议": [],
+    }
+    compliance = {
+        "status": "blocked",
+        "score": 30,
+        "checks": [],
+        "blocking_reasons": ["当前作物不在吡虫啉适用作物范围内"],
+        "warnings": [],
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {"weather": weather, "decision": decision, "compliance": compliance}
+
+    async def fake_ensure_px4_ready():
+        calls.append("ensure_px4")
+        return {"status": "started", "ready": True}
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        calls.append("execute")
+        return {"status": "completed"}
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> str:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        try:
+            await app._process_image(request_id, queued_image, field_context, worker_id=1)
+            return request_id
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id = asyncio.run(run_pipeline())
+        task = app.sqlite_store.fetch_one(
+            "SELECT status FROM tasks WHERE request_id = ?",
+            (request_id,),
+        )
+        events = [
+            event
+            for event in event_bus.load_events(app.event_bus.path)
+            if event.get("request_id") == request_id
+        ]
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert calls == []
+    assert task is not None
+    assert task["status"] == "blocked"
+    assert any(
+        event.get("stage") == "compliance" and event.get("status") == "blocked"
+        for event in events
+    )
+
+
+def test_main_pipeline_forces_manual_takeoff_when_compliance_warns(monkeypatch, tmp_path) -> None:
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", drone_backend="px4", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    calls: list[str] = []
+    detections = [{"pest_type": "aphid", "confidence": 0.94, "position": {}}]
+    weather = {"temperature": 26.5, "humidity": 88, "summary": "多云", "wind_speed": 6.1}
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "500mL",
+            "安全提示": [],
+        },
+        "农事建议": [],
+    }
+    compliance = {
+        "status": "warning",
+        "score": 76,
+        "checks": [],
+        "blocking_reasons": [],
+        "warnings": ["当前风速6.1m/s偏高，注意药液漂移风险"],
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {"weather": weather, "decision": decision, "compliance": compliance}
+
+    async def fake_ensure_px4_ready():
+        calls.append("ensure_px4")
+        return {"status": "started", "ready": True}
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        calls.append("execute")
+        return {"status": "completed"}
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> str:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        try:
+            task = asyncio.create_task(
+                app._process_image(request_id, queued_image, field_context, worker_id=1)
+            )
+            for _ in range(50):
+                events = [
+                    event
+                    for event in event_bus.load_events(app.event_bus.path)
+                    if event.get("request_id") == request_id
+                ]
+                if any(
+                    event.get("stage") == "drone"
+                    and event.get("status") == "pending_confirmation"
+                    for event in events
+                ):
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                    return request_id
+                await asyncio.sleep(0.01)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            return request_id
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id = asyncio.run(run_pipeline())
+        events = [
+            event
+            for event in event_bus.load_events(app.event_bus.path)
+            if event.get("request_id") == request_id
+        ]
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert calls == []
+    assert any(
+        event.get("stage") == "drone" and event.get("status") == "pending_confirmation"
+        for event in events
+    )
+
+
+def test_main_pipeline_uses_mission_final_status_for_spray_record(monkeypatch, tmp_path) -> None:
+    """Test that mission final status is used for spray records via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+
+    detections = [
+        {
+            "pest_type": "aphid",
+            "confidence": 0.94,
+            "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+        }
+    ]
+    weather = {
+        "temperature": 26.5,
+        "humidity": 61,
+        "summary": "多云",
+        "wind_direction": "东南风",
+        "wind_scale_text": "2",
+        "wind_speed": 3.3,
+    }
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "1L",
+            "安全提示": ["佩戴防护装备"],
+        },
+        "农事建议": ["优先处理高风险区"],
+    }
+    mission_result = {
+        "status": "submitted",
+        "task_id": "px4-req-progress",
+        "accepted": True,
+        "final_status": "in_progress",
+        "last_known_status": "spraying",
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {
+            "weather": weather,
+            "decision": decision,
+            "structured_input_text": "stub",
+        }
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        return mission_result
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", _fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> str:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        try:
+            await app._process_image(request_id, queued_image, field_context, worker_id=1)
+            return request_id
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id = asyncio.run(run_pipeline())
+        spray_row = app.sqlite_store.fetch_one(
+            """
+            SELECT result_status, drone_task_id
+            FROM spray_records
+            WHERE request_id = ?
+            """,
+            (request_id,),
+        )
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert spray_row is not None
+    assert spray_row["drone_task_id"] == "px4-req-progress"
+    assert spray_row["result_status"] == "in_progress"
+
+
+def test_main_pipeline_links_spray_record_to_pesticide_catalog(monkeypatch, tmp_path) -> None:
+    """Test that spray records are linked to pesticide catalog via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    app.drone_config.setdefault("execution", {})["takeoff_mode"] = "auto"
+    image_path = tmp_path / "sample.jpg"
+    image_path.write_bytes(b"\xff\xd8\xff\xd9")
+    app.sqlite_store.upsert_pesticide_catalog_record(
+        {
+            "pesticide_id": "seed-imidacloprid",
+            "registration_no": "SEED-PD-IMI-001",
+            "product_name": "吡虫啉",
+            "active_ingredient": "吡虫啉",
+            "formulation": "10% 可湿性粉剂",
+            "toxicity": "低毒",
+            "manufacturer": "牧野示例目录",
+            "target_crops": ["冬小麦", "夏玉米"],
+            "target_pests": ["蚜虫", "飞虱"],
+            "dilution_guidance": "1000-1500倍液",
+            "source": "henan_pesticide_catalog_seed",
+        }
+    )
+
+    detections = [
+        {
+            "pest_type": "aphid",
+            "confidence": 0.94,
+            "position": {"x1": 1, "y1": 2, "x2": 3, "y2": 4},
+        }
+    ]
+    weather = {
+        "temperature": 26.5,
+        "humidity": 61,
+        "summary": "多云",
+        "wind_direction": "东南风",
+        "wind_scale_text": "2",
+        "wind_speed": 3.3,
+    }
+    decision = {
+        "用药": {
+            "农药名称": "吡虫啉",
+            "浓度": "1000倍",
+            "配比": "1:1000",
+            "总量": "1L",
+            "安全提示": ["佩戴防护装备"],
+        },
+        "农事建议": ["优先处理高风险区"],
+    }
+    mission_result = {
+        "status": "submitted",
+        "task_id": "px4-req-pesticide",
+        "accepted": True,
+        "final_status": "completed",
+    }
+
+    async def fake_detect_pests(*args, **kwargs):
+        return detections
+
+    async def fake_generate_decision(*args, **kwargs):
+        return {
+            "weather": weather,
+            "decision": decision,
+            "structured_input_text": "stub",
+        }
+
+    async def fake_execute_spray_mission(*args, **kwargs):
+        return mission_result
+
+    monkeypatch.setattr(app.image_processor, "detect_pests", fake_detect_pests)
+    monkeypatch.setattr(app.decision_engine, "generate_decision", fake_generate_decision)
+    monkeypatch.setattr(main_module, "ensure_px4_ready", _fake_ensure_px4_ready)
+    monkeypatch.setattr(app.drone_controller, "execute_spray_mission", fake_execute_spray_mission)
+
+    async def run_pipeline() -> str:
+        await app.enqueue_image(image_path)
+        request_id, queued_image, field_context = app.queue.get_nowait()
+        try:
+            await app._process_image(request_id, queued_image, field_context, worker_id=1)
+            return request_id
+        finally:
+            app.pending_images.discard(str(queued_image.resolve()))
+            app.queue.task_done()
+
+    try:
+        request_id = asyncio.run(run_pipeline())
+        spray_row = app.sqlite_store.fetch_one(
+            """
+            SELECT pesticide_id, drone_task_id
+            FROM spray_records
+            WHERE request_id = ?
+            """,
+            (request_id,),
+        )
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert spray_row is not None
+    assert spray_row["pesticide_id"] == "seed-imidacloprid"
+    assert spray_row["drone_task_id"] == "px4-req-pesticide"
+
+
+def test_main_prefers_sqlite_field_context_over_static_config(monkeypatch, tmp_path) -> None:
+    """Test that SQLite field context is preferred via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    try:
+        app.drone_config["field"]["field_id"] = None
+        app.sqlite_store.upsert_field(
+            {
+                "field_id": "henan-zz-001",
+                "field_code": "HN-001",
+                "field_name": "郑州示范田1号",
+                "owner_user_id": "user_a",
+                "province": "河南省",
+                "city": "郑州",
+                "county": "中原区",
+                "latitude": 34.74,
+                "longitude": 113.62,
+                "area_mu": 66,
+                "geofence": [[113.61, 34.73], [113.63, 34.73], [113.63, 34.75], [113.61, 34.75]],
+                "soil_type": "潮土",
+            }
+        )
+        app.sqlite_store.upsert_crop_catalog_record(
+            {
+                "crop_code": "winter_wheat",
+                "crop_name": "冬小麦",
+                "category": "grain",
+                "growth_cycle_days": 240,
+                "water_demand_coefficient": 1.0,
+            }
+        )
+        app.sqlite_store.upsert_field_crop_cycle(
+            {
+                "field_id": "henan-zz-001",
+                "crop_code": "winter_wheat",
+                "year": 2025,
+                "season": "winter",
+                "planting_date": "2025-10-10",
+                "harvest_date": "2026-06-05",
+                "area_mu": 66,
+                "status": "growing",
+            }
+        )
+
+        field_context = app.field_resolver.resolve()
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert field_context["field_id"] == "henan-zz-001"
+    assert field_context["location"]["city"] == "郑州"
+    assert field_context["crop_cycle"]["crop_name"] == "冬小麦"
+
+
+def test_main_ignores_seeded_config_field_when_real_fields_exist(monkeypatch, tmp_path) -> None:
+    """Test that seeded config field is ignored when real fields exist via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    try:
+        app.drone_config["field"]["field_id"] = "henan-zz-001"
+        app.sqlite_store.upsert_field(
+            {
+                "field_id": "henan-zz-001",
+                "field_code": "HENAN-ZZ-001",
+                "field_name": "配置回退地块",
+                "province": "河南省",
+                "city": "郑州",
+                "county": "中原区",
+                "latitude": 34.74,
+                "longitude": 113.62,
+                "source": "drone_config_fallback",
+            }
+        )
+        app.sqlite_store.upsert_field(
+            {
+                "field_id": "henan-kf-002",
+                "field_code": "HN-002",
+                "field_name": "开封示范田1号",
+                "province": "河南省",
+                "city": "开封",
+                "county": "龙亭区",
+                "latitude": 34.79,
+                "longitude": 114.30,
+                "source": "henan_field_crop_generated_seed",
+            }
+        )
+
+        field_context = app.field_resolver.resolve()
+    finally:
+        asyncio.run(app.shutdown())
+
+    assert field_context["field_id"] == "henan-kf-002"
+    assert field_context["location"]["city"] == "开封"
+
+
+def test_main_rejects_ambiguous_field_context_without_explicit_selection(monkeypatch, tmp_path) -> None:
+    """Test that ambiguous field context is rejected without explicit selection via MuyeConfig."""
+    config = MuyeConfig(sqlite_path=tmp_path / "muye.db", rag_enabled=False)
+    app = MuyeApplication(config=config)
+    try:
+        app.drone_config["field"]["field_id"] = None
+        app.sqlite_store.upsert_field(
+            {
+                "field_id": "henan-zz-001",
+                "field_code": "HN-001",
+                "field_name": "郑州示范田1号",
+                "province": "河南省",
+                "city": "郑州",
+                "county": "中原区",
+                "latitude": 34.74,
+                "longitude": 113.62,
+            }
+        )
+        app.sqlite_store.upsert_field(
+            {
+                "field_id": "henan-kf-002",
+                "field_code": "HN-002",
+                "field_name": "开封示范田1号",
+                "province": "河南省",
+                "city": "开封",
+                "county": "龙亭区",
+                "latitude": 34.79,
+                "longitude": 114.30,
+            }
+        )
+
+        try:
+            app.field_resolver.resolve()
+            assert False, "expected ambiguous field context to raise"
+        except RuntimeError as exc:
+            assert "MUYE_ACTIVE_FIELD_ID" in str(exc)
+    finally:
+        asyncio.run(app.shutdown())
+
+
+# ── PX4 route tests ──
+
+from app.routes.drone import (
+    get_px4_status,
+    stop_px4_demo,
+    start_px4_demo,
+    Px4StartRequest,
+    Px4StatusResponse,
+)
+import app.routes.drone as drone_mod
+from app.services import px4_process_service as px4_process_mod
+
+
+def _setup_px4_paths(monkeypatch, tmp_path):
+    """Redirect PX4_PID_FILE and PX4_LOG_DIR to tmp_path."""
+    pid_file = tmp_path / "px4.pid"
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    # The service functions reference px4_process_service module-level constants,
+    # so the patch must target that module (drone_mod aliases are stale copies).
+    monkeypatch.setattr(px4_process_mod, "PX4_PID_FILE", pid_file)
+    monkeypatch.setattr(px4_process_mod, "PX4_LOG_DIR", log_dir)
+    monkeypatch.setattr(drone_mod, "PX4_PID_FILE", pid_file)
+    monkeypatch.setattr(drone_mod, "PX4_LOG_DIR", log_dir)
+    return pid_file
+
+
+def _write_pid_file(pid_file, pid, world="default", source="api"):
+    pid_file.write_text(
+        json.dumps({"pid": pid, "world": world, "source": source, "ts": 1234567890.0}),
+        encoding="utf-8",
+    )
+
+
+def test_px4_status_not_running_when_no_pid_file(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_adopt_existing_px4", lambda **kwargs: None)
+    status = asyncio.run(get_px4_status())
+    assert status.running is False
+    assert status.ready is False
+    assert status.pid is None
+
+
+def test_px4_status_running_and_ready(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=12345, world="muye_world")
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: True)
+    monkeypatch.setattr(drone_mod, "_is_port_open", lambda port, timeout=0.5: True)
+
+    status = asyncio.run(get_px4_status())
+    assert status.running is True
+    assert status.ready is True
+    assert status.pid == 12345
+    assert status.world == "muye_world"
+
+
+def test_px4_status_running_not_ready(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=99999)
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: True)
+    monkeypatch.setattr(drone_mod, "_is_port_open", lambda port, timeout=0.5: False)
+
+    status = asyncio.run(get_px4_status())
+    assert status.running is True
+    assert status.ready is False
+
+
+def test_px4_status_cleans_dead_process_pid_file(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=11111)
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_adopt_existing_px4", lambda **kwargs: None)
+
+    status = asyncio.run(get_px4_status())
+    assert status.running is False
+    assert not pid_file.exists()
+
+
+def test_px4_status_adopts_running_px4_when_pid_file_missing(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        drone_mod,
+        "_adopt_existing_px4",
+        lambda **kwargs: {
+            "status": "already_running",
+            "pid": "24680",
+            "world": "muye_demo_field",
+            "source": "detected",
+            "ready": True,
+        },
+    )
+
+    status = asyncio.run(get_px4_status())
+
+    assert status.running is True
+    assert status.ready is True
+    assert status.pid == 24680
+    assert status.world == "muye_demo_field"
+    assert status.source == "detected"
+
+
+def test_px4_status_adopts_running_px4_when_pid_file_points_to_dead_wrapper(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=13579, world="muye_demo_field", source="api")
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(
+        drone_mod,
+        "_adopt_existing_px4",
+        lambda **kwargs: {
+            "status": "already_running",
+            "pid": "24680",
+            "world": "muye_demo_field",
+            "source": "detected",
+            "ready": True,
+        },
+    )
+
+    status = asyncio.run(get_px4_status())
+
+    assert status.running is True
+    assert status.ready is True
+    assert status.pid == 24680
+    assert status.world == "muye_demo_field"
+    assert status.source == "detected"
+
+
+def test_stop_px4_not_running_when_no_pid_file(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    result = asyncio.run(stop_px4_demo())
+    assert result == {"status": "not_running"}
+
+
+def test_stop_px4_not_running_when_process_dead(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=22222)
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+
+    result = asyncio.run(stop_px4_demo())
+    assert result == {"status": "not_running"}
+    assert not pid_file.exists()
+
+
+def test_stop_px4_stops_running_process(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=33333, source="api")
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: True)
+    monkeypatch.setattr(drone_mod, "_kill_px4_process", AsyncMock())
+
+    result = asyncio.run(stop_px4_demo())
+    assert result == {"status": "stopped", "pid": "33333", "source": "api"}
+    assert not pid_file.exists()
+
+
+def test_start_px4_skip_returns_skipped(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    request = Px4StartRequest(skip_px4=True)
+    result = asyncio.run(start_px4_demo(request))
+    assert result == {"status": "skipped"}
+
+
+def test_start_px4_already_running(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    _write_pid_file(pid_file, pid=44444, world="my_world", source="script")
+
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: True)
+
+    request = Px4StartRequest()
+    result = asyncio.run(start_px4_demo(request))
+    assert result["status"] == "already_running"
+    assert result["pid"] == "44444"
+    assert result["world"] == "my_world"
+    assert result["source"] == "script"
+
+
+def test_start_px4_returns_400_when_dir_not_found(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
+
+    request = Px4StartRequest(px4_dir="/nonexistent/px4/dir")
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(start_px4_demo(request))
+    assert exc_info.value.status_code == 400
+    assert "not found" in exc_info.value.detail
+
+
+def test_start_px4_returns_400_when_makefile_missing(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
+
+    px4_dir = tmp_path / "px4"
+    px4_dir.mkdir()
+    # No Makefile
+
+    request = Px4StartRequest(px4_dir=str(px4_dir))
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(start_px4_demo(request))
+    assert exc_info.value.status_code == 400
+    assert "Makefile" in exc_info.value.detail
+
+
+def test_start_px4_success(monkeypatch, tmp_path) -> None:
+    pid_file = _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
+    monkeypatch.setattr(drone_mod, "_adopt_existing_px4", lambda **kwargs: None)
+
+    px4_dir = tmp_path / "px4"
+    px4_dir.mkdir()
+    (px4_dir / "Makefile").write_text("")
+
+    mock_proc = type("MockProc", (), {
+        "pid": 55555,
+        "poll": lambda self: None,
+        "returncode": None,
+    })()
+
+    monkeypatch.setattr(drone_mod.subprocess, "Popen", lambda *a, **kw: mock_proc)
+    # Port opens immediately
+    monkeypatch.setattr(drone_mod, "_is_port_open", lambda port, timeout=0.5: True)
+
+    request = Px4StartRequest(px4_dir=str(px4_dir), world="test_world")
+    result = asyncio.run(start_px4_demo(request))
+
+    assert result["status"] == "started"
+    assert result["pid"] == "55555"
+    assert result["world"] == "test_world"
+    assert result["ready"] is True
+    assert pid_file.exists()
+
+
+def test_start_px4_adopts_existing_running_px4_before_spawn(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
+
+    px4_dir = tmp_path / "px4"
+    px4_dir.mkdir()
+    (px4_dir / "Makefile").write_text("")
+
+    monkeypatch.setattr(
+        drone_mod,
+        "_adopt_existing_px4",
+        lambda **kwargs: {
+            "status": "already_running",
+            "pid": "99991",
+            "world": "muye_demo_field",
+            "source": "detected",
+            "ready": True,
+        },
+    )
+
+    popen_called = False
+
+    def fake_popen(*args, **kwargs):
+        nonlocal popen_called
+        popen_called = True
+        raise AssertionError("Popen should not be called when adopting an existing PX4 instance")
+
+    monkeypatch.setattr(drone_mod.subprocess, "Popen", fake_popen)
+
+    request = Px4StartRequest(px4_dir=str(px4_dir))
+    result = asyncio.run(start_px4_demo(request))
+
+    assert result["status"] == "already_running"
+    assert result["pid"] == "99991"
+    assert result["source"] == "detected"
+    assert popen_called is False
+
+
+def test_start_px4_timeout_returns_504(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
+    monkeypatch.setattr(drone_mod, "_kill_px4_process", AsyncMock())
+
+    px4_dir = tmp_path / "px4"
+    px4_dir.mkdir()
+    (px4_dir / "Makefile").write_text("")
+
+    mock_proc = type("MockProc", (), {
+        "pid": 66666,
+        "poll": lambda self: None,
+        "returncode": None,
+    })()
+
+    monkeypatch.setattr(drone_mod.subprocess, "Popen", lambda *a, **kw: mock_proc)
+    # Port never opens
+    monkeypatch.setattr(drone_mod, "_is_port_open", lambda port, timeout=0.5: False)
+    # Speed up timeout
+    monkeypatch.setattr(drone_mod, "PX4_READY_TIMEOUT", 0)
+
+    request = Px4StartRequest(px4_dir=str(px4_dir))
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(start_px4_demo(request))
+    assert exc_info.value.status_code == 504
+    assert "not ready" in exc_info.value.detail
+
+
+def test_start_px4_exits_immediately_returns_500(monkeypatch, tmp_path) -> None:
+    _setup_px4_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(drone_mod, "_is_process_alive", lambda pid: False)
+    monkeypatch.setattr(drone_mod, "_read_pid_file", lambda: None)
+
+    px4_dir = tmp_path / "px4"
+    px4_dir.mkdir()
+    (px4_dir / "Makefile").write_text("")
+
+    mock_proc = type("MockProc", (), {
+        "pid": 77777,
+        "poll": lambda self: 1,
+        "returncode": 1,
+    })()
+
+    monkeypatch.setattr(drone_mod.subprocess, "Popen", lambda *a, **kw: mock_proc)
+
+    request = Px4StartRequest(px4_dir=str(px4_dir))
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(start_px4_demo(request))
+    assert exc_info.value.status_code == 500
+    assert "exited immediately" in exc_info.value.detail

@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend and data contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: .
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run backend regression suite
+        run: >-
+          python -m pytest tests
+          -x
+          -k "not px4_simulator"
+          --ignore=tests/test_script_imports.py
+          -q
+
+      - name: Run fixed heatmap regression
+        run: >-
+          python scripts/eval_fixed_set.py
+          --output artifacts/fixed-eval.md
+          --json-output artifacts/fixed-eval.json
+
+      - name: Verify documentation contracts
+        run: python scripts/verify_docs.py
+
+      - name: Upload fixed evaluation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fixed-heatmap-evaluation
+          path: artifacts/fixed-eval.*
+          if-no-files-found: warn
+          retention-days: 14
+
+  frontend:
+    name: Frontend quality, build and browser layouts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
+
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Test frontend
+        run: npm run test
+        working-directory: frontend
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      - name: Install Chromium for layout acceptance
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run multi-viewport browser acceptance
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Upload browser acceptance report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-browser-layout-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+          retention-days: 14
+
+  containers:
+    name: Container build and end-to-end smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+
+      - name: Validate isolated smoke configuration
+        run: docker compose --file docker-compose.smoke.yml config --quiet
+
+      - name: Validate real-model acceptance configuration
+        run: docker compose --file docker-compose.real-smoke.yml config --quiet
+
+      - name: Build backend and frontend images
+        run: docker compose build
+
+      - name: Run isolated container smoke
+        run: ./scripts/docker_smoke.sh

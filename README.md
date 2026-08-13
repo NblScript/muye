@@ -1,289 +1,244 @@
-# 牧野智能农业害虫防治系统
+<div align="center">
 
-`muye` 是一个基于 Python 的智能农业害虫防治项目，集成了无人机图像采集、YOLO 害虫识别、和风天气数据整合、千问 AI 决策和精准喷洒控制。项目采用异步任务流、模块化设计，并对外部 API 响应进行严格校验。
+# 牧野智农 · Muye
 
-## 项目结构
+### 从昆虫识别到变量喷洒的智能农业作业闭环
+
+基于 YOLO、气象数据、多模型 AI 会诊与无人机任务规划，构建可运行、可追溯、可扩展的植保指挥系统。
+
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=111)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![PX4](https://img.shields.io/badge/PX4-SITL-1B1F23?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-372_backend_%7C_33_frontend_%7C_6_browser-success?style=flat-square)
+[![CI](https://github.com/NblScript/muye/actions/workflows/ci.yml/badge.svg)](https://github.com/NblScript/muye/actions/workflows/ci.yml)
+
+[快速开始](#快速开始) · [系统架构](#系统架构) · [真实数据边界](#真实数据边界) · [项目文档](#项目文档)
+
+</div>
+
+## 项目是什么
+
+牧野面向大田植保场景，将巡检图像接入、害虫识别、天气融合、AI 用药决策、安全合规检查、无人机变量喷洒和药效复检串成一条完整工作流。
+
+项目首页不是行政区地图，而是一块与业务数据绑定的虚拟田地：展示 YOLO 昆虫相对热值、喷洒航线、无人机状态、气象条件、AI 决策与闭环评估。演示数据和真实检测数据具有明确来源标记，不在前端随机生成虫情。
+
+## 核心能力
+
+| 能力 | 当前实现 |
+|---|---|
+| 昆虫检测 | 本地 Ultralytics YOLO API，支持模型热切换、批量检测和结果校验 |
+| 热力地图 | 检测框按图像尺寸归一化，生成田块相对热值网格与变量喷洒计划 |
+| AI 决策 | Qwen 快速专家路径，或 Qwen / DeepSeek / Xiaomi 多智能体并行会诊与加权投票 |
+| 知识增强 | LangChain + ChromaDB，融合农药目录、农业知识和历史决策案例 |
+| 安全合规 | 用药规则检查、阻断原因、替代方案和自动/人工起飞策略 |
+| 无人机执行 | PX4 SITL + MAVSDK；保留 DJI OSDK 后端接口与仿真适配 |
+| 闭环评估 | 喷洒后复检、杀灭率评估与未达标任务重试 |
+| 指挥大屏 | React + Three.js 虚拟田地、稳定热力层、航线、任务流程和历史追溯 |
+| 数据存储 | SQLite 结构化任务数据 + JSONL 事件流 + Chroma 向量库 |
+| 工程质量 | 领域模块化、API 数据校验、速率限制、SLO、前后端自动化测试 |
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    A[巡检图片] --> B[YOLO 昆虫检测]
+    B --> C[坐标归一化与热力网格]
+    C --> D[天气与地块上下文]
+    D --> E[DecisionRouter]
+    E --> F[快速专家 / 多模型会诊]
+    F --> G[农药安全合规]
+    G --> H[变量喷洒任务规划]
+    H --> I[PX4 / DJI 后端]
+    I --> J[药效复检与闭环评估]
+
+    B -. 实时状态 .-> K[React 指挥大屏]
+    F -. 决策与证据 .-> K
+    H -. 热力、航线、遥测 .-> K
+    J -. 评估结果 .-> K
+```
+
+主要目录：
 
 ```text
 muye/
-├── .env.example                 # 环境变量模板
-├── app.py                       # Streamlit 可视化演示面板
-├── config/                      # 项目配置目录
-│   ├── api_keys.env             # 本地运行时密钥与接口地址配置
-│   ├── drone_config.json        # 地块、围栏、飞行限制等无人机配置
-│   └── yolo_config.yaml         # YOLO 推理服务相关配置
-├── data/                        # 运行期数据目录
-│   ├── images/                  # 无人机采集图像与演示上传图片
-│   └── logs/                    # 系统日志与事件总线文件
-├── models/                      # 本地模型目录
-│   └── README.md                # 模型放置说明
-├── modules/                     # 核心业务模块
-│   ├── __init__.py              # 模块包初始化文件
-│   ├── ai_decision.py           # 千问决策与结构化提示词组装
-│   ├── common.py                # 公共工具、日志与路径管理
-│   ├── data_collector.py        # 图片采集与目录监听
-│   ├── drone_controller.py      # 无人机指令校验与任务执行
-│   ├── event_bus.py             # 基于 JSONL 的演示事件总线
-│   ├── image_processor.py       # YOLO API 调用与识别结果校验
-│   ├── local_yolo_api.py        # 本地 YOLO 模型 HTTP 服务
-│   ├── virtual_drone_api.py     # 虚拟无人机 HTTP 服务
-│   └── weather_integration.py   # 和风天气接入与字段映射
-├── drone_api.py                 # 虚拟无人机 API 启动入口
-├── tests/                       # 单元测试目录
-│   ├── test_ai_decision.py      # 千问决策测试
-│   ├── test_event_bus.py        # 事件总线测试
-│   ├── test_image_processor.py  # YOLO 识别流程测试
-│   ├── test_local_yolo_api.py   # 本地 YOLO API 测试
-│   ├── test_main.py             # 主入口辅助逻辑测试
-│   ├── test_virtual_drone_api.py # 虚拟无人机状态流测试
-│   └── test_weather_integration.py # 和风天气两步调用测试
-├── main.py                      # 后端主入口与一键演示调度器
-├── requirements.txt             # Python 依赖清单
-├── yolo_api.py                  # 本地 YOLO API 启动入口
-└── README.md                    # 项目说明文档
+├── app/                 # FastAPI 应用、路由与工作流编排
+├── modules/
+│   ├── detection/       # YOLO 服务、图像处理与数据采集
+│   ├── decision/        # AI 决策、路由、多智能体、RAG 与合规检查
+│   ├── drone/           # 密度网格、任务规划、PX4 与 DJI 后端
+│   └── infra/           # SQLite、天气、事件总线与公共基础设施
+├── frontend/            # React + TypeScript + Three.js 指挥大屏
+├── models/              # API Schema 与农业数据模型
+├── config/              # YOLO、无人机和模型配置
+├── data/                # 示例图片、种子数据和运行时数据
+├── scripts/             # 环境准备、演示、生产运行和质量检查
+└── docs/                # 架构、产品、API、数据模型和农业知识文档
 ```
 
-## 功能说明
+## 快速开始
 
-1. `data_collector.py`
-   - 每 24 小时自动触发无人机采图。
-   - 使用 `watchdog` 实时监听 `data/images/` 新图片。
-   - 图片命名格式为 `YYYYMMDD-HHMMSS.jpg`。
-
-2. `image_processor.py`
-   - 异步调用 YOLO API。
-   - 校验害虫类型、置信度、位置信息。
-   - 过滤低于置信度阈值的检测结果。
-   - 已默认接到本地 YOLO `best.pt` API。
-
-3. `local_yolo_api.py` + `yolo_api.py`
-   - 将本地 `models/best.pt` 封装为 HTTP API。
-   - 暴露 `/health` 和 `/detect` 两个接口。
-   - 支持 Bearer Token 鉴权、IP 白名单、速率限制和批量推理。
-
-4. `weather_integration.py`
-   - 先调用和风天气城市查询接口获取 `Location ID`。
-   - 再调用和风天气实况天气接口获取天气数据。
-   - 将返回字段统一映射为项目内部格式：温度、湿度、风向、风力、天气概况。
-
-5. `ai_decision.py`
-   - 将害虫检测和天气信息整合成结构化文本。
-   - 调用千问 API 输出 JSON 决策。
-   - 使用 `jsonschema` 强制校验返回结构。
-
-6. `drone_controller.py`
-   - 校验气象限制、地理围栏和飞行控制参数。
-   - 支持虚拟无人机 API 执行与状态轮询。
-
-7. `main.py`
-   - 使用 `asyncio` 组织采集、识别、决策、执行全流程。
-   - 通过异步队列避免并发场景下的资源竞争。
-   - 支持一键同时启动本地 YOLO API、虚拟无人机 API 和主系统。
-
-8. `event_bus.py`
-   - 采用 `JSONL` 文件作为简单事件总线。
-   - 后端关键节点会写入带时间戳、阶段和状态的事件。
-   - Streamlit 面板通过轮询同一份事件文件实现跨进程展示。
-
-9. `app.py`
-   - 基于 Streamlit 的演示面板。
-   - 支持上传图片、原图/识别图对比、天气/决策卡片、无人机进度和实时日志。
-
-10. `virtual_drone_api.py` + `drone_api.py`
-   - 提供虚拟无人机任务创建与任务状态查询接口。
-   - 自动模拟排队、起飞、前往作业区、喷洒、返航和完成状态。
-
-## 安装依赖
+### 1. 获取代码并安装依赖
 
 ```bash
-cd /home/qingking/muye
-pip install -r requirements.txt
+git clone git@github.com:NblScript/muye.git
+cd muye
+
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+cd frontend
+npm ci
+cd ..
 ```
 
-如果你已经安装了项目内虚拟环境，也可以直接使用：
+### 2. 检查本地环境
 
 ```bash
-cd /home/qingking/muye
-. .venv/bin/activate
+./scripts/prepare.sh --check-only
 ```
 
-## 环境变量配置
-
-项目提供两个环境配置参考文件：
-
-- [`.env.example`](/home/qingking/muye/.env.example)：模板文件
-- [`api_keys.env`](/home/qingking/muye/config/api_keys.env)：当前项目运行时读取的配置文件
-
-和风天气开发者 Key 获取方式：
-
-1. 访问 `https://console.qweather.com`
-2. 注册并登录和风天气开发者平台
-3. 创建项目并申请 API Key
-4. 将 Key 写入 `QWEATHER_API_KEY`
-
-推荐配置示例：
-
-```env
-YOLO_API_URL="http://127.0.0.1:8010/detect"
-YOLO_API_KEY="muye-local-yolo-token"
-YOLO_LOCAL_MODEL_PATH="models/best.pt"
-YOLO_LOCAL_HOST="127.0.0.1"
-YOLO_LOCAL_PORT="8010"
-
-QWEN_API_URL="https://your-qwen-compatible-endpoint/v1/chat/completions"
-QWEN_API_KEY="replace-with-your-qwen-key"
-QWEN_MODEL="qwen-max"
-
-QWEATHER_API_KEY="在此填入你的和风天气API_KEY"
-QWEATHER_GEO_URL="https://api.qweather.com/geo/v2/city/lookup"
-QWEATHER_WEATHER_URL="https://api.qweather.com/v7/weather/now"
-
-DRONE_API_URL="http://127.0.0.1:9010/missions"
-DRONE_API_KEY="virtual-drone-token"
-VIRTUAL_DRONE_HOST="127.0.0.1"
-VIRTUAL_DRONE_PORT="9010"
-VIRTUAL_DRONE_ALLOWED_IPS="127.0.0.1,::1"
-SERVICE_CLIENT_IP="127.0.0.1"
-```
-
-说明：
-
-- 请将训练好的权重文件放到 `models/best.pt`。
-- `drone_config.json` 中的 `field.weather_location` 或 `field.location.city` 用于和风天气地点查询，建议填写城市名，例如 `上海`。
-- 本地 YOLO API 默认读取 `YOLO_LOCAL_MODEL_PATH`，主流程默认调用 `YOLO_API_URL`。
-- `YOLO_API_KEY` 同时用于主项目访问本地 YOLO API 的 Bearer Token。
-- `drone_config.json` 中 `simulate_capture=true` 时，系统会自动生成一张最小 JPEG 作为采图结果，便于本地联调。
-- `execution.simulate_only=true` 时，无人机喷洒任务只做本地模拟，不访问虚拟无人机 API。
-- 使用 `--with-virtual-drone-api` 或 `--with-demo-stack` 时，主程序会自动接管无人机接口地址并关闭本地模拟模式。
-
-## 运行方式
-
-当前项目已经支持以下真实/模拟组合：
-
-- YOLO：真实本地模型 `best.pt`
-- 和风天气：真实接口
-- 千问：支持真实接口，也支持通过 `QWEN_USE_MOCK` 切换为模拟模式
-- 无人机：虚拟无人机 API
-
-当你的 [api_keys.env](/home/qingking/muye/config/api_keys.env) 中设置为：
-
-```env
-QWEATHER_USE_MOCK="false"
-QWEN_USE_MOCK="false"
-```
-
-系统会运行在“真实天气 + 真实千问 + 虚拟无人机”模式。
-
-推荐一键启动本地 YOLO API、虚拟无人机 API 与主系统：
+### 3. 启动确定性演示
 
 ```bash
-cd /home/qingking/muye
-python main.py --with-demo-stack
+cp .env.demo.example .env.demo
+./scripts/demo.sh
 ```
 
-执行一次完整链路后退出：
+启动后访问：
+
+- 指挥大屏：<http://localhost:5173/?demo=1>
+- 后端 API：<http://127.0.0.1:18000>
+- 健康检查：<http://127.0.0.1:18000/health>
+
+演示模式使用固定的阶段数据、模拟天气和模拟 AI 决策，适合界面体验与流程讲解；它不会被标记为真实 YOLO 虫情。
+
+## 接入真实服务
+
+1. 将训练好的模型放到 `models/best.pt`，或在环境变量中指定其他模型路径。
+2. 从 `.env.production.example` 创建 `.env.production`，配置 Qwen、和风天气、可选的 DeepSeek/Xiaomi 和 PX4 参数。
+3. 启动 PX4 SITL 或连接真机；两者均通过 `PX4_EXECUTION_MODE=real` 的 MAVSDK 执行链路接入。
+4. 运行生产入口：
 
 ```bash
-cd /home/qingking/muye
-python main.py --with-demo-stack --once
+cp .env.production.example .env.production
+./scripts/prepare.sh --production
+./scripts/run.sh
 ```
 
-如果你希望分开启动，也可以先启动本地 YOLO API：
+常用服务端口：
+
+| 服务 | 默认地址 |
+|---|---|
+| React 前端 | `127.0.0.1:5173` |
+| FastAPI | `127.0.0.1:18000` |
+| 本地 YOLO API | `127.0.0.1:8010` |
+| PX4 MAVSDK | `udpin://0.0.0.0:14540` |
+
+API 密钥只应写入本地环境文件，不要提交到仓库。生产运行参数和安全边界参见 [安全说明](SECURITY.md) 与 [演示流程规范](docs/product-specs/demo-pipeline.md)。
+
+### Docker 本地联调
+
+Docker Compose 使用真实本地 YOLO 模型、固定 mock AI/天气和动画无人机，适合确定性联调，不会连接真机：
 
 ```bash
-cd /home/qingking/muye
-python yolo_api.py
+# 先将模型放到 models/best.pt
+docker compose up --build
 ```
 
-再启动虚拟无人机 API：
+启动后访问前端 <http://localhost:5173> 和 API <http://localhost:18000>。端口默认只绑定宿主机回环地址；YOLO API 仅在后端容器内监听，不对宿主机暴露。Compose readiness 会同时检查真实模型、内嵌 YOLO 和跨进程处理链标记，而不只判断 API 进程存活。
+
+准备好权重后，可用专用验收栈完成一次真实图片推理并自动清理：
 
 ```bash
-cd /home/qingking/muye
-python drone_api.py
+./scripts/docker_real_smoke.sh
 ```
 
-可选检查：
+该脚本使用 `docker-compose.real-smoke.yml`，默认在 `18081` / `5175` 启动独立数据卷环境，验证前端代理、上传监听、真实 YOLO 检测以及像素框原图尺寸契约。它不会设置 `MUYE_CONTAINER_SMOKE`，样本无检测或返回模拟标记都会失败。
+
+若只需验证镜像、Nginx 代理、图片监听和完整处理链，可运行不依赖模型权重的隔离冒烟栈：
 
 ```bash
-curl http://127.0.0.1:8010/health
-curl http://127.0.0.1:9010/health
+./scripts/docker_smoke.sh
 ```
 
-再启动主系统：
+该脚本使用 `docker-compose.smoke.yml`，默认只在回环地址暴露前端 `5174`、API `18080` 和模拟 YOLO `18010`，并使用独立命名数据卷。它会上传真实图片、等待工作流产生固定 `aphid` 检测，然后自动删除测试容器和数据卷。模拟响应显式标记 `mode=smoke_fake` 和 `is_simulated=true`，不得用于模型精度或生产验收。
+
+## 真实数据边界
+
+为了避免“好看但不真实”，项目对热力数据做了以下约束：
+
+- Ultralytics `xyxy` 检测框按像素处理，并携带原图宽高；归一化框使用明确的 `image_normalized` 坐标空间。
+- 缺少图像尺寸的像素框不会进入真实密度网格，也不会被强行放到田块边缘。
+- `density_grid[].density` 是本次任务内按检测置信度累计并归一化的**相对热值**，不是每亩虫口数或经济防治阈值。
+- 当前 `image_frame_to_geofence_bbox` 投影假定图像覆盖田块且图像顶部对应北侧；没有正射影像或相机位姿时，不宣称虫点具有测绘级 GPS 精度。
+- 演示种子通过 `density_metadata.is_simulated` 明确标记，前端同步显示数据来源。
+
+详细契约参见 [昆虫热力图产品规格](docs/product-specs/insect-heatmap.md)、[数据模型](docs/references/data-model.md) 和 [前端热力规则](FRONTEND.md#昆虫热力图规则)。
+
+## 主要 API
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| `GET` | `/live` | 进程存活检查 |
+| `GET` | `/health` | 依赖与运行状态检查 |
+| `GET` | `/workflow/state` | 当前聚合工作流 |
+| `GET` | `/heatmaps/latest` | 当前田地最新热力快照 |
+| `GET` | `/heatmaps/snapshots` | 按虫种、时间和来源筛选历史快照 |
+| `WS` | `/ws/enhanced-state` | 实时任务、遥测与热力状态 |
+| `POST` | `/demo/upload-image` | 上传巡检图片并进入处理链 |
+| `POST` | `/drone/confirm-takeoff` | 确认人工起飞 |
+| `GET` | `/drone/density-map` | 查询任务密度网格与来源元数据 |
+
+完整端点、请求体和响应示例见 [API 参考](docs/references/api.md)。
+
+## 质量验证
 
 ```bash
-cd /home/qingking/muye
-python main.py
+# 竞赛关键路径
+./scripts/check.sh
+
+# 后端全量回归 + 前端测试/构建 + 文档校验
+MUYE_FULL_CHECK=1 ./scripts/check.sh
+
+# 单独检查固定图片、热力网格、航线和喷洒速率基线
+python scripts/eval_fixed_set.py --output data/eval/latest_report.md
+
+# 前端静态检查
+cd frontend && npm run lint
+
+# 1366×768、1920×1080 与 125% 缩放等效视口验收
+cd frontend && npx playwright install --with-deps chromium && npm run build && npm run test:e2e
 ```
 
-## 可视化演示面板
+固定评测集包含 3 类 IP102 害虫正样本和空检测、缺少坐标、非法围栏 3 类降级场景。图片及算法输出均使用 SHA-256 锁定；清单、数据来源和标注边界见 [data/eval/README.md](data/eval/README.md)。
 
-后端与前端通过同一个事件文件连接：
+GitHub Actions 在每次 push、pull request、merge queue 和手动触发时并行执行：
 
-- 事件总线文件：`data/logs/demo_events.jsonl`
-- 图片投喂目录：`data/images/`
+- Python 3.11 后端全量回归、固定数据回归与文档契约校验。
+- Node.js 22 前端依赖锁定安装、lint、单元测试、生产构建和 6 个 Chromium 多视口布局验收。
+- Docker Compose 三套配置解析、后端/前端镜像构建，以及无权重隔离容器的 HTTP 端到端冒烟。
 
-推荐使用两个终端同时启动：
+CI 保存固定评测报告、前端 `dist` 产物与 Playwright 视口截图/失败 trace 14 天。CI 不保存私有模型权重，因此只解析真实模型验收配置；完整推理验收需在提供 `models/best.pt` 的环境运行 `./scripts/docker_real_smoke.sh`。
 
-终端 1，启动后端主流程：
+## 项目文档
 
-```bash
-cd /home/qingking/muye
-. .venv/bin/activate
-python main.py --with-demo-stack
-```
+| 文档 | 内容 |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 系统边界、模块依赖和关键数据流 |
+| [FRONTEND.md](FRONTEND.md) | 指挥大屏架构、实时状态和热力规则 |
+| [docs/product-specs/insect-heatmap.md](docs/product-specs/insect-heatmap.md) | 昆虫热力产品范围、数据语义和展示边界 |
+| [docs/exec-plans/2026-08-04-insect-heatmap-productization.md](docs/exec-plans/2026-08-04-insect-heatmap-productization.md) | 下一阶段实施顺序与验收标准 |
+| [docs/references/api.md](docs/references/api.md) | API 与 WebSocket 接口参考 |
+| [docs/references/data-model.md](docs/references/data-model.md) | 检测框、密度网格和存储模型 |
+| [docs/demo-script.md](docs/demo-script.md) | 演示操作说明 |
+| [RELIABILITY.md](RELIABILITY.md) | 健康检查、SLO 和故障处理 |
+| [SECURITY.md](SECURITY.md) | 密钥、网络与飞行安全约束 |
+| [PLANS.md](PLANS.md) | 已完成能力与后续路线 |
 
-终端 2，启动 Streamlit 前端：
+## 当前阶段
 
-```bash
-cd /home/qingking/muye
-. .venv/bin/activate
-streamlit run app.py
-```
+牧野目前是一个可运行的智慧植保系统原型，适合竞赛展示、教学、算法联调和无人机任务流程验证。真实农田生产使用仍需要完成现场标定、正射影像或相机位姿接入、农艺阈值校准、药剂法规复核以及真实飞行安全认证。
 
-启动后：
-
-1. 在 Streamlit 左侧栏上传图片
-2. 前端会将图片写入 `data/images/`
-3. 后端监听到新图片后，依次执行 YOLO、天气、千问和无人机流程
-4. 事件总线持续写入 `data/logs/demo_events.jsonl`
-5. Streamlit 自动轮询并刷新原图、识别框、天气卡片、AI 建议和无人机状态
-6. Streamlit 左侧栏会直接显示当前是 `real` 还是 `mock` 模式
-
-## 日志与数据
-
-- 无人机图片存放在 `data/images/`
-- 系统日志存放在 `data/logs/system.log`
-- 日志会记录 `request_id`、`client_ip`、`duration_ms` 等字段
-
-## 测试
-
-```bash
-cd /home/qingking/muye
-pytest
-```
-
-测试覆盖：
-
-- YOLO 检测结果过滤与响应校验
-- 事件总线的写入、清空与任务视图聚合
-- 和风天气地点查询与天气实况两步流程
-- 本地 YOLO API 的鉴权与标准输出格式
-- 虚拟无人机任务状态推进
-- 千问决策 JSON Schema 校验与结构化输入构建
-
-## 版本记录
-
-- `v0.1-initial`
-  - 项目初始稳定版本
-  - 包含基础的 YOLO、天气、千问、无人机控制和测试结构
-
-- `v0.2-initial`
-  - 当前稳定演示版本
-  - 已支持真实 YOLO、真实和风天气、真实千问增强链路、虚拟无人机和可视化指挥中心前端
-
-## 部署建议
-
-- 将 `config/api_keys.env` 中的示例值替换为真实密钥，避免提交到公共仓库。
-- 若需要增强安全性，可在网关层补充 API 密钥认证、IP 白名单和速率限制。
-- 如需监控，可在现有日志基础上接入 Prometheus/Grafana，并为 YOLO/Qwen/无人机接口增加指标采集。
+项目会持续围绕真实虫情数据、精准变量喷洒、无人机硬件接入和可观测性演进。
