@@ -162,6 +162,18 @@ def test_container_exposes_only_public_api_and_fails_fast() -> None:
     assert "docker" not in ignored_entries
 
 
+def test_backend_image_apt_packages_compatible_with_debian_trixie() -> None:
+    dockerfile = (ROOT_DIR / "docker/Dockerfile.backend").read_text(encoding="utf-8")
+
+    # python:3.11-slim 已基于 Debian trixie，libgl1-mesa-glx 在该发行版被移除，
+    # OpenCV 所需的 libGL.so.1 由 libgl1 提供。
+    install_block = dockerfile.split("RUN apt-get update", 1)[1].split(
+        "&& rm -rf", 1
+    )[0]
+    assert "libgl1 \\\n" in install_block
+    assert "libgl1-mesa-glx" not in install_block
+
+
 def test_docker_smoke_script_scopes_cleanup_to_its_project() -> None:
     content = (ROOT_DIR / "scripts/docker_smoke.sh").read_text(encoding="utf-8")
 

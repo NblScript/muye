@@ -7,8 +7,9 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 系统依赖（YOLO/ultralytics 需要）
+# 注意：Debian trixie 已移除 libgl1-mesa-glx，改用 libgl1（同样提供 OpenCV 需要的 libGL.so.1）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \

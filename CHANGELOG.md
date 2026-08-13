@@ -54,6 +54,7 @@
 - 修复 Docker Compose 构建路径、端口、挂载、健康检查和确定性本地联调配置。
 - 新增独立 `docker-compose.smoke.yml` 和 `scripts/docker_smoke.sh`，用显式标记的固定检测器验证前端代理、图片上传、目录监听、YOLO 请求与工作流状态；默认真实模型入口仍保持缺权重快速失败。
 - 新增 `docker-compose.real-smoke.yml` 和 `scripts/docker_real_smoke.sh`：使用独立数据卷验证真实权重加载、样本推理、像素框尺寸与公开 HTTP 链路；默认 Compose 改用跨进程 readiness 并将宿主机端口限制在回环地址。
+- 修复后端镜像在 Debian trixie 上构建失败：`libgl1-mesa-glx` 已被移除，改用 `libgl1` 提供 OpenCV 所需的 `libGL.so.1`。
 
 ### 文档与质量
 
