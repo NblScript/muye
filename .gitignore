@@ -17,6 +17,7 @@ __pycache__/
 /models/*.engine
 
 # Runtime data
+/data/eval/latest_report.md
 /data/images/*
 !/data/images/.gitkeep
 /data/logs/*
