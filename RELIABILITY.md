@@ -106,7 +106,7 @@ curl http://localhost:18000/slo
 
 滑动窗口 per-IP 限流中间件（`app/middleware.py`），默认每分钟 120 次请求。超限返回 429。
 
-配置项：`config/app_config.json` → `api_rate_limit_per_minute`
+配置项：环境变量 `MUYE_API_RATE_LIMIT_PER_MINUTE`（默认 120）。
 
 ### 健康检查
 

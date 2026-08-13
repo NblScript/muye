@@ -54,7 +54,7 @@ EOF
 # 默认配置
 API_HOST="${MUYE_API_HOST:-127.0.0.1}"
 API_PORT="${MUYE_API_PORT:-18000}"
-FRONTEND_PORT=5173
+FRONTEND_PORT="${MUYE_FRONTEND_PORT:-5173}"
 NO_FRONTEND="false"
 SKIP_PRECHECK="false"
 ALLOW_DEFAULT_ENV="false"
@@ -264,8 +264,31 @@ else
     print_info "跳过环境检查"
 fi
 
+# 端口占用预检：防止与上一场残留进程串台（vite 被占会自动 +1，但脚本仍探测原端口）
+port_in_use() {
+    local port="$1"
+    (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null
+}
+
+require_free_port() {
+    local port="$1" name="$2"
+    if port_in_use "$port"; then
+        print_error "端口 ${port}（${name}）已被占用，疑似残留进程"
+        echo "  请先停止旧进程：pkill -f 'uvicorn app.main:api_app'; pkill -f 'app.main --with-yolo-api'; pkill -f 'vite'" >&2
+        echo "  或改用其他端口：--api-port / --frontend-port" >&2
+        exit 1
+    fi
+}
+
 # ── 2. 启动服务 ──
 print_stage "2/3" "启动服务"
+
+# 端口预检（防残留进程串台；内嵌 YOLO 固定监听 8010）
+require_free_port "$API_PORT" "前端 API"
+if [[ "$NO_FRONTEND" != "true" ]]; then
+    require_free_port "$FRONTEND_PORT" "前端"
+fi
+require_free_port "8010" "内嵌 YOLO API"
 
 mkdir -p "$IMAGES_DIR"
 

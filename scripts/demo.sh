@@ -3,7 +3,10 @@
 # 自动推进：巡检(30s) → 害虫识别(5s) → AI决策(手动确认) → 打药执行
 #
 # 用法:
-#   ./scripts/demo.sh
+#   ./scripts/demo.sh [--mode virtual|px4] [--takeoff manual|auto]
+#                     [--api-port 18000] [--frontend-port 5173]
+#
+# 环境变量优先级：命令行参数 > 已导出的环境变量（含 demo_scenario.sh 场景） > .env.demo > 默认值
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,9 +29,56 @@ print_success() { echo -e "${GREEN}✓${NC} $1"; }
 print_info()    { echo -e "${BLUE}ℹ${NC} $1"; }
 print_warn()    { echo -e "${YELLOW}⚠${NC} $1"; }
 
-# ── 配置 ──
-API_PORT="${MUYE_API_PORT:-18000}"
-FRONTEND_PORT=5173
+usage() {
+    cat <<'EOF'
+用法: ./scripts/demo.sh [选项]
+
+选项:
+  --mode virtual|px4        演示模式（默认 virtual）：
+                            virtual = 纯动画演示；px4 = 额外启动 PX4 SITL + Gazebo 供现场观感
+  --takeoff manual|auto     起飞确认方式（默认 manual）
+  --api-port <端口>         后端 API 端口（默认 18000，可用 MUYE_API_PORT 预设）
+  --frontend-port <端口>    前端端口（默认 5173，可用 MUYE_FRONTEND_PORT 预设）
+  -h, --help                显示本帮助
+EOF
+}
+
+# ── 参数解析（命令行优先级最高；bash getopts 不支持长选项，采用手动解析）──
+MODE="virtual"
+CLI_TAKEOFF=""
+CLI_API_PORT=""
+CLI_FRONTEND_PORT=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --mode)
+            [[ $# -ge 2 ]] || { echo "Missing value for --mode" >&2; usage; exit 1; }
+            MODE="$2"
+            shift 2
+            ;;
+        --takeoff)
+            [[ $# -ge 2 ]] || { echo "Missing value for --takeoff" >&2; usage; exit 1; }
+            CLI_TAKEOFF="$2"
+            shift 2
+            ;;
+        --api-port)
+            [[ $# -ge 2 ]] || { echo "Missing value for --api-port" >&2; usage; exit 1; }
+            CLI_API_PORT="$2"
+            shift 2
+            ;;
+        --frontend-port)
+            [[ $# -ge 2 ]] || { echo "Missing value for --frontend-port" >&2; usage; exit 1; }
+            CLI_FRONTEND_PORT="$2"
+            shift 2
+            ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
+    esac
+done
+
+case "$MODE" in
+    virtual|px4) ;;
+    *) echo -e "${YELLOW}⚠${NC} 无效 --mode: $MODE（可选 virtual|px4）" >&2; usage; exit 2 ;;
+esac
 
 # ── 加载环境 ──
 load_env_file() {
@@ -47,22 +97,34 @@ load_env_file() {
     fi
 }
 
+# 不覆盖调用方已导出的变量：demo_scenario.sh 的场景变量因此得以保留
 load_env_file "$API_KEYS_FILE" false
-[[ -f "$DEMO_ENV_FILE" ]] && load_env_file "$DEMO_ENV_FILE" true
+[[ -f "$DEMO_ENV_FILE" ]] && load_env_file "$DEMO_ENV_FILE" false
 
-# ── 演示环境变量 ──
-export DRONE_BACKEND="px4"
-export PX4_EXECUTION_MODE="animated_demo"
-export PX4_AUTO_START_ON_SPRAY="false"
-export MUYE_TAKEOFF_MODE="manual"
-export QWEATHER_USE_MOCK="true"
-export QWEATHER_MOCK_HUMIDITY="61"
-export QWEN_USE_MOCK="true"
-export RAG_ENABLED="false"
-export MUYE_MULTI_AGENT_ENABLED="false"
-export MUYE_ROUTER_ENABLED="false"
-export PX4_REQUIRE_GLOBAL_POSITION="false"
-export PX4_ALLOW_FORCE_ARM="true"
+# ── 配置（命令行 > 环境变量 > 默认值）──
+API_PORT="${CLI_API_PORT:-${MUYE_API_PORT:-18000}}"
+FRONTEND_PORT="${CLI_FRONTEND_PORT:-${MUYE_FRONTEND_PORT:-5173}}"
+
+# ── 演示环境变量（只补默认值，不覆盖已导出的场景变量）──
+export DRONE_BACKEND="${DRONE_BACKEND:-px4}"
+export PX4_EXECUTION_MODE="${PX4_EXECUTION_MODE:-animated_demo}"
+export PX4_AUTO_START_ON_SPRAY="${PX4_AUTO_START_ON_SPRAY:-false}"
+export MUYE_TAKEOFF_MODE="${MUYE_TAKEOFF_MODE:-manual}"
+export QWEATHER_USE_MOCK="${QWEATHER_USE_MOCK:-true}"
+export QWEATHER_MOCK_HUMIDITY="${QWEATHER_MOCK_HUMIDITY:-61}"
+export QWEN_USE_MOCK="${QWEN_USE_MOCK:-true}"
+export RAG_ENABLED="${RAG_ENABLED:-false}"
+export MUYE_MULTI_AGENT_ENABLED="${MUYE_MULTI_AGENT_ENABLED:-false}"
+export MUYE_ROUTER_ENABLED="${MUYE_ROUTER_ENABLED:-false}"
+export PX4_REQUIRE_GLOBAL_POSITION="${PX4_REQUIRE_GLOBAL_POSITION:-false}"
+export PX4_ALLOW_FORCE_ARM="${PX4_ALLOW_FORCE_ARM:-true}"
+
+if [[ -n "$CLI_TAKEOFF" ]]; then
+    case "$CLI_TAKEOFF" in
+        manual|auto) export MUYE_TAKEOFF_MODE="$CLI_TAKEOFF" ;;
+        *) echo "无效 --takeoff: $CLI_TAKEOFF（可选 manual|auto）" >&2; usage; exit 2 ;;
+    esac
+fi
 
 # ── 清理 ──
 PIDS=()
@@ -83,6 +145,23 @@ wait_for_url() {
     done
     echo -e "${YELLOW}⚠${NC} $name 启动超时" >&2
     return 1
+}
+
+# 端口占用预检：避免命中上一场演示残留的旧进程（vite 被占会自动 +1，
+# 但脚本仍探测原端口，会造成“假就绪”串台）
+port_in_use() {
+    local port="$1"
+    (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null
+}
+
+require_free_port() {
+    local port="$1" name="$2"
+    if port_in_use "$port"; then
+        echo -e "${YELLOW}✗${NC} 端口 ${port}（${name}）已被占用，疑似残留进程。" >&2
+        echo "  请先停止旧进程：pkill -f 'uvicorn app.main:api_app'; pkill -f 'vite'; pkill -f 'npm run dev'" >&2
+        echo "  或改用其他端口：--api-port / --frontend-port" >&2
+        exit 1
+    fi
 }
 
 seed_stage() {
@@ -116,6 +195,10 @@ if [[ ! -d "${FRONTEND_DIR}/node_modules" ]]; then
     (cd "$FRONTEND_DIR" && npm install --silent)
 fi
 
+# ── 端口预检（防残留进程串台）──
+require_free_port "$API_PORT" "后端 API"
+require_free_port "$FRONTEND_PORT" "前端"
+
 # ── 清空旧数据 ──
 PYTHONPATH="$ROOT_DIR" "$PYTHON_BIN" "$SEED_SCRIPT" --stage clear 2>/dev/null || true
 print_success "旧数据已清空"
@@ -138,6 +221,16 @@ wait_for_url "http://127.0.0.1:${FRONTEND_PORT}" "前端" 60
 print_success "所有服务已就绪"
 echo -e "  前端大屏: ${GREEN}http://localhost:${FRONTEND_PORT}?demo=1${NC}"
 echo ""
+
+# --mode px4：现场观感模式下额外启动 PX4 SITL + Gazebo（尽力而为，失败不阻断演示）
+if [[ "$MODE" == "px4" ]]; then
+    print_info "模式 px4：请求启动 PX4 SITL + Gazebo..."
+    if curl -fsS -X POST "http://127.0.0.1:${API_PORT}/drone/start-px4-demo" >/dev/null 2>&1; then
+        print_success "PX4 SITL 启动请求已受理（启动过程可能需要数十秒）"
+    else
+        print_warn "PX4 SITL 启动失败（可能未安装 ~/PX4-Autopilot），继续使用动画演示"
+    fi
+fi
 
 # ═══════════════════════════════════════════════════
 # 阶段 1: 无人机巡检 (30s)

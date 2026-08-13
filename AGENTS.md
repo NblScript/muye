@@ -89,12 +89,12 @@ frontend/ → app/ (routes → services) → modules/ (领域逻辑) → models/
 
 ```bash
 ./scripts/prepare.sh   # 环境准备（依赖检查、演示图片、RAG 知识库）
-./scripts/demo.sh      # 演示主入口：手动投图 → 人工确认起飞 → PX4 动画演示
+./scripts/demo.sh      # 演示主入口：确定性种子回放 → 人工确认起飞 → PX4 动画演示
 ```
 
 **demo.sh 参数**：`--mode virtual|px4` · `--takeoff manual|auto` · `--api-port` · `--frontend-port`
 
-演示模式特点：单张图片手动注入、人工确认起飞、PX4 animated_demo 模式、mock 天气/AI。
+演示模式特点：确定性种子回放（无图片注入）、人工确认起飞、PX4 animated_demo 模式、mock 天气/AI。
 
 ### 生产入口（24h 自动巡检）
 
@@ -111,9 +111,9 @@ cp .env.production.example .env.production
 | 配置项 | demo.sh（演示） | run.sh（生产） |
 |--------|----------------|---------------|
 | `MUYE_TAKEOFF_MODE` | `manual` | `auto` |
-| 启动采集 | `--no-capture-on-startup` | 启动即采集 |
+| 启动采集 | 不启动主处理链（种子回放） | 启动即采集 |
 | `PX4_EXECUTION_MODE` | `animated_demo` | `real` |
-| 图片注入 | 单张手动注入 | 依赖定时采集（24h） |
+| 图片注入 | 无图片注入（种子回放） | 依赖定时采集（24h） |
 | 前端 | 必须启动 | 可选（`--no-frontend`） |
 | 环境配置 | mock | `.env.production`（真实 API Key） |
 

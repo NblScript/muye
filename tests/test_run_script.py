@@ -54,3 +54,14 @@ def test_run_script_requires_configured_yolo_model() -> None:
     assert 'YOLO_MODEL_PATH="${YOLO_LOCAL_MODEL_PATH:-models/best.pt}"' in content
     assert 'print_error "YOLO 模型不存在: $YOLO_MODEL_PATH"' in content
     assert "--with-yolo-api 需要可用的本地模型" in content
+
+
+def test_run_script_preflights_ports_before_starting() -> None:
+    content = RUN_SH.read_text(encoding="utf-8")
+
+    assert "port_in_use" in content
+    assert "require_free_port" in content
+    assert "/dev/tcp/127.0.0.1" in content
+    assert 'require_free_port "$API_PORT" "前端 API"' in content
+    assert 'require_free_port "$FRONTEND_PORT" "前端"' in content
+    assert 'require_free_port "8010" "内嵌 YOLO API"' in content
