@@ -128,6 +128,18 @@ export default function Field({ model }: { model: ScreenViewModel }) {
   useLayoutEffect(() => {
     if (!groupRef.current) return
     groupRef.current.scale.setScalar(0.01)
+    // prefers-reduced-motion：跳过入场动画，直接落到最终视角与比例，
+    // 避免软件渲染/无障碍环境下入场动画阻塞信息面板展示。
+    if (
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      camera.position.set(58, 124, 166)
+      groupRef.current.scale.setScalar(1)
+      useConfigStore.setState({ mapPlayComplete: true })
+      return
+    }
     const timeline = gsap.timeline({ onComplete: () => useConfigStore.setState({ mapPlayComplete: true }) })
     timeline.to(camera.position, { x: 58, y: 124, z: 166, duration: 1.8, ease: 'circ.out' })
     timeline.to(groupRef.current.scale, { x: 1, y: 1, z: 1, duration: 0.9, ease: 'circ.out' }, 1.45)

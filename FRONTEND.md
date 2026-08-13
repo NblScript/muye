@@ -123,6 +123,7 @@ YOLO 像素检测框必须携带 `coordinate_space: "image_pixel"`、`image_widt
 - 同一份 `heatCells` 内容不重建纹理。
 - 纹理替换后必须释放旧的 `CanvasTexture`。
 - 热力图可显隐，但显隐不能改变数据。
+- 入场动画（面板 `useMoveTo` 与地图 `field.tsx` 时间轴）尊重 `prefers-reduced-motion`：命中时直接保持最终状态，不创建动画。CI 的 Playwright 项目启用 reduced motion，几何验收不依赖动画时序；软件渲染/无障碍环境中信息面板也不得因动画被阻塞。
 - 虚拟田地边界固定为项目内部坐标，真实 GPS 只用于地块内归一化。
 - 当前投影把整张巡检图像的上、下、左、右边缘映射到地块外接矩形，默认图像北向且覆盖整个田块；接入正射影像或相机位姿前，不宣称单个虫点具有测绘级 GPS 精度。
 

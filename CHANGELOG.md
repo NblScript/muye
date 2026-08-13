@@ -61,6 +61,7 @@
 - `demo.sh` 实现文档承诺的参数解析（`--mode virtual|px4`、`--takeoff manual|auto`、`--api-port`、`--frontend-port`），并改为尊重已导出的环境变量——`demo_scenario.sh` 的 5 个预设场景不再被无条件覆盖。
 - `demo.sh`/`run.sh` 启动前增加端口占用预检，命中残留进程立即退出并给出清理命令，避免 vite 端口漂移造成的"假就绪"串台；`run.sh` 前端端口支持 `MUYE_FRONTEND_PORT`。
 - 前端大屏信息面板入场不再永久依赖 3D 场景完成事件：WebGL 初始化失败或过慢时 4 秒兜底入场，避免整屏信息停留在透明状态（修复 CI 三视口 e2e 超时）。
+- 入场动画尊重 `prefers-reduced-motion`（CI Playwright 项目启用）：命中时直接保持最终状态，几何验收不再依赖动画时序；Canvas dpr 上限降至 1.5 并关闭抗锯齿以减轻软件渲染负担。
 - 修复 `fetchMission` 双 `/api` hack：后端 mission 路由补齐裸路径别名，前端改为与其他接口一致的路径。
 - Settings 页移除无实效的"应用配置"死表单，改为指向真实配置来源（env 文件 + config/）的说明。
 - 同步修正文档漂移：RELIABILITY.md 的 `app_config.json` 引用改为环境变量；AGENTS.md 与 demo-pipeline.md 的演示入口行为描述与实现对齐。

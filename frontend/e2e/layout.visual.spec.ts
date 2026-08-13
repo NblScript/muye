@@ -51,8 +51,8 @@ test('command screen stays inside the viewport without panel collisions', async 
   await page.goto('/')
   await expect(page.getByTestId('field-title')).toContainText('昆虫密度热力值地图')
   await expect(page.getByLabel('首页虫种筛选')).toHaveValue('all')
-  // 入场动画在软件渲染的 CI 环境可能被主线程饥饿延迟，
-  // 面板兜底入场最迟 ~4s 触发，动画本身 <1s；30s 上限远高于任何正常路径。
+  // prefers-reduced-motion（本工程全部 e2e 项目启用）下面板跳过入场动画直接显示；
+  // 轮询只验证最终状态，不依赖动画时序。30s 上限远高于任何正常路径。
   await expect.poll(async () => page.getByTestId('panel-pests').evaluate((element) => {
     const style = getComputedStyle(element)
     return Number(style.opacity) === 1
