@@ -48,7 +48,9 @@ test('command screen stays inside the viewport without panel collisions', async 
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
-  await page.goto('/')
+  // ?e2e=1 跳过 3D Canvas：几何验收只测 DOM 面板布局，
+  // 避免 swiftshader 软件渲染在 CI 上占满主线程导致断言饥饿。
+  await page.goto('/?e2e=1')
   await expect(page.getByTestId('field-title')).toContainText('昆虫密度热力值地图')
   await expect(page.getByLabel('首页虫种筛选')).toHaveValue('all')
   // prefers-reduced-motion（本工程全部 e2e 项目启用）下面板跳过入场动画直接显示；

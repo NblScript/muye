@@ -142,6 +142,16 @@ function formatSnapshotTime(value: string) {
   })
 }
 
+function isE2ERun(): boolean {
+  // e2e 几何验收只关心 DOM 面板布局，不依赖 WebGL 渲染。
+  // 软件渲染（swiftshader）在 CI 上会长时间占满主线程，导致一切定时器/断言饥饿；
+  // 该标记让 e2e 跳过 3D Canvas，保留标题/图例等 DOM 覆盖层。
+  return (
+    typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('e2e')
+  )
+}
+
 export default function Map({ model, pestOptions, selectedPestType, onSelectPest }: MapProps) {
   const cells = model.fieldTwin.heatCells
   const average = cells.length ? cells.reduce((sum, cell) => sum + cell.density, 0) / cells.length : 0
@@ -149,18 +159,20 @@ export default function Map({ model, pestOptions, selectedPestType, onSelectPest
 
   return (
     <CanvasWrapper data-testid="command-map">
-      <Canvas
-        flat
-        camera={{ position: [-50, 125, 250], fov: 50, far: 2000, near: 1 }}
-        dpr={[1, 1.5]}
-        gl={{ antialias: false }}
-      >
-        <color attach="background" args={['#26282a']} />
-        <MapOrbitControls />
-        <Lights />
-        <FieldShadow />
-        <Scene model={model} />
-      </Canvas>
+      {!isE2ERun() && (
+        <Canvas
+          flat
+          camera={{ position: [-50, 125, 250], fov: 50, far: 2000, near: 1 }}
+          dpr={[1, 1.5]}
+          gl={{ antialias: false }}
+        >
+          <color attach="background" args={['#26282a']} />
+          <MapOrbitControls />
+          <Lights />
+          <FieldShadow />
+          <Scene model={model} />
+        </Canvas>
+      )}
       <Overlay>
         <FieldTitle data-testid="field-title">
           <strong>昆虫密度热力值地图</strong>
