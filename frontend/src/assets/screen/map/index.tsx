@@ -149,7 +149,12 @@ export default function Map({ model, pestOptions, selectedPestType, onSelectPest
 
   return (
     <CanvasWrapper data-testid="command-map">
-      <Canvas flat camera={{ position: [-50, 125, 250], fov: 50, far: 2000, near: 1 }} dpr={[1, 2]}>
+      <Canvas
+        flat
+        camera={{ position: [-50, 125, 250], fov: 50, far: 2000, near: 1 }}
+        dpr={[1, 1.5]}
+        gl={{ antialias: false }}
+      >
         <color attach="background" args={['#26282a']} />
         <MapOrbitControls />
         <Lights />
