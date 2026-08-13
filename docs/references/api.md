@@ -603,7 +603,9 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 
 ## 任务闭环
 
-### GET /api/mission/by-request/{request_id}
+> 与其余端点一致，任务闭环端点同时支持裸路径与 `/api/` 前缀别名；下例使用裸路径。
+
+### GET /mission/by-request/{request_id}
 
 通过原始请求 ID 获取任务闭环详情（含所有迭代记录）。
 
@@ -655,13 +657,13 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 }
 ```
 
-### GET /api/mission/{mission_uuid}
+### GET /mission/{mission_uuid}
 
 通过任务闭环 UUID 获取任务闭环详情（含所有迭代记录）。
 
 **响应**：`MissionDetailResponse`（同上）
 
-### GET /api/missions
+### GET /missions
 
 获取任务闭环列表，支持按状态过滤和分页。
 
@@ -694,7 +696,7 @@ API 进程存活检查，不访问 SQLite、YOLO、PX4、RAG 或外部服务。�
 }
 ```
 
-### POST /api/mission/{mission_uuid}/cancel
+### POST /mission/{mission_uuid}/cancel
 
 取消正在执行的任务闭环（仅 active 状态可取消）。
 

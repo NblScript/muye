@@ -72,7 +72,7 @@ export async function fetchHeatmapComparison(requestId: string, iterationNumber?
 
 export async function fetchMission(missionId: string) {
   const response = await apiClient.get<MissionDetail>(
-    `/api/mission/${encodeURIComponent(missionId)}`,
+    `/mission/${encodeURIComponent(missionId)}`,
   )
   return response.data
 }

@@ -102,10 +102,20 @@ export default function Panel({ model, actions }: PanelProps) {
   const { ref: bottomRef, restart: restartBottom } = useMoveTo<HTMLDivElement>('toTop', .8, .5)
 
   useEffect(() => {
-    const unsubscribeMap = useConfigStore.subscribe((state) => state.mapPlayComplete, (complete) => {
-      if (!complete) return
+    let started = false
+    const start = () => {
+      if (started) return
+      started = true
       for (const restart of [restartTop, restartBottom, restartLeft, restartLeft1, restartLeft2, restartRight, restartRight1, restartRight2]) restart()
+    }
+    const unsubscribeMap = useConfigStore.subscribe((state) => state.mapPlayComplete, (complete) => {
+      if (complete) start()
     })
+    // 渐进降级：面板入场不得永久依赖 3D 场景的完成事件。
+    // WebGL 初始化失败或软件渲染过慢时，地图时间轴可能永远不触发
+    // mapPlayComplete，此时必须在有限时间内让信息面板强制入场，
+    // 否则整屏信息会停留在透明状态。
+    const fallbackTimer = window.setTimeout(start, 4000)
     const unsubscribeMode = useConfigStore.subscribe((state) => state.mode, (visible) => {
       const transitions = [
         [restartTop, reverseTop], [restartLeft, reverseLeft], [restartLeft1, reverseLeft1],
@@ -116,7 +126,7 @@ export default function Panel({ model, actions }: PanelProps) {
         else reverse()
       }
     })
-    return () => { unsubscribeMap(); unsubscribeMode() }
+    return () => { unsubscribeMap(); unsubscribeMode(); window.clearTimeout(fallbackTimer) }
   }, [
     restartBottom, restartLeft, restartLeft1, restartLeft2, restartRight, restartRight1, restartRight2, restartTop,
     reverseLeft, reverseLeft1, reverseLeft2, reverseRight, reverseRight1, reverseRight2, reverseTop,

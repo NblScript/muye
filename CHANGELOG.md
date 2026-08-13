@@ -56,10 +56,18 @@
 - 新增 `docker-compose.real-smoke.yml` 和 `scripts/docker_real_smoke.sh`：使用独立数据卷验证真实权重加载、样本推理、像素框尺寸与公开 HTTP 链路；默认 Compose 改用跨进程 readiness 并将宿主机端口限制在回环地址。
 - 修复后端镜像在 Debian trixie 上构建失败：`libgl1-mesa-glx` 已被移除，改用 `libgl1` 提供 OpenCV 所需的 `libGL.so.1`。
 
+### 演示可靠性与 CI 修复
+
+- `demo.sh` 实现文档承诺的参数解析（`--mode virtual|px4`、`--takeoff manual|auto`、`--api-port`、`--frontend-port`），并改为尊重已导出的环境变量——`demo_scenario.sh` 的 5 个预设场景不再被无条件覆盖。
+- `demo.sh`/`run.sh` 启动前增加端口占用预检，命中残留进程立即退出并给出清理命令，避免 vite 端口漂移造成的"假就绪"串台；`run.sh` 前端端口支持 `MUYE_FRONTEND_PORT`。
+- 前端大屏信息面板入场不再永久依赖 3D 场景完成事件：WebGL 初始化失败或过慢时 4 秒兜底入场，避免整屏信息停留在透明状态（修复 CI 三视口 e2e 超时）。
+- 修复 `fetchMission` 双 `/api` hack：后端 mission 路由补齐裸路径别名，前端改为与其他接口一致的路径。
+- Settings 页移除无实效的"应用配置"死表单，改为指向真实配置来源（env 文件 + config/）的说明。
+- 同步修正文档漂移：RELIABILITY.md 的 `app_config.json` 引用改为环境变量；AGENTS.md 与 demo-pipeline.md 的演示入口行为描述与实现对齐。
+
 ### 文档与质量
 
-- 新增昆虫热力图产品规格和产品化执行计划，固定单田地、来源可追溯和相对热值边界。
-- 新增 6 场景固定热力回归集，覆盖 3 类 IP102 害虫、空检测、缺少坐标和非法围栏；图片、完整网格、航线与喷洒速率均以 SHA-256 锁定并接入赛前总检查。
+- 新增昆虫热力图产品规格和产品化执行计划，固定单田地、来源可追溯和相对热值边界。- 新增 6 场景固定热力回归集，覆盖 3 类 IP102 害虫、空检测、缺少坐标和非法围栏；图片、完整网格、航线与喷洒速率均以 SHA-256 锁定并接入赛前总检查。
 - 新增 GitHub Actions CI，使用只读权限并行执行 Python 3.11 后端/数据/文档检查、Node.js 22 前端质量/真浏览器布局检查，以及 Docker Compose 配置、双镜像构建和隔离端到端冒烟；固定评测报告、前端产物、视口截图和失败 trace 保留 14 天。
 - 同步更新架构、产品理念、安全、设计、质量基线、路线图和文档索引。
 - 当前验证基线：后端 372 passed / 1 skipped，前端 33 个 Vitest + 6 个 Playwright 场景，固定数据回归、构建与文档校验通过。

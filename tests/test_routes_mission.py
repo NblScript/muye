@@ -86,3 +86,19 @@ async def test_get_mission_by_request_not_found(client):
 async def test_cancel_mission_not_found(client):
     resp = await client.post("/api/mission/nonexistent_id/cancel")
     assert resp.status_code in (404, 200)
+
+
+@pytest.mark.asyncio
+async def test_mission_bare_paths_match_api_aliases(client):
+    """裸路径与 /api 别名行为一致（前端经 Vite 代理剥离 /api 后命中裸路径）。"""
+    resp_bare = await client.get("/missions")
+    resp_api = await client.get("/api/missions")
+    assert resp_bare.status_code == resp_api.status_code
+
+    resp_bare = await client.get("/mission/nonexistent_id")
+    resp_api = await client.get("/api/mission/nonexistent_id")
+    assert resp_bare.status_code == resp_api.status_code
+
+    resp_bare = await client.post("/mission/nonexistent_id/cancel")
+    resp_api = await client.post("/api/mission/nonexistent_id/cancel")
+    assert resp_bare.status_code == resp_api.status_code

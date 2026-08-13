@@ -93,10 +93,6 @@ export default function Settings() {
     return () => clearInterval(timer)
   }, [])
 
-  const handleSave = () => {
-    toast.success('设置已保存（本地预览）')
-  }
-
   const healthChecks = health?.checks ? Object.entries(health.checks) : []
   const runtimeConfig = health?.checks?.runtime_config
   const runtimeConfigItems: Array<[string, unknown]> = runtimeConfig
@@ -180,30 +176,17 @@ export default function Settings() {
         )}
       </Card>
 
-      <Card title="应用配置">
-        <form className="settings-form" onSubmit={(e) => { e.preventDefault(); handleSave() }}>
-          <label className="settings-field">
-            <span className="settings-label">后端 API 地址</span>
-            <input className="input" defaultValue="/api" placeholder="例如: http://localhost:8000/api" />
-          </label>
-
-          <label className="settings-field">
-            <span className="settings-label">刷新间隔(ms)</span>
-            <input className="input" type="number" defaultValue="2000" />
-          </label>
-
-          <label className="settings-field settings-field-row">
-            <span className="settings-label">启用 WebSocket</span>
-            <input type="checkbox" defaultChecked className="settings-toggle" />
-          </label>
-
-          <label className="settings-field settings-field-row">
-            <span className="settings-label">自动刷新</span>
-            <input type="checkbox" defaultChecked className="settings-toggle" />
-          </label>
-
-          <Button variant="primary" type="submit" className="settings-submit-btn">保存设置</Button>
-        </form>
+      <Card title="应用配置说明">
+        <div className="settings-config-notes">
+          <p>运行配置由启动脚本和环境文件统一管理，不在页面内修改：</p>
+          <ul>
+            <li>演示环境：<code>.env.demo</code>（模板 <code>.env.demo.example</code>）</li>
+            <li>生产环境：<code>.env.production</code>（模板 <code>.env.production.example</code>）</li>
+            <li>无人机参数：<code>config/drone_config.json</code></li>
+            <li>检测模型：<code>config/yolo_config.yaml</code> · 决策模型：<code>config/model_config.yaml</code></li>
+          </ul>
+          <p className="color-muted">修改配置后请重启对应服务；上方「当前生效配置」实时展示后端实际读取到的值。</p>
+        </div>
       </Card>
 
       {toast.holder}

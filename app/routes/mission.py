@@ -97,7 +97,14 @@ async def cancel_mission(mission_uuid: str) -> dict[str, str]:
 
 
 def register_mission_routes(app: FastAPI) -> None:
-    """Register mission API routes."""
+    """Register mission API routes.
+
+    与其他路由保持一致：同时注册裸路径与 /api 前缀别名。
+    """
+    app.get("/mission/by-request/{request_id}", response_model=MissionDetailResponse, include_in_schema=False)(get_mission_by_request)
+    app.get("/mission/{mission_uuid}", response_model=MissionDetailResponse, include_in_schema=False)(get_mission)
+    app.get("/missions", response_model=MissionListResponse, include_in_schema=False)(list_missions)
+    app.post("/mission/{mission_uuid}/cancel", include_in_schema=False)(cancel_mission)
     app.get("/api/mission/by-request/{request_id}", response_model=MissionDetailResponse)(get_mission_by_request)
     app.get("/api/mission/{mission_uuid}", response_model=MissionDetailResponse)(get_mission)
     app.get("/api/missions", response_model=MissionListResponse)(list_missions)
