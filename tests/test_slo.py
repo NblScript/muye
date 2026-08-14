@@ -97,3 +97,28 @@ async def test_slo_endpoint_returns_snapshot():
     assert "pipeline" in data
     assert "websocket" in data
     assert "availability" in data
+
+
+def test_sim_websocket_handlers_record_connect_and_disconnect():
+    """sim.py 的 WebSocket 端点必须接入 SLO connect/disconnect 计数。"""
+    from fastapi.testclient import TestClient
+
+    from app.routes.sim import register_sim_routes
+    from app.services.map_simulator import Px4MapStateSimulator
+    from app.slo import get_slo_metrics
+
+    metrics = get_slo_metrics()
+    metrics.reset()
+
+    app = FastAPI()
+    register_sim_routes(app, Px4MapStateSimulator())
+    client = TestClient(app)
+
+    assert metrics.snapshot()["websocket"]["connects"] == 0
+    with client.websocket_connect("/sim/ws/map-state") as websocket:
+        websocket.receive_json()
+    snap = metrics.snapshot()
+    assert snap["websocket"]["connects"] == 1
+    assert snap["websocket"]["disconnects"] == 1
+    client.close()
+    metrics.reset()

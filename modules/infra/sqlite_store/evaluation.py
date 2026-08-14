@@ -17,7 +17,7 @@ class EvaluationMixin:
         scheduled_at: str,
         action_time_hours: float,
         pre_pest_count: int,
-        kill_rate_threshold: float = 0.7,
+        kill_rate_threshold: float = 0.9,
         retry_count: int = 0,
     ) -> int:
         with self._lock:

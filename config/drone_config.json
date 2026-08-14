@@ -155,7 +155,6 @@
   },
   "execution": {
     "backend": "px4",
-    "simulate_only": false,
     "request_timeout_seconds": 15,
     "takeoff_mode": "manual"
   },

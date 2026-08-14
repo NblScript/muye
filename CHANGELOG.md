@@ -66,9 +66,18 @@
 - Settings 页移除无实效的"应用配置"死表单，改为指向真实配置来源（env 文件 + config/）的说明。
 - 同步修正文档漂移：RELIABILITY.md 的 `app_config.json` 引用改为环境变量；AGENTS.md 与 demo-pipeline.md 的演示入口行为描述与实现对齐。
 
+### 代码质量清理与文档瘦身
+
+- WebSocket SLO 接入真实生产数据：sim.py 两个 WS 端点记录 connect/disconnect，`/demo/readiness` 的 websocket 检查据此反映真实连接状态。
+- 统一杀灭率阈值默认值 0.9（`task_evaluations` 建表默认、评估 Mixin 与路由回退值原为 0.7）。
+- `_ALLOWED_TABLES` 白名单对齐 `_SCHEMA_SQL` 真实表名，并新增一致性回归测试。
+- 清理死配置与死代码：移除 `evaluation_simulated_kill_rate_min/max`、未使用的 `api_rate_limit_per_minute` 配置字段、`simulate_only` 覆盖与 `deps.simulator`；删除无调用方的 `scripts/seed_history.py`。
+- 文档体系瘦身：删除 `docs/superpowers/`（合规设计并入 design-docs，历史计划并入 exec-plans）；core-beliefs 并入 PRODUCT_SENSE；竞赛材料统一归入 `docs/competition/`；PLANS.md 瘦身为路线图骨架。
+
 ### 文档与质量
 
-- 新增昆虫热力图产品规格和产品化执行计划，固定单田地、来源可追溯和相对热值边界。- 新增 6 场景固定热力回归集，覆盖 3 类 IP102 害虫、空检测、缺少坐标和非法围栏；图片、完整网格、航线与喷洒速率均以 SHA-256 锁定并接入赛前总检查。
+- 新增昆虫热力图产品规格和产品化执行计划，固定单田地、来源可追溯和相对热值边界。
+- 新增 6 场景固定热力回归集，覆盖 3 类 IP102 害虫、空检测、缺少坐标和非法围栏；图片、完整网格、航线与喷洒速率均以 SHA-256 锁定并接入赛前总检查。
 - 新增 GitHub Actions CI，使用只读权限并行执行 Python 3.11 后端/数据/文档检查、Node.js 22 前端质量/真浏览器布局检查，以及 Docker Compose 配置、双镜像构建和隔离端到端冒烟；固定评测报告、前端产物、视口截图和失败 trace 保留 14 天。
 - 同步更新架构、产品理念、安全、设计、质量基线、路线图和文档索引。
 - 当前验证基线：后端 372 passed / 1 skipped，前端 33 个 Vitest + 6 个 Playwright 场景，固定数据回归、构建与文档校验通过。

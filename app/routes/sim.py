@@ -23,6 +23,7 @@ from models.schemas import (
 from app.services import workflow_service
 from app.services.map_simulator import Px4MapStateSimulator
 from app.services.telemetry_service import get_telemetry_service
+from app.slo import get_slo_metrics
 from modules.infra.common import safe_float
 
 # Global simulator instance, set during app initialization
@@ -51,6 +52,7 @@ async def get_sim_map_state() -> SimMapStateResponse:
 async def sim_map_state_ws(websocket: WebSocket) -> None:
     """Legacy simulation map state websocket handler."""
     await websocket.accept()
+    get_slo_metrics().record_ws_connect()
     try:
         while True:
             snapshot = get_simulator().snapshot()
@@ -58,11 +60,14 @@ async def sim_map_state_ws(websocket: WebSocket) -> None:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         return
+    finally:
+        get_slo_metrics().record_ws_disconnect()
 
 
 async def enhanced_state_ws(websocket: WebSocket) -> None:
     """Enhanced map state websocket handler with real telemetry state."""
     await websocket.accept()
+    get_slo_metrics().record_ws_connect()
     telemetry_service = get_telemetry_service()
     try:
         while True:
@@ -94,6 +99,8 @@ async def enhanced_state_ws(websocket: WebSocket) -> None:
             await asyncio.sleep(1)
     except WebSocketDisconnect:
         return
+    finally:
+        get_slo_metrics().record_ws_disconnect()
 
 
 def _default_drone_state() -> DroneState:

@@ -359,7 +359,6 @@ class MuyeApplication:
         if self.config.drone_backend:
             execution["backend"] = self.config.drone_backend.strip().lower()
 
-        execution["simulate_only"] = False
         execution["takeoff_mode"] = self.config.takeoff_mode.strip().lower()
 
         if self.config.px4_system_address:
@@ -410,7 +409,6 @@ class MuyeApplication:
         if normalized not in BACKEND_REGISTRY:
             raise ValueError(f"未知的无人机后端: {normalized}，可选: {list(BACKEND_REGISTRY.keys())}")
         self.drone_config.setdefault("execution", {})["backend"] = normalized
-        self.drone_config["execution"]["simulate_only"] = False
 
     async def start(
         self,

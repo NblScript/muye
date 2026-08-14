@@ -801,7 +801,6 @@ def test_main_reads_px4_backend_override(monkeypatch, tmp_path) -> None:
     app = MuyeApplication(config=config)
     try:
         assert app.drone_config["execution"]["backend"] == "px4"
-        assert app.drone_config["execution"]["simulate_only"] is False
         assert app.drone_config["px4"]["system_address"] == "udpin://0.0.0.0:14550"
     finally:
         asyncio.run(app.shutdown())

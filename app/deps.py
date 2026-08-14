@@ -4,16 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from modules.infra.common import DATA_DIR
-
-if TYPE_CHECKING:
-    from app.services.map_simulator import Px4MapStateSimulator
-
-
-# Global simulator instance (initialized in app.main)
-simulator: Px4MapStateSimulator | None = None
 
 # Global reference for health checks
 embedded_yolo_runner_for_health: Any = None
@@ -24,16 +17,6 @@ takeoff_confirmation_event: asyncio.Event | None = None
 TAKEOFF_STATE_DIR = DATA_DIR / "runtime" / "takeoff"
 TAKEOFF_PENDING_REQUEST_PATH = TAKEOFF_STATE_DIR / "pending_request.json"
 TAKEOFF_CONFIRMATION_FLAG_PATH = TAKEOFF_STATE_DIR / "confirmed.flag"
-
-def get_simulator() -> Px4MapStateSimulator:
-    """Get the map state simulator instance."""
-    global simulator
-    if simulator is None:
-        from app.services.map_simulator import Px4MapStateSimulator
-        # Create a default simulator if not set
-        simulator = Px4MapStateSimulator()
-    return simulator
-
 
 def get_embedded_yolo_runner() -> Any:
     """Get the embedded YOLO runner for health checks."""

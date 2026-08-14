@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from modules.infra.event_bus import FileEventBus, build_task_views, load_events
 from modules.infra.sqlite_store import SqliteStore
 
@@ -66,3 +68,40 @@ def test_seed_demo_state_generates_full_demo_task(tmp_path) -> None:
     assert seeded["rag_context"]["consultation_detail"]["active_count"] == 3
     assert seeded["compliance"]["status"] == "passed"
     assert seeded["drone"]["status"] == "spraying"
+
+
+@pytest.mark.asyncio
+async def test_demo_readiness_websocket_reflects_slo_state(monkeypatch) -> None:
+    """/demo/readiness 的 websocket 检查来自 SLO 连接计数，不再恒为 warning。"""
+    from app import slo as slo_mod
+    from app.routes import demo_readiness
+
+    metrics = slo_mod.get_slo_metrics()
+    metrics.reset()
+
+    monkeypatch.setattr(
+        demo_readiness,
+        "collect_health_status",
+        lambda: ({"status": "ok", "checks": {}, "failures": []}, True),
+    )
+
+    class _StubWorkflow:
+        def model_dump(self):
+            return {"latest_task": {"request_id": "req-ws-check"}}
+
+    monkeypatch.setattr(
+        demo_readiness.workflow_service,
+        "build_workflow_state_response",
+        lambda: _StubWorkflow(),
+    )
+
+    # 无连接：websocket 检查应为 warning
+    payload = await demo_readiness.get_demo_readiness()
+    assert payload["checks"]["websocket"]["status"] == "warning"
+
+    # 有活跃连接：应为 ok
+    metrics.record_ws_connect()
+    payload = await demo_readiness.get_demo_readiness()
+    assert payload["checks"]["websocket"]["status"] == "ok"
+
+    metrics.reset()

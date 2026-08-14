@@ -103,9 +103,6 @@ class MuyeConfig:
     # AI 模型参数
     ai_temperature: float = 0.1
 
-    # API 限流配置
-    api_rate_limit_per_minute: int = 120
-
     # 闭环评估配置
     evaluation_enabled: bool = True
     evaluation_default_action_time_hours: float = 24.0
@@ -113,8 +110,6 @@ class MuyeConfig:
     evaluation_kill_rate_threshold: float = 0.9
     evaluation_max_retries: int = 3
     evaluation_auto_retry: bool = True
-    evaluation_simulated_kill_rate_min: float = 0.6
-    evaluation_simulated_kill_rate_max: float = 0.95
 
     # DJI OSDK 配置
     dji_osdk_execution_mode: str = "osdk_sim"
@@ -322,8 +317,6 @@ class MuyeConfig:
             multi_agent_enabled=_parse_env_bool(os.getenv("MUYE_MULTI_AGENT_ENABLED"), False),
             multi_agent_timeout_seconds=float(os.getenv("MUYE_MULTI_AGENT_TIMEOUT_SECONDS", "60")),
             ai_temperature=float(os.getenv("MUYE_AI_TEMPERATURE", "0.1")),
-            # API 限流配置
-            api_rate_limit_per_minute=int(os.getenv("MUYE_API_RATE_LIMIT_PER_MINUTE", "120")),
             # 闭环评估配置
             evaluation_enabled=_parse_env_bool(os.getenv("MUYE_EVALUATION_ENABLED"), True),
             evaluation_default_action_time_hours=float(
@@ -337,12 +330,6 @@ class MuyeConfig:
             ),
             evaluation_max_retries=int(os.getenv("MUYE_EVALUATION_MAX_RETRIES", "3")),
             evaluation_auto_retry=_parse_env_bool(os.getenv("MUYE_EVALUATION_AUTO_RETRY"), True),
-            evaluation_simulated_kill_rate_min=float(
-                os.getenv("MUYE_EVALUATION_SIM_KILL_RATE_MIN", "0.6")
-            ),
-            evaluation_simulated_kill_rate_max=float(
-                os.getenv("MUYE_EVALUATION_SIM_KILL_RATE_MAX", "0.95")
-            ),
             # DJI OSDK 配置
             dji_osdk_execution_mode=os.getenv("DJI_OSDK_EXECUTION_MODE", "osdk_sim"),
             dji_osdk_serial_port=os.getenv("DJI_OSDK_SERIAL_PORT", "/dev/ttyACM0"),
