@@ -11,8 +11,8 @@ from docx.shared import Pt
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = Path("/mnt/c/shuangdian/05-1 作品信息概要表（人工智能实践赛、挑战赛，2026版）模板.docx")
-OUTPUT = ROOT / "2026002224-作品信息概要表.docx"
-README_OUTPUT = ROOT / "2026002224-03设计与开发文档-readme.txt"
+OUTPUT = ROOT / "docs" / "competition" / "2026002224-作品信息概要表.docx"
+README_OUTPUT = ROOT / "docs" / "competition" / "2026002224-03设计与开发文档-readme.txt"
 
 
 def set_run_font(run, size: float = 9.5, bold: bool = False) -> None:

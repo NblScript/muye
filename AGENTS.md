@@ -150,8 +150,7 @@ cd frontend && npm run test:e2e # Playwright 大屏/历史页 3 视口验收（�
 | [docs/references/api.md](docs/references/api.md) | API 端点参考 |
 | [docs/references/data-model.md](docs/references/data-model.md) | 数据模型参考 |
 | [docs/references/rag-llms.txt](docs/references/rag-llms.txt) | RAG/LangChain 使用指南 |
-| [docs/superpowers/specs/](docs/superpowers/) | 技术创新设计规格 |
-| [docs/project-plan.md](docs/project-plan.md) | 项目计划书 |
+| [docs/competition/](docs/competition/index.md) | 竞赛材料（解说词、计划书、PPT 内容、提交产物） |
 
 ## 当前活跃计划
 
@@ -194,7 +193,7 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 **知识数据基线**：80 条农药演示种子，覆盖 7 类目标作物、59 类防治对象；种子中实际出现 4 种毒性标签，合规规则按 5 级标准处理。Markdown 知识块在构建时从当前 `docs/` 动态切分，数量随文档版本变化，不作为固定架构常量。
 
 **代码**：`modules/decision/compliance.py`
-**设计文档**：`docs/superpowers/specs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`
+**设计文档**：`docs/design-docs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`
 
 ## 闭环效果评估
 

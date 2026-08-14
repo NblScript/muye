@@ -10,7 +10,7 @@ from docx.shared import Cm, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = Path("/mnt/c/shuangdian/05-3 作品报告（人工智能实践赛，2026版）模板.docx")
-OUTPUT = ROOT / "2026002224-作品报告.docx"
+OUTPUT = ROOT / "docs" / "competition" / "2026002224-作品报告.docx"
 
 
 def set_run_font(run, size: int | float | None = None, bold: bool | None = None) -> None:
@@ -327,7 +327,7 @@ def add_report(document: Document) -> None:
     bullet(
         document,
         [
-            "一键演示：scripts/demo.sh 可启动后端 API 和 React 前端，scripts/seed_demo_stages.py 支持分阶段注入演示数据，docs/demo-script.md 提供配套解说词，三件套支撑完整竞赛演示。",
+            "一键演示：scripts/demo.sh 可启动后端 API 和 React 前端，scripts/seed_demo_stages.py 支持分阶段注入演示数据，docs/competition/demo-script.md 提供配套解说词，三件套支撑完整竞赛演示。",
             "人工确认起飞：后端在 pending_confirmation 阶段等待用户确认，前端提供确认按钮，避免无人机任务自动越过安全确认。",
             "多模型加权投票：ExpertConsultation 内置三个专家角色，支持配置不同 LLM provider，通过熟悉度加权投票产生最终用药方案。",
             "合规推理链：PesticideComplianceChecker 对施药方案执行五维检查（来源验证、作物匹配、毒性评估、天气约束、安全提示），每项附带证据溯源和应对建议，输出结构化执行策略。",

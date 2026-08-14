@@ -232,7 +232,7 @@ CI 保存固定评测报告、前端 `dist` 产物与 Playwright 视口截图/�
 | [docs/exec-plans/2026-08-04-insect-heatmap-productization.md](docs/exec-plans/2026-08-04-insect-heatmap-productization.md) | 下一阶段实施顺序与验收标准 |
 | [docs/references/api.md](docs/references/api.md) | API 与 WebSocket 接口参考 |
 | [docs/references/data-model.md](docs/references/data-model.md) | 检测框、密度网格和存储模型 |
-| [docs/demo-script.md](docs/demo-script.md) | 演示操作说明 |
+| [docs/competition/demo-script.md](docs/competition/demo-script.md) | 演示操作说明 |
 | [RELIABILITY.md](RELIABILITY.md) | 健康检查、SLO 和故障处理 |
 | [SECURITY.md](SECURITY.md) | 密钥、网络与飞行安全约束 |
 | [PLANS.md](PLANS.md) | 已完成能力与后续路线 |
