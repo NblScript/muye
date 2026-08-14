@@ -7,11 +7,24 @@
     "formulation": "10% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "水稻", "棉花"],
-    "target_pests": ["蚜虫", "飞虱", "稻飞虱", "白粉虱"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "水稻",
+      "棉花"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "飞虱",
+      "稻飞虱",
+      "白粉虱"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-chlorantraniliprole",
@@ -21,11 +34,22 @@
     "formulation": "20% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "水稻"],
-    "target_pests": ["草地贪夜蛾", "玉米螟", "稻纵卷叶螟"],
+    "target_crops": [
+      "夏玉米",
+      "水稻"
+    ],
+    "target_pests": [
+      "草地贪夜蛾",
+      "玉米螟",
+      "稻纵卷叶螟",
+      "水稻螟虫"
+    ],
     "dilution_guidance": "1500-2500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-emamectin-benzoate",
@@ -35,11 +59,24 @@
     "formulation": "5% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "水稻"],
-    "target_pests": ["粘虫", "玉米螟", "稻纵卷叶螟", "草地贪夜蛾"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "水稻"
+    ],
+    "target_pests": [
+      "粘虫",
+      "玉米螟",
+      "稻纵卷叶螟",
+      "草地贪夜蛾",
+      "潜叶蝇"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-lambda-cyhalothrin",
@@ -49,11 +86,24 @@
     "formulation": "2.5% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "棉花"],
-    "target_pests": ["蚜虫", "麦蜘蛛", "棉铃虫"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "棉花"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "麦蜘蛛",
+      "棉铃虫",
+      "麦叶蜂",
+      "潜叶蝇"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-acetamiprid",
@@ -63,11 +113,21 @@
     "formulation": "5% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "棉花"],
-    "target_pests": ["蚜虫", "白粉虱"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "棉花"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "白粉虱"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-abamectin",
@@ -77,11 +137,24 @@
     "formulation": "1.8% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "水稻", "棉花", "大豆"],
-    "target_pests": ["红蜘蛛", "稻纵卷叶螟", "棉铃虫"],
+    "target_crops": [
+      "夏玉米",
+      "水稻",
+      "棉花",
+      "大豆"
+    ],
+    "target_pests": [
+      "红蜘蛛",
+      "稻纵卷叶螟",
+      "棉铃虫",
+      "潜叶蝇"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-chlorpyrifos",
@@ -91,11 +164,23 @@
     "formulation": "48% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "水稻"],
-    "target_pests": ["蛴螬", "粘虫", "稻飞虱"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "水稻"
+    ],
+    "target_pests": [
+      "蛴螬",
+      "粘虫",
+      "稻飞虱",
+      "蝼蛄"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-phoxim",
@@ -105,11 +190,23 @@
     "formulation": "40% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "大豆"],
-    "target_pests": ["蛴螬", "蝼蛄", "金针虫"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "大豆"
+    ],
+    "target_pests": [
+      "蛴螬",
+      "蝼蛄",
+      "金针虫",
+      "麦叶蜂"
+    ],
     "dilution_guidance": "800-1000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-cypermethrin",
@@ -119,11 +216,22 @@
     "formulation": "10% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "棉花", "大豆"],
-    "target_pests": ["棉铃虫", "蚜虫", "大豆食心虫"],
+    "target_crops": [
+      "冬小麦",
+      "棉花",
+      "大豆"
+    ],
+    "target_pests": [
+      "棉铃虫",
+      "蚜虫",
+      "大豆食心虫"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-triazophos",
@@ -133,11 +241,21 @@
     "formulation": "20% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "冬小麦"],
-    "target_pests": ["稻纵卷叶螟", "二化螟", "稻飞虱"],
+    "target_crops": [
+      "水稻",
+      "冬小麦"
+    ],
+    "target_pests": [
+      "稻纵卷叶螟",
+      "二化螟",
+      "稻飞虱"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-buprofezin",
@@ -147,11 +265,19 @@
     "formulation": "25% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["稻飞虱", "白粉虱"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "白粉虱"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-pymetrozine",
@@ -161,11 +287,20 @@
     "formulation": "50% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "冬小麦"],
-    "target_pests": ["稻飞虱", "蚜虫"],
+    "target_crops": [
+      "水稻",
+      "冬小麦"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "蚜虫"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-chlorfenapyr",
@@ -175,11 +310,22 @@
     "formulation": "10% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "棉花", "大豆"],
-    "target_pests": ["甜菜夜蛾", "棉铃虫", "红蜘蛛"],
+    "target_crops": [
+      "夏玉米",
+      "棉花",
+      "大豆"
+    ],
+    "target_pests": [
+      "甜菜夜蛾",
+      "棉铃虫",
+      "红蜘蛛"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-tebufenozide",
@@ -189,11 +335,21 @@
     "formulation": "20% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "水稻"],
-    "target_pests": ["粘虫", "甜菜夜蛾", "稻纵卷叶螟"],
+    "target_crops": [
+      "夏玉米",
+      "水稻"
+    ],
+    "target_pests": [
+      "粘虫",
+      "甜菜夜蛾",
+      "稻纵卷叶螟"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-triadimefon",
@@ -203,11 +359,19 @@
     "formulation": "15% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦"],
-    "target_pests": ["小麦条锈病", "小麦白粉病"],
+    "target_crops": [
+      "冬小麦"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "小麦白粉病"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-carbendazim",
@@ -217,11 +381,22 @@
     "formulation": "50% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "水稻", "棉花"],
-    "target_pests": ["小麦赤霉病", "稻瘟病", "棉花枯萎病"],
+    "target_crops": [
+      "冬小麦",
+      "水稻",
+      "棉花"
+    ],
+    "target_pests": [
+      "小麦赤霉病",
+      "稻瘟病",
+      "棉花枯萎病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-tricyclazole",
@@ -231,11 +406,18 @@
     "formulation": "75% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["稻瘟病"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "稻瘟病"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-probenazole",
@@ -245,11 +427,19 @@
     "formulation": "8% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["稻瘟病", "白叶枯病"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "稻瘟病",
+      "白叶枯病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-validamycin",
@@ -259,11 +449,18 @@
     "formulation": "5% 水剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["纹枯病"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "纹枯病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-tebuconazole",
@@ -273,11 +470,21 @@
     "formulation": "25% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米"],
-    "target_pests": ["小麦条锈病", "小麦白粉病", "玉米大斑病"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "小麦白粉病",
+      "玉米大斑病"
+    ],
     "dilution_guidance": "1000-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-propiconazole",
@@ -287,11 +494,21 @@
     "formulation": "25% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "水稻"],
-    "target_pests": ["小麦条锈病", "小麦白粉病", "稻曲病"],
+    "target_crops": [
+      "冬小麦",
+      "水稻"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "小麦白粉病",
+      "稻曲病"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-thiophanate-methyl",
@@ -301,11 +518,20 @@
     "formulation": "70% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米"],
-    "target_pests": ["小麦赤霉病", "玉米茎腐病"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米"
+    ],
+    "target_pests": [
+      "小麦赤霉病",
+      "玉米茎腐病"
+    ],
     "dilution_guidance": "800-1000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-mancozeb",
@@ -315,11 +541,20 @@
     "formulation": "80% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "棉花"],
-    "target_pests": ["玉米大斑病", "棉花苗期病害"],
+    "target_crops": [
+      "夏玉米",
+      "棉花"
+    ],
+    "target_pests": [
+      "玉米大斑病",
+      "棉花苗期病害"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-cymoxanil-mancozeb",
@@ -329,11 +564,19 @@
     "formulation": "72% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米"],
-    "target_pests": ["玉米大斑病", "霜霉病"],
+    "target_crops": [
+      "夏玉米"
+    ],
+    "target_pests": [
+      "玉米大斑病",
+      "霜霉病"
+    ],
     "dilution_guidance": "500-600倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-cyhalothrin-thiamethoxam",
@@ -343,11 +586,21 @@
     "formulation": "22% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米"],
-    "target_pests": ["蚜虫", "粘虫", "玉米螟"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "粘虫",
+      "玉米螟"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-metolachlor",
@@ -357,11 +610,20 @@
     "formulation": "72% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "大豆", "棉花"],
-    "target_pests": ["杂草"],
+    "target_crops": [
+      "夏玉米",
+      "大豆",
+      "棉花"
+    ],
+    "target_pests": [
+      "杂草"
+    ],
     "dilution_guidance": "100-150毫升/亩",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-atrazine",
@@ -371,11 +633,18 @@
     "formulation": "50% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米"],
-    "target_pests": ["杂草"],
+    "target_crops": [
+      "夏玉米"
+    ],
+    "target_pests": [
+      "杂草"
+    ],
     "dilution_guidance": "150-200克/亩",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-bifenthrin",
@@ -385,11 +654,21 @@
     "formulation": "10% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["棉花", "大豆"],
-    "target_pests": ["棉铃虫", "红蜘蛛", "大豆食心虫"],
+    "target_crops": [
+      "棉花",
+      "大豆"
+    ],
+    "target_pests": [
+      "棉铃虫",
+      "红蜘蛛",
+      "大豆食心虫"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-cyromazine",
@@ -399,11 +678,20 @@
     "formulation": "50% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["大豆", "冬小麦"],
-    "target_pests": ["潜叶蝇", "麦蜘蛛"],
+    "target_crops": [
+      "大豆",
+      "冬小麦"
+    ],
+    "target_pests": [
+      "潜叶蝇",
+      "麦蜘蛛"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-flubendiamide",
@@ -413,11 +701,21 @@
     "formulation": "20% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "水稻"],
-    "target_pests": ["玉米螟", "二化螟", "稻纵卷叶螟"],
+    "target_crops": [
+      "夏玉米",
+      "水稻"
+    ],
+    "target_pests": [
+      "玉米螟",
+      "二化螟",
+      "稻纵卷叶螟"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-phorate",
@@ -427,11 +725,24 @@
     "formulation": "60% 乳油",
     "toxicity": "高毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "夏玉米", "大豆"],
-    "target_pests": ["蛴螬", "蝼蛄", "金针虫", "蚜虫"],
+    "target_crops": [
+      "冬小麦",
+      "夏玉米",
+      "大豆"
+    ],
+    "target_pests": [
+      "蛴螬",
+      "蝼蛄",
+      "金针虫",
+      "蚜虫"
+    ],
     "dilution_guidance": "拌种或沟施，不可喷雾",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省", "restricted": true}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省",
+      "restricted": true
+    }
   },
   {
     "pesticide_id": "seed-carbofuran",
@@ -441,11 +752,24 @@
     "formulation": "3% 颗粒剂",
     "toxicity": "高毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "棉花", "大豆"],
-    "target_pests": ["稻飞虱", "蚜虫", "蓟马", "线虫"],
+    "target_crops": [
+      "水稻",
+      "棉花",
+      "大豆"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "蚜虫",
+      "蓟马",
+      "线虫"
+    ],
     "dilution_guidance": "沟施或撒施，2-3公斤/亩",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省", "restricted": true}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省",
+      "restricted": true
+    }
   },
   {
     "pesticide_id": "seed-aldicarb",
@@ -455,11 +779,23 @@
     "formulation": "5% 颗粒剂",
     "toxicity": "剧毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["棉花", "大豆"],
-    "target_pests": ["蚜虫", "红蜘蛛", "线虫", "蓟马"],
+    "target_crops": [
+      "棉花",
+      "大豆"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "红蜘蛛",
+      "线虫",
+      "蓟马"
+    ],
     "dilution_guidance": "土壤施药，严禁喷雾",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省", "restricted": true}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省",
+      "restricted": true
+    }
   },
   {
     "pesticide_id": "seed-omethoate",
@@ -469,11 +805,23 @@
     "formulation": "40% 乳油",
     "toxicity": "高毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "棉花", "果树"],
-    "target_pests": ["蚜虫", "红蜘蛛", "介壳虫"],
+    "target_crops": [
+      "冬小麦",
+      "棉花",
+      "果树"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "红蜘蛛",
+      "介壳虫"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省", "restricted": true}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省",
+      "restricted": true
+    }
   },
   {
     "pesticide_id": "seed-isocarbophos",
@@ -483,11 +831,23 @@
     "formulation": "40% 乳油",
     "toxicity": "高毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "棉花", "果树"],
-    "target_pests": ["红蜘蛛", "介壳虫", "二化螟"],
+    "target_crops": [
+      "水稻",
+      "棉花",
+      "果树"
+    ],
+    "target_pests": [
+      "红蜘蛛",
+      "介壳虫",
+      "二化螟"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省", "restricted": true}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省",
+      "restricted": true
+    }
   },
   {
     "pesticide_id": "seed-thiamethoxam",
@@ -497,11 +857,24 @@
     "formulation": "25% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "水稻", "蔬菜", "果树"],
-    "target_pests": ["蚜虫", "飞虱", "白粉虱", "蓟马"],
+    "target_crops": [
+      "冬小麦",
+      "水稻",
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "飞虱",
+      "白粉虱",
+      "蓟马"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-flonicamid",
@@ -511,11 +884,20 @@
     "formulation": "50% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "蔬菜", "果树"],
-    "target_pests": ["蚜虫"],
+    "target_crops": [
+      "冬小麦",
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "蚜虫"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-nitenpyram",
@@ -525,11 +907,21 @@
     "formulation": "10% 水剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "蔬菜"],
-    "target_pests": ["稻飞虱", "蚜虫", "白粉虱"],
+    "target_crops": [
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "蚜虫",
+      "白粉虱"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-dinotefuran",
@@ -539,11 +931,22 @@
     "formulation": "20% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "蔬菜", "果树"],
-    "target_pests": ["稻飞虱", "蚜虫", "白粉虱"],
+    "target_crops": [
+      "水稻",
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "蚜虫",
+      "白粉虱"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-spirodiclofen",
@@ -553,11 +956,20 @@
     "formulation": "24% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["棉花", "果树", "蔬菜"],
-    "target_pests": ["红蜘蛛"],
+    "target_crops": [
+      "棉花",
+      "果树",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "红蜘蛛"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-pyridaben",
@@ -567,11 +979,20 @@
     "formulation": "15% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["棉花", "果树", "蔬菜"],
-    "target_pests": ["红蜘蛛"],
+    "target_crops": [
+      "棉花",
+      "果树",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "红蜘蛛"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-indoxacarb",
@@ -581,11 +1002,22 @@
     "formulation": "15% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "水稻", "蔬菜"],
-    "target_pests": ["粘虫", "甜菜夜蛾", "棉铃虫"],
+    "target_crops": [
+      "夏玉米",
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "粘虫",
+      "甜菜夜蛾",
+      "棉铃虫"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-spinosad",
@@ -595,11 +1027,20 @@
     "formulation": "2.5% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["夏玉米", "蔬菜"],
-    "target_pests": ["甜菜夜蛾", "小菜蛾"],
+    "target_crops": [
+      "夏玉米",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "甜菜夜蛾",
+      "小菜蛾"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-azoxystrobin",
@@ -609,11 +1050,22 @@
     "formulation": "25% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "水稻", "蔬菜"],
-    "target_pests": ["小麦条锈病", "稻瘟病", "番茄晚疫病"],
+    "target_crops": [
+      "冬小麦",
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "稻瘟病",
+      "番茄晚疫病"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-difenoconazole",
@@ -623,11 +1075,22 @@
     "formulation": "10% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "蔬菜", "果树"],
-    "target_pests": ["小麦白粉病", "番茄叶霉病", "苹果斑点落叶病"],
+    "target_crops": [
+      "冬小麦",
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "小麦白粉病",
+      "番茄叶霉病",
+      "苹果斑点落叶病"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-prochloraz",
@@ -637,11 +1100,22 @@
     "formulation": "25% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "果树", "蔬菜"],
-    "target_pests": ["稻瘟病", "柑橘青霉病", "芒果炭疽病"],
+    "target_crops": [
+      "水稻",
+      "果树",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "稻瘟病",
+      "柑橘青霉病",
+      "芒果炭疽病"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-metalaxyl",
@@ -651,11 +1125,19 @@
     "formulation": "25% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜"],
-    "target_pests": ["黄瓜霜霉病", "番茄晚疫病"],
+    "target_crops": [
+      "蔬菜"
+    ],
+    "target_pests": [
+      "黄瓜霜霉病",
+      "番茄晚疫病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-chlorothalonil",
@@ -665,11 +1147,21 @@
     "formulation": "75% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "夏玉米"],
-    "target_pests": ["黄瓜霜霉病", "番茄早疫病", "玉米大斑病"],
+    "target_crops": [
+      "蔬菜",
+      "夏玉米"
+    ],
+    "target_pests": [
+      "黄瓜霜霉病",
+      "番茄早疫病",
+      "玉米大斑病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-bacillus-subtilis",
@@ -679,11 +1171,21 @@
     "formulation": "1000亿芽孢/克 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "水稻"],
-    "target_pests": ["稻瘟病", "番茄灰霉病", "黄瓜白粉病"],
+    "target_crops": [
+      "蔬菜",
+      "水稻"
+    ],
+    "target_pests": [
+      "稻瘟病",
+      "番茄灰霉病",
+      "黄瓜白粉病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-copper-hydroxide",
@@ -693,11 +1195,20 @@
     "formulation": "77% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["番茄细菌性病害", "柑橘溃疡病"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "番茄细菌性病害",
+      "柑橘溃疡病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-beta-cyfluthrin",
@@ -707,11 +1218,21 @@
     "formulation": "2.5% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "冬小麦"],
-    "target_pests": ["菜青虫", "蚜虫", "小菜蛾"],
+    "target_crops": [
+      "蔬菜",
+      "冬小麦"
+    ],
+    "target_pests": [
+      "菜青虫",
+      "蚜虫",
+      "小菜蛾"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-deltamethrin",
@@ -721,11 +1242,22 @@
     "formulation": "2.5% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "冬小麦", "棉花"],
-    "target_pests": ["菜青虫", "蚜虫", "棉铃虫"],
+    "target_crops": [
+      "蔬菜",
+      "冬小麦",
+      "棉花"
+    ],
+    "target_pests": [
+      "菜青虫",
+      "蚜虫",
+      "棉铃虫"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-bisultap",
@@ -735,11 +1267,21 @@
     "formulation": "18% 水剂",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["稻纵卷叶螟", "二化螟", "三化螟"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "稻纵卷叶螟",
+      "二化螟",
+      "三化螟",
+      "水稻螟虫"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-spirotetramat",
@@ -749,11 +1291,21 @@
     "formulation": "22.4% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["蚜虫", "介壳虫", "白粉虱"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "介壳虫",
+      "白粉虱"
+    ],
     "dilution_guidance": "3000-4000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-spinetoram",
@@ -763,11 +1315,21 @@
     "formulation": "6% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["小菜蛾", "甜菜夜蛾", "苹果蠹蛾"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "小菜蛾",
+      "甜菜夜蛾",
+      "苹果蠹蛾"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-chlorfluazuron",
@@ -777,11 +1339,21 @@
     "formulation": "5% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "棉花"],
-    "target_pests": ["小菜蛾", "棉铃虫", "甜菜夜蛾"],
+    "target_crops": [
+      "蔬菜",
+      "棉花"
+    ],
+    "target_pests": [
+      "小菜蛾",
+      "棉铃虫",
+      "甜菜夜蛾"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-kasugamycin",
@@ -791,11 +1363,20 @@
     "formulation": "2% 水剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "蔬菜"],
-    "target_pests": ["稻瘟病", "番茄叶霉病"],
+    "target_crops": [
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "稻瘟病",
+      "番茄叶霉病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-fosthiazate",
@@ -805,11 +1386,19 @@
     "formulation": "10% 颗粒剂",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["根结线虫"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "根结线虫"
+    ],
     "dilution_guidance": "土壤撒施，1-2公斤/亩",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-flusilazole",
@@ -819,11 +1408,20 @@
     "formulation": "10% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "果树"],
-    "target_pests": ["小麦白粉病", "苹果黑星病"],
+    "target_crops": [
+      "冬小麦",
+      "果树"
+    ],
+    "target_pests": [
+      "小麦白粉病",
+      "苹果黑星病"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-iprodione",
@@ -833,11 +1431,20 @@
     "formulation": "50% 可湿性粉剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["番茄灰霉病", "苹果轮纹病"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "番茄灰霉病",
+      "苹果轮纹病"
+    ],
     "dilution_guidance": "800-1000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-pyrimethanil",
@@ -847,11 +1454,20 @@
     "formulation": "40% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["番茄灰霉病", "葡萄灰霉病"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "番茄灰霉病",
+      "葡萄灰霉病"
+    ],
     "dilution_guidance": "800-1200倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-dichlorbenzuron",
@@ -861,11 +1477,20 @@
     "formulation": "25% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "蔬菜"],
-    "target_pests": ["粘虫", "菜青虫"],
+    "target_crops": [
+      "冬小麦",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "粘虫",
+      "菜青虫"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-ethylicin",
@@ -875,11 +1500,20 @@
     "formulation": "15% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "棉花"],
-    "target_pests": ["稻瘟病", "棉花枯萎病"],
+    "target_crops": [
+      "水稻",
+      "棉花"
+    ],
+    "target_pests": [
+      "稻瘟病",
+      "棉花枯萎病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-methoxyfenozide",
@@ -889,11 +1523,20 @@
     "formulation": "24% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "蔬菜"],
-    "target_pests": ["稻纵卷叶螟", "甜菜夜蛾"],
+    "target_crops": [
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "稻纵卷叶螟",
+      "甜菜夜蛾"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-sulfoxaflor",
@@ -903,11 +1546,22 @@
     "formulation": "22% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "棉花", "蔬菜"],
-    "target_pests": ["蚜虫", "棉蚜", "白粉虱"],
+    "target_crops": [
+      "冬小麦",
+      "棉花",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "蚜虫",
+      "棉蚜",
+      "白粉虱"
+    ],
     "dilution_guidance": "3000-5000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-carbosulfan",
@@ -917,11 +1571,21 @@
     "formulation": "20% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "蔬菜"],
-    "target_pests": ["稻飞虱", "蚜虫", "蓟马"],
+    "target_crops": [
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "蚜虫",
+      "蓟马"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-pyriproxyfen",
@@ -931,11 +1595,20 @@
     "formulation": "10% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "果树"],
-    "target_pests": ["白粉虱", "介壳虫"],
+    "target_crops": [
+      "蔬菜",
+      "果树"
+    ],
+    "target_pests": [
+      "白粉虱",
+      "介壳虫"
+    ],
     "dilution_guidance": "1000-1500倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-sulfur",
@@ -945,11 +1618,20 @@
     "formulation": "80% 干悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["果树", "蔬菜"],
-    "target_pests": ["红蜘蛛", "白粉病"],
+    "target_crops": [
+      "果树",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "红蜘蛛",
+      "白粉病"
+    ],
     "dilution_guidance": "200-300倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-lime-sulfur",
@@ -959,11 +1641,20 @@
     "formulation": "29% 水剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["果树"],
-    "target_pests": ["介壳虫", "红蜘蛛", "白粉病"],
+    "target_crops": [
+      "果树"
+    ],
+    "target_pests": [
+      "介壳虫",
+      "红蜘蛛",
+      "白粉病"
+    ],
     "dilution_guidance": "3-5波美度喷雾",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-kresoxim-methyl",
@@ -973,11 +1664,20 @@
     "formulation": "50% 干悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "蔬菜"],
-    "target_pests": ["小麦白粉病", "黄瓜白粉病"],
+    "target_crops": [
+      "冬小麦",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "小麦白粉病",
+      "黄瓜白粉病"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-epoxiconazole",
@@ -987,11 +1687,20 @@
     "formulation": "12.5% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "水稻"],
-    "target_pests": ["小麦条锈病", "稻曲病"],
+    "target_crops": [
+      "冬小麦",
+      "水稻"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "稻曲病"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-thiadiazole-copper",
@@ -1001,11 +1710,20 @@
     "formulation": "20% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "蔬菜"],
-    "target_pests": ["水稻细菌性条斑病", "白菜软腐病"],
+    "target_crops": [
+      "水稻",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "水稻细菌性条斑病",
+      "白菜软腐病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-difenoconazole-azoxystrobin",
@@ -1015,11 +1733,20 @@
     "formulation": "30% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "水稻"],
-    "target_pests": ["小麦条锈病", "稻瘟病"],
+    "target_crops": [
+      "冬小麦",
+      "水稻"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "稻瘟病"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-ningnanmycin",
@@ -1029,11 +1756,20 @@
     "formulation": "8% 水剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜", "冬小麦"],
-    "target_pests": ["病毒病", "小麦丛矮病"],
+    "target_crops": [
+      "蔬菜",
+      "冬小麦"
+    ],
+    "target_pests": [
+      "病毒病",
+      "小麦丛矮病"
+    ],
     "dilution_guidance": "500-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-phenthoate",
@@ -1043,11 +1779,20 @@
     "formulation": "50% 乳油",
     "toxicity": "中等毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["稻飞虱", "稻纵卷叶螟", "二化螟"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "稻飞虱",
+      "稻纵卷叶螟",
+      "二化螟"
+    ],
     "dilution_guidance": "800-1000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-thifluzamide",
@@ -1057,11 +1802,19 @@
     "formulation": "24% 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻"],
-    "target_pests": ["纹枯病", "稻曲病"],
+    "target_crops": [
+      "水稻"
+    ],
+    "target_pests": [
+      "纹枯病",
+      "稻曲病"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-fluopicolide-propamocarb",
@@ -1071,11 +1824,19 @@
     "formulation": "687.5克/升 悬浮剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["蔬菜"],
-    "target_pests": ["黄瓜霜霉病", "番茄晚疫病"],
+    "target_crops": [
+      "蔬菜"
+    ],
+    "target_pests": [
+      "黄瓜霜霉病",
+      "番茄晚疫病"
+    ],
     "dilution_guidance": "600-800倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-enostroburin",
@@ -1085,11 +1846,19 @@
     "formulation": "25% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦"],
-    "target_pests": ["小麦条锈病", "小麦白粉病"],
+    "target_crops": [
+      "冬小麦"
+    ],
+    "target_pests": [
+      "小麦条锈病",
+      "小麦白粉病"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-flonicamid-acetamiprid",
@@ -1099,11 +1868,19 @@
     "formulation": "25% 水分散粒剂",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["冬小麦", "蔬菜"],
-    "target_pests": ["蚜虫"],
+    "target_crops": [
+      "冬小麦",
+      "蔬菜"
+    ],
+    "target_pests": [
+      "蚜虫"
+    ],
     "dilution_guidance": "2000-3000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   },
   {
     "pesticide_id": "seed-difenoconazole-propiconazole",
@@ -1113,10 +1890,19 @@
     "formulation": "30% 乳油",
     "toxicity": "低毒",
     "manufacturer": "牧野示例目录",
-    "target_crops": ["水稻", "冬小麦"],
-    "target_pests": ["稻曲病", "小麦赤霉病"],
+    "target_crops": [
+      "水稻",
+      "冬小麦"
+    ],
+    "target_pests": [
+      "稻曲病",
+      "小麦赤霉病"
+    ],
     "dilution_guidance": "1500-2000倍液",
     "source": "henan_pesticide_catalog_seed",
-    "raw_payload": {"seed_type": "demo_catalog", "region_scope": "河南省"}
+    "raw_payload": {
+      "seed_type": "demo_catalog",
+      "region_scope": "河南省"
+    }
   }
 ]

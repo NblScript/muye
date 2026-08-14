@@ -126,6 +126,7 @@ cp .env.production.example .env.production
 ./scripts/docker_real_smoke.sh # 真实 best.pt 容器验收（独立数据卷，需 Docker 与模型）
 ./scripts/demo_doctor.sh # 现场诊断报告（health/SLO/workflow/事件流/错误日志）
 python scripts/eval_fixed_set.py --output data/eval/latest_report.md # 固定样例评测集报告
+python scripts/seed_history.py --source <图片目录> --count 50 # 批量播种历史决策案例（RAG 历史经验，需 QWEN_API_KEY）
 ./scripts/check.sh     # 竞赛总验证（关键路径测试 + 前端构建 + 文档校验；MUYE_FULL_CHECK=1 开启全量回归）
 cd frontend && npm run test:e2e # Playwright 大屏/历史页 3 视口验收（需先 build）
 ./scripts/precheck.sh  # 可 source 的环境检查工具库
@@ -190,7 +191,7 @@ AI 推荐农药 → 合规推理链（5 项检查）→ passed/warning/blocked �
 
 每项检查携带 `evidence`（来源 + 匹配字段），顶层返回 `summary`（规则拼接）、`execution_policy`、`alternatives`（blocked/warning 时从 RAG 候选中推荐替代农药，最多 3 条，排除高毒/剧毒品种）。
 
-**知识数据基线**：80 条农药演示种子，覆盖 7 类目标作物、59 类防治对象；种子中实际出现 4 种毒性标签，合规规则按 5 级标准处理。Markdown 知识块在构建时从当前 `docs/` 动态切分，数量随文档版本变化，不作为固定架构常量。
+**知识数据基线**：80 条农药演示种子，覆盖 7 类目标作物、61 类防治对象；种子中实际出现 4 种毒性标签，合规规则按 5 级标准处理。Markdown 知识块在构建时从当前 `docs/` 动态切分，数量随文档版本变化，不作为固定架构常量。
 
 **代码**：`modules/decision/compliance.py`
 **设计文档**：`docs/design-docs/2026-05-26-pesticide-compliance-reasoning-chain-design.md`

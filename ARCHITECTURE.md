@@ -86,7 +86,7 @@ frontend/ → app/routes/ → app/services/ → modules/ → models/ → config/
     - `voting.py` — 加权投票 + 置信度计算 + 分歧检测
     - `knowledge_loader.py` — 知识加载器 + `build_mission_summary_document`（将已完成/失败任务索引为 `mission_summary` 文档写入 ChromaDB `decisions` 集合）
 - **数据流**：害虫列表 + 天气 → RAG 检索 → [路由评估] → 专家路径（单 Qwen）或多智能体会诊（3 模型） → 用药/农事建议 JSON
-- **知识数据基线**：农药演示种子 80 条，覆盖 7 类目标作物、59 类防治对象；害虫/病害同义词 27 组。Markdown 知识块和历史决策均在构建或运行时动态增长，不记录为固定架构常量
+- **知识数据基线**：农药演示种子 80 条，覆盖 7 类目标作物、61 类防治对象；害虫/病害同义词 24 组。Markdown 知识块和历史决策均在构建或运行时动态增长，不记录为固定架构常量
 
 ### 3. drone（无人机域）
 
